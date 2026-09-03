@@ -141,7 +141,7 @@ export class SSEClient {
       // Real events ride the default `message` name; heartbeats are named.
       source.onmessage = (event) => {
         if (source !== this.source) return;
-        const data = (event as MessageEvent).data;
+        const data: unknown = (event as MessageEvent).data;
         this.dispatch('message', typeof data === 'string' ? data : '');
       };
       source.addEventListener('heartbeat', () => {
@@ -203,7 +203,7 @@ export class SSEClient {
     const inner = rest.content;
     if (typeof inner === 'string' && inner.trimStart().startsWith('{')) {
       try {
-        const innerParsed = JSON.parse(inner);
+        const innerParsed: unknown = JSON.parse(inner);
         if (innerParsed && typeof innerParsed === 'object' && !Array.isArray(innerParsed)) {
           payload = innerParsed as Record<string, unknown>;
         }

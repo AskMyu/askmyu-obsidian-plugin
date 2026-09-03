@@ -22,7 +22,7 @@
  */
 
 import { normalizePath, TFile, type App } from 'obsidian';
-import type { AskMyuApi, BackendFlags, CardSpecLite, EntityHeadline, VaultChangeCard, VaultChangesPage, VaultCommitment, WeeklyEdition } from '../transport/api';
+import type { AskMyuApi, BackendFlags, CardSpecLite, EntityHeadline, VaultChangeCard, VaultChangesPage, VaultCommitment } from '../transport/api';
 import type { ApiResponse } from '../transport';
 import type { AskMyuSettings } from '../settings';
 import { hashContent } from '../capture/noteMeta';
@@ -189,7 +189,7 @@ export class MaterializationService {
     for (let i = 0; i < meetings.length; i++) {
       await this.writeMeetingRow(meetings[i], i + 1, meetings.length, fullRefresh);
     }
-    const total = (listed.data?.count as number | undefined) ?? meetings.length;
+    const total = listed.data?.count ?? meetings.length;
     if (total > meetings.length) {
       this.deps.onProgress(`Meeting history: ${meetings.length} of ${total} this pass — the rest follow on later passes`);
     }
@@ -742,7 +742,7 @@ export class MaterializationService {
 
   private async writeWeek(): Promise<void> {
     const res = await this.deps.api().getWeeklyReview().catch(() => null);
-    const edition = res?.data?.edition as WeeklyEdition | undefined;
+    const edition = res?.data?.edition;
     if (!edition || !isWeeklyEditionFresh(edition)) return;
     await this.writeHeld(`${this.folder}/Week.md`, buildWeekMarkdown(edition));
   }

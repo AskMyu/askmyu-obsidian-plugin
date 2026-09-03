@@ -771,7 +771,7 @@ test('terms — what /terms, /features and a 428 mean for the pane', async () =>
   assert.equal(termsStateFrom428({ error: 'something_else' }), null);
 
   // The links carry the agreement's own titles, in reading order.
-  assert.deepEqual(termsLinks({}).map((l) => l.label), ['Beta Participation Terms', 'Privacy Policy']);
+  assert.deepEqual(termsLinks({}).map((l) => l.label), ['Beta participation terms', 'Privacy policy']);
 });
 
 test('terms — the wire: /terms is public, the version rides every door, accept names the client', async () => {
@@ -824,8 +824,8 @@ test('terms — the Create-account door: inert until ticked, then the version th
   assert.ok(box(), 'the checkbox is at the door');
   const links = [...root.walk()].filter((e) => e.tag === 'a').map((e) => [e.text, e.attrs.href]);
   assert.deepEqual(links, [
-    ['Beta Participation Terms', 'https://www.askmyu.com/beta-program-participation-terms'],
-    ['Privacy Policy', 'https://www.askmyu.com/privacy-policy'],
+    ['Beta participation terms', 'https://www.askmyu.com/beta-program-participation-terms'],
+    ['Privacy policy', 'https://www.askmyu.com/privacy-policy'],
   ], 'both documents, built as links — the public pages when /terms names none');
   const google = () => root.find((e) => e.classes.has('myu-google-door'))!;
   assert.ok(google().classes.has('myu-inert'), 'the Google door waits for the tick');
@@ -870,7 +870,7 @@ test('terms — the Today pane: gated shows one screen and nothing else; an upda
       terms: { currentVersion: '2026-10-01' },
       termsStanding: () => standing,
       termsUpdateVisible: () => standing === 'update',
-      termsLinkTargets: () => [{ label: 'Beta Participation Terms', url: 'https://www.askmyu.com/terms-of-service' }, { label: 'Privacy Policy', url: 'https://www.askmyu.com/privacy-policy' }],
+      termsLinkTargets: () => [{ label: 'Beta participation terms', url: 'https://www.askmyu.com/terms-of-service' }, { label: 'Privacy policy', url: 'https://www.askmyu.com/privacy-policy' }],
       acceptTerms: async () => { accepted++; return true; },
       dismissTermsUpdate: () => { dismissed++; },
       unlock: { current: 'unlocked', disconnect: async () => undefined },
@@ -888,7 +888,7 @@ test('terms — the Today pane: gated shows one screen and nothing else; an upda
   const gate = make('gated');
   const texts = gate.visibleTexts();
   assert.ok(texts.includes('Before you start'), 'the gate screen');
-  assert.ok(texts.some((t) => /Read the Beta Participation Terms/.test(t)) && texts.some((t) => /Read the Privacy Policy/.test(t)), 'both documents');
+  assert.ok(texts.some((t) => /Read the Beta participation terms/.test(t)) && texts.some((t) => /Read the Privacy policy/.test(t)), 'both documents');
   const go = gate.find((e) => e.text === 'Continue')!;
   assert.equal(go.disabled, true, 'Continue waits for the tick');
   const box = gate.find((e) => e.tag === 'input' && e.attrs.type === 'checkbox')!;

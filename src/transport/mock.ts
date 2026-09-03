@@ -602,7 +602,7 @@ export class MockApi implements AskMyuApi {
     const [brief, events, mirror, weekly, loop, help] = await Promise.all([
       part(this.getBrief()), part(this.getCalendarEvents()), part(this.getMirrorEdition()), part(this.getWeeklyReview()), part(this.getPersonalLoop()), part(this.getHelpMyuQueue()),
     ]);
-    return ok({ brief: brief as Record<string, unknown> | null, events: events as Record<string, unknown> | null, mirror, weekly, loop, help_queue: help, server_time: Date.now() });
+    return ok({ brief, events, mirror, weekly, loop, help_queue: help, server_time: Date.now() });
   }
 
   /**

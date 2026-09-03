@@ -242,17 +242,17 @@ export default class AskMyuPlugin extends Plugin {
    */
   readonly api = {
     status: (): string => this.unlock?.current ?? 'disconnected',
-    getBrief: async (): Promise<unknown | null> => {
+    getBrief: async (): Promise<unknown> => {
       if (this.unlock?.current !== 'unlocked') return null;
       const res = await this.backend.getBrief();
       return res.ok ? (res.data as { brief?: unknown } | null)?.brief ?? null : null;
     },
-    getPrep: async (eventId: string): Promise<unknown | null> => {
+    getPrep: async (eventId: string): Promise<unknown> => {
       if (this.unlock?.current !== 'unlocked') return null;
       const res = await this.backend.getMeetingPrep(eventId);
       return res.ok ? res.data?.prep ?? null : null;
     },
-    getPersonCard: async (name: string): Promise<unknown | null> => {
+    getPersonCard: async (name: string): Promise<unknown> => {
       if (this.unlock?.current !== 'unlocked') return null;
       const search = await this.backend.searchEntities(name);
       const match = (search.data?.results ?? []).find((r) => r.entity_type === 'person');
@@ -260,7 +260,7 @@ export default class AskMyuPlugin extends Plugin {
       const card = await this.backend.getCard('person', match.entity_id);
       return card.ok ? card.data?.card ?? null : null;
     },
-    getWeeklyReview: async (): Promise<unknown | null> => {
+    getWeeklyReview: async (): Promise<unknown> => {
       if (this.unlock?.current !== 'unlocked') return null;
       const res = await this.backend.getWeeklyReview();
       return res.ok ? res.data?.edition ?? null : null;
@@ -1111,8 +1111,8 @@ export default class AskMyuPlugin extends Plugin {
       in frontmatter; the user's own person pages resolve by name. */
   async chatContextForFile(file: TFile): Promise<ChatContext | undefined> {
     const fm = this.app.metadataCache.getFileCache(file)?.frontmatter;
-    const fmType = fm?.type;
-    const fmId = fm?.['myu-id'];
+    const fmType: unknown = fm?.type;
+    const fmId: unknown = fm?.['myu-id'];
     if ((fmType === 'myu-person' || fmType === 'myu-company') && typeof fmId === 'string' && fmId) {
       const entityType = fmType === 'myu-person' ? 'person' : 'company';
       return {

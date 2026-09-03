@@ -118,7 +118,7 @@ Consequences worth knowing before you install:
 ## Capabilities (what the plugin accesses)
 
 - **Network** — only the askMyu backend you configure; every endpoint is listed below.
-- **File system** — the vault, through Obsidian's Vault API only: reads the notes and folders you allow in Settings → What Myu can read; writes only under the `Myu/` folder (and `Myu/Canvas/`, `Myu/Conversations/`) after your explicit consent, plus one CSS snippet in your vault's config folder (`.obsidian/snippets/myu-look.css`) when you press *Install the look* — removable from the same row. Never outside the vault.
+- **File system** — the vault, through Obsidian's Vault API only: reads the notes and folders you allow in Settings → What Myu can read; lists the vault's file paths (never their contents) to find your own person pages and the files Myu wrote; writes only under the `Myu/` folder (and `Myu/Canvas/`, `Myu/Conversations/`) after your explicit consent, plus one CSS snippet in your vault's config folder (`.obsidian/snippets/myu-look.css`) when you press *Install the look* — removable from the same row. Never outside the vault.
 - **Clipboard** — user-initiated copies only: your recovery phrase (the key ceremony) and a recipe from the Weave Myu in pane (the copy button on its code block). Nothing is read from the clipboard except to clear the phrase you just copied.
 - **Account** — required. askMyu is a service; the plugin is a client for it.
 - **Pricing** — free during the beta. Creating an account means agreeing to the [Beta Participation Terms](https://www.askmyu.com/beta-program-participation-terms) and the [Privacy Policy](https://www.askmyu.com/privacy-policy): a checkbox at the door, and the backend records which version you agreed to. An account that has not agreed yet sees one screen asking, and nothing else, until it does.
@@ -128,6 +128,20 @@ Consequences worth knowing before you install:
 Obsidian's developer policies require network use to be disclosed; here is all
 of it. The plugin talks ONLY to the askMyu backend you configure (default
 `myu.askmyu.com`) — no third-party services, no analytics endpoints, no CDN.
+
+**Links that open in your browser, never fetched by the plugin.** A few buttons
+hand a page to your browser: the beta terms and privacy policy on askmyu.com,
+the askMyu web app (Google sign-in, subscription), the look snippet on
+github.com, and a person's LinkedIn profile from their card or the Career row.
+Each opens only when you press it; the plugin itself never requests those
+sites. The LinkedIn address also appears as placeholder text in the fields
+that ask for one.
+
+**Base64 is how ciphertext and keys travel.** Encrypted notes, wrapped keys and
+the device-transfer blob are binary; the plugin base64-encodes them into JSON
+for the wire and decodes them back. That is the only use of base64, and none
+of it hides anything: the bundle ships unminified, and every endpoint is
+listed below.
 
 **There is no client-side telemetry in this plugin.** It does not measure,
 count, or report your use of it, and there is no toggle to turn on — the

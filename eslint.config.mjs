@@ -28,6 +28,19 @@ export default tseslint.config(
     rules: {
       ...obsidianRules,
       'obsidianmd/ui/sentence-case': ['error', { brands: BRANDS, acronyms: ACRONYMS, ignoreRegex: NOT_SENTENCES, allowAutoFix: true }],
+      // The type-aware rules the directory's automated review reports as
+      // warnings on every release (0.1.0, 2026-09-03: ~50 of them were ours
+      // once its environment noise was set aside). Errors here, so they never
+      // reach a scan again. NEVER `eslint-disable` an obsidianmd rule — the
+      // review counts that as a blocking Risk.
+      '@typescript-eslint/no-unsafe-call': 'error',
+      '@typescript-eslint/no-unsafe-member-access': 'error',
+      '@typescript-eslint/no-unsafe-assignment': 'error',
+      '@typescript-eslint/no-unsafe-return': 'error',
+      '@typescript-eslint/no-unsafe-argument': 'error',
+      '@typescript-eslint/no-misused-promises': 'error',
+      '@typescript-eslint/no-unnecessary-type-assertion': 'error',
+      '@typescript-eslint/no-redundant-type-constituents': 'error',
     },
   },
   js.configs.recommended,

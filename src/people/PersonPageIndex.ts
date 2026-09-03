@@ -114,7 +114,7 @@ export class PersonPageIndex {
 
 function aliasesFrom(cache: CachedMetadata | null): string[] {
   const fm = cache?.frontmatter;
-  const raw = fm?.aliases;
+  const raw: unknown = fm?.aliases;
   if (Array.isArray(raw)) return raw.filter((a): a is string => typeof a === 'string' && a.trim().length > 0);
   if (typeof raw === 'string' && raw.trim()) return [raw.trim()];
   return [];

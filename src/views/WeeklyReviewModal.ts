@@ -12,7 +12,7 @@ import { App, Modal, Setting } from 'obsidian';
 export class WeeklyReviewModal extends Modal {
   constructor(
     app: App,
-    private onDecision: (enabled: boolean) => void,
+    private onDecision: (enabled: boolean) => void | Promise<void>,
   ) {
     super(app);
   }

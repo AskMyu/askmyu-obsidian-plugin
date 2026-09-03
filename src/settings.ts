@@ -271,7 +271,7 @@ export function normalizeSettings(raw: unknown): AskMyuSettings {
   for (const [key, fallback] of Object.entries(DEFAULT_SETTINGS)) {
     const value = merged[key];
     if (Array.isArray(fallback)) {
-      if (!Array.isArray(value)) merged[key] = [...fallback];
+      if (!Array.isArray(value)) merged[key] = [...(fallback as unknown[])];
     } else if (fallback !== null && typeof fallback === 'object') {
       if (!value || typeof value !== 'object' || Array.isArray(value)) merged[key] = { ...fallback };
     }

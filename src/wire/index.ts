@@ -47,7 +47,7 @@ export interface DailyBrief {
   /** R7: how many lower-confidence items the gate held back. Disclosed, never silent. */
   suppressed_count?: number;
   /** Day one, cold-start: the one finite bar, then the watermark, then silence. */
-  progress?: { stage?: 'first_minutes' | 'long_tail' | 'steady' | string; people_read?: number; people_total?: number; meetings_this_week?: number; first_timers?: number; external?: number; mail_understood_back_to?: string | null };
+  progress?: { stage?: 'first_minutes' | 'long_tail' | 'steady' | (string & Record<never, never>); people_read?: number; people_total?: number; meetings_this_week?: number; first_timers?: number; external?: number; mail_understood_back_to?: string | null };
 }
 
 export interface GoogleCalendarEvent {

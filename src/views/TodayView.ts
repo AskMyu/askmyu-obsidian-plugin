@@ -307,15 +307,13 @@ export class TodayView extends ItemView {
     zone.createEl('h3', { text: 'Before you start' });
     zone.createEl('p', {
       cls: 'myu-prose',
-      // eslint-disable-next-line obsidianmd/ui/sentence-case -- the documents' titles
-      text: 'The beta needs one thing first: your agreement to the Beta Participation Terms and the Privacy Policy. Read them, then tick the box.',
+      text: 'The beta needs one thing first: your agreement to the beta participation terms and the privacy policy. Read them, then tick the box.',
     });
     this.renderTermsLinks(zone);
     const label = zone.createEl('label', { cls: 'myu-terms-label' });
-    // eslint-disable-next-line obsidianmd/ui/sentence-case -- the documents' titles, and the agreement's own §12 wording
-    const box = label.createEl('input', { cls: 'myu-terms-box', attr: { type: 'checkbox', 'aria-label': 'I agree to the Beta Participation Terms and the Privacy Policy' } });
+    const box = label.createEl('input', { cls: 'myu-terms-box', attr: { type: 'checkbox', 'aria-label': 'I agree to the beta participation terms and the privacy policy' } });
     box.checked = this.termsAgreed;
-    label.createSpan({ cls: 'myu-terms-sentence', text: 'I agree to the Beta Participation Terms and the Privacy Policy.' });
+    label.createSpan({ cls: 'myu-terms-sentence', text: 'I agree to the beta participation terms and the privacy policy.' });
     const actions = zone.createDiv({ cls: 'myu-mirror-actions' });
     const go = actions.createEl('button', { cls: 'myu-affordance myu-cta', text: 'Continue' });
     go.disabled = !this.termsAgreed;
@@ -343,7 +341,7 @@ export class TodayView extends ItemView {
   private renderTermsUpdate(root: HTMLElement): void {
     const zone = root.createDiv({ cls: 'myu-zone myu-terms-update' });
     zone.createEl('h3', { text: 'We\u2019ve updated the terms' });
-    zone.createEl('p', { cls: 'myu-prose', text: `The Beta Participation Terms or the Privacy Policy changed (version ${this.plugin.terms?.currentVersion ?? ''}). You can keep working on the version you agreed to; accepting the new one takes a moment.` });
+    zone.createEl('p', { cls: 'myu-prose', text: `The beta participation terms or the privacy policy changed (version ${this.plugin.terms?.currentVersion ?? ''}). You can keep working on the version you agreed to; accepting the new one takes a moment.` });
     this.renderTermsLinks(zone);
     const actions = zone.createDiv({ cls: 'myu-mirror-actions' });
     const accept = actions.createEl('button', { cls: 'myu-affordance myu-cta', text: 'I agree to the updated terms' });

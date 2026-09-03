@@ -151,7 +151,7 @@ export function renderLinkedInMatchesInline(root: HTMLElement, suggestions: Link
   const slot = root.createDiv({ cls: 'myu-linkedin-inline' });
 
   const say = (row: HTMLElement, text: string) => {
-    const status = row.querySelector('.myu-status') as HTMLElement | null;
+    const status = row.querySelector<HTMLElement>('.myu-status');
     (status ?? row.createSpan({ cls: 'myu-status myu-quiet' })).setText(text);
   };
 

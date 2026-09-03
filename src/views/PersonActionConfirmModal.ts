@@ -9,7 +9,7 @@ import { App, Modal, Setting } from 'obsidian';
 export class PersonActionConfirmModal extends Modal {
   private answered = false;
 
-  constructor(app: App, private readonly copy: { title: string; body: string; cta: string }, private readonly onAnswer: (yes: boolean) => void) {
+  constructor(app: App, private readonly copy: { title: string; body: string; cta: string }, private readonly onAnswer: (yes: boolean) => void | Promise<void>) {
     super(app);
   }
 

@@ -21,8 +21,8 @@ export const TERMS_TYPES = ['beta_participation', 'privacy_policy'] as const;
 export type TermsType = (typeof TERMS_TYPES)[number];
 
 export const TERMS_LABELS: Record<TermsType, string> = {
-  beta_participation: 'Beta Participation Terms',
-  privacy_policy: 'Privacy Policy',
+  beta_participation: 'Beta participation terms',
+  privacy_policy: 'Privacy policy',
 };
 
 /**

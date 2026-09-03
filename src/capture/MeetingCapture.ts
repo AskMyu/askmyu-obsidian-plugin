@@ -156,7 +156,7 @@ export class MeetingCapture {
   private occurredAt(file: TFile): number {
     const fm = this.deps.app.metadataCache.getFileCache(file)?.frontmatter;
     for (const key of ['date', 'created']) {
-      const value = fm?.[key];
+      const value: unknown = fm?.[key];
       if (value instanceof Date && !Number.isNaN(value.getTime())) return value.getTime();
       if (typeof value === 'string') {
         const dateOnly = value.trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);

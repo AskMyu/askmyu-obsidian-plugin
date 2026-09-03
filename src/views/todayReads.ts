@@ -31,8 +31,8 @@ export function readsFromBundle(res: ApiResponse<TodayBundle> | null): TodayRead
   const weekly = b.weekly ? part('weekly', b.weekly) : null;
   const loop = b.loop ? part('loop', b.loop) : null;
   return {
-    brief: part('brief', b.brief as Record<string, unknown> | null | undefined),
-    events: part('events', b.events as Record<string, unknown> | null | undefined),
+    brief: part('brief', b.brief),
+    events: part('events', b.events),
     mirror,
     weekly,
     loop,

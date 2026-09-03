@@ -26,7 +26,7 @@ export function surveyLinks(notes: Array<{ text: string; mtime: number }>): Link
     let m: RegExpExecArray | null;
     const inThisNote = new Set<string>();
     while ((m = LINK_RE.exec(note.text)) !== null) {
-      const name = m[1]!.trim();
+      const name = m[1].trim();
       if (!looksLikeAName(name) || inThisNote.has(name)) continue;
       inThisNote.add(name);
       const cur = seen.get(name) ?? { name, count: 0, last: 0 };

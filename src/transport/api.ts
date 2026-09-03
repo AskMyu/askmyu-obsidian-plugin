@@ -17,6 +17,9 @@ import type { Transport, ApiResponse, EncryptedJournalPayload } from './index';
 import type { SourceReferenceLite, SurfaceMutationLite, ChatBlock, ChatContext, CompositionSpecLite, EntityHeadline, PrepPayload } from '../wire';
 import type { CanvasReply } from '../composition/afterTurn';
 
+/** A literal union the server may extend: the named values stay as hints, any other string is still allowed. */
+export type Loose<T extends string> = T | (string & Record<never, never>);
+
 export interface ExchangeResult {
   auth_token: string;
   account_id: string;
@@ -561,14 +564,14 @@ export interface VaultChangesPage {
 }
 
 /** One service on a Google/Microsoft credential (scope-aware status). */
-export interface IntegrationService { state?: 'connected' | 'not_yet' | 'needs_reconnect' | string; last_sync_at?: string | null; events_synced?: number | null; understood_back_to?: string | null; still_reading?: boolean; oldest_date_limit?: string | null }
+export interface IntegrationService { state?: Loose<'connected' | 'not_yet' | 'needs_reconnect'>; last_sync_at?: string | null; events_synced?: number | null; understood_back_to?: string | null; still_reading?: boolean; oldest_date_limit?: string | null }
 
 export interface OAuthStatusResult {
   connected?: boolean;
   /** Emitted unconditionally by the scope-aware status: whether calendar / mail can be consented separately. */
   split_consent?: boolean;
   /** One per signed-in account; `credential_id` is what disconnect / set-primary take. */
-  credentials?: Array<{ email?: string; credential_id?: string; is_primary?: boolean; status?: string; granted_scopes?: string[]; health?: 'ok' | 'needs_reconnect' | string; services?: { calendar?: IntegrationService; mail?: IntegrationService; meeting_notes?: IntegrationService } }>;
+  credentials?: Array<{ email?: string; credential_id?: string; is_primary?: boolean; status?: string; granted_scopes?: string[]; health?: Loose<'ok' | 'needs_reconnect'>; services?: { calendar?: IntegrationService; mail?: IntegrationService; meeting_notes?: IntegrationService } }>;
 }
 
 /** `mail` = Gmail only; `history` = mail + notes together; `drive` = docs. The label and the scope must agree. */
@@ -606,7 +609,7 @@ export interface MomentClassifyResult {
  */
 export interface DeliveredOffer {
   /** `history` = one consent for mail+docs; `calendar` = the wedge re-offered to someone who skipped it. */
-  moment?: 'mail' | 'notes' | 'connect_rest' | 'history' | 'calendar' | string;
+  moment?: Loose<'mail' | 'notes' | 'connect_rest' | 'history' | 'calendar'>;
   /** The user's own words earned this ask. A triggered ask outranks a stale canvas — never suppressed. */
   triggered?: boolean;
   lead?: string;
@@ -671,7 +674,7 @@ export interface InteractionEvent {
 /** `POST /feedback/submit`, the web's body minus screenshots. */
 export interface FeedbackBody {
   message: string;
-  category: 'bug' | 'feature' | 'general' | 'myu_response' | string;
+  category: Loose<'bug' | 'feature' | 'general' | 'myu_response'>;
   rating?: 1 | -1;
   app: string;
   version: string;
@@ -887,7 +890,7 @@ export type { EntityHeadline } from '../wire';
 export interface MailOffer {
   lead?: string;
   trust_line?: string;
-  options?: Array<{ id?: 'gmail' | 'microsoft' | 'archive' | 'imap' | 'not_now' | string; label?: string; init?: { provider?: 'google' | 'microsoft' | string; scope_set?: ScopeSet | string; return_to?: string } }>;
+  options?: Array<{ id?: Loose<'gmail' | 'microsoft' | 'archive' | 'imap' | 'not_now'>; label?: string; init?: { provider?: Loose<'google' | 'microsoft'>; scope_set?: Loose<ScopeSet>; return_to?: string } }>;
 }
 
 export interface CardSpecLite {
@@ -909,7 +912,7 @@ export interface CardSpecLite {
   /** Person card, `per_card_offer` on and no mail source connected: the server-composed mail offer (MailOfferBuilder). Absent otherwise. */
   mail_offer?: MailOffer;
   /** Self card, `self_card_legible` on: what Myu knows, each line with its source and whether it is a fact, a read, or not yet. */
-  known_facts?: Array<{ key?: string; value?: string; source?: 'linkedin' | 'you' | 'calendar' | 'mail' | 'read' | string; kind?: 'fact' | 'read' | 'not_yet' | string }>;
+  known_facts?: Array<{ key?: string; value?: string; source?: Loose<'linkedin' | 'you' | 'calendar' | 'mail' | 'read'>; kind?: Loose<'fact' | 'read' | 'not_yet'> }>;
   sections?: Array<{
     section_id?: string;
     section_type?: string;

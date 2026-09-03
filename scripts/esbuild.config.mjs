@@ -8,7 +8,9 @@
  */
 import esbuild from 'esbuild';
 import process from 'node:process';
-import builtins from 'builtin-modules';
+import { builtinModules } from 'node:module';
+// Node's own list, with and without the `node:` prefix — no third-party package for it.
+const builtins = [...builtinModules, ...builtinModules.map((m) => `node:${m}`)];
 
 const production = process.argv[2] === 'production';
 // Overrides for internal tooling (dev loops, test harnesses). Release builds
@@ -97,7 +99,10 @@ const context = await esbuild.context({
   sourcemap: production ? false : 'inline',
   treeShaking: true,
   outfile,
-  minify: production,
+  // Never minified: the directory's malware / obfuscation / network scans need
+  // readable code (0.1.0: "scan not available" ×3), and a reader who opens the
+  // bundle in their vault should be able to read it too. Tree-shaken, not shrunk.
+  minify: false,
 });
 
 if (oneShot) {

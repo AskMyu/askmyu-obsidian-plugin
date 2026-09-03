@@ -111,8 +111,7 @@ export class SignupModal extends Modal {
   private renderTermsRow(host: HTMLElement): void {
     const row = host.createDiv({ cls: 'myu-terms-row' });
     const label = row.createEl('label', { cls: 'myu-terms-label' });
-    // eslint-disable-next-line obsidianmd/ui/sentence-case -- the documents' titles, and the agreement's own §12 wording
-    const box = label.createEl('input', { cls: 'myu-terms-box', attr: { type: 'checkbox', 'aria-label': 'I agree to the Beta Participation Terms and the Privacy Policy' } });
+    const box = label.createEl('input', { cls: 'myu-terms-box', attr: { type: 'checkbox', 'aria-label': 'I agree to the beta participation terms and the privacy policy' } });
     box.checked = this.agreed;
     box.onchange = () => {
       this.agreed = box.checked;

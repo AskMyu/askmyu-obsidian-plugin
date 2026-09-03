@@ -331,7 +331,7 @@
 .myu-prep-ref {
   display: block;
   padding: 2px 0;
-  text-decoration: none;
+  text-decoration-line: none;
 }
 
 .myu-prep-search {
@@ -937,7 +937,7 @@ button.myu-chip { display: inline-flex; align-items: center; background: none; b
   flex: none;
 }
 .myu-terms-sentence a {
-  text-decoration: underline;
+  text-decoration-line: underline;
 }
 /* A door that waits for the tick: still pressable, so pressing it can say why. */
 .myu-inert {

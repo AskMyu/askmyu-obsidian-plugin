@@ -103,7 +103,7 @@ function normalizeFolder(folder: string | null): string | null {
   return trimmed.length ? trimmed : null;
 }
 
-async function readJson(app: App, path: string): Promise<unknown | null> {
+async function readJson(app: App, path: string): Promise<unknown> {
   try {
     if (!(await app.vault.adapter.exists(path))) return null;
     return JSON.parse(await app.vault.adapter.read(path));

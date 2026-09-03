@@ -368,7 +368,7 @@ export function buildMonthCalendarMarkdown(months: Array<{ year: number; month: 
     const first = new Date(Date.UTC(year, month, 1));
     const startOffset = (first.getUTCDay() + 6) % 7;
     const daysInMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
-    let row: string[] = new Array(startOffset).fill(' ');
+    let row: string[] = new Array<string>(startOffset).fill(' ');
     for (let d = 1; d <= daysInMonth; d++) {
       const iso = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
       const count = busy.get(iso) ?? 0;

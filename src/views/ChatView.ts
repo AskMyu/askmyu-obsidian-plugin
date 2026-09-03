@@ -101,7 +101,7 @@ export class ChatView extends ItemView {
 
   override async onOpen(): Promise<void> {
     // Keyboard-first: the composer takes focus when the pane opens.
-    queueMicrotask(() => (this.contentEl.querySelector('textarea.myu-chat-input') as HTMLTextAreaElement | null)?.focus());
+    queueMicrotask(() => this.contentEl.querySelector<HTMLTextAreaElement>('textarea.myu-chat-input')?.focus());
     this.contentEl.addClass('myu-today');
     this.render();
   }
@@ -446,7 +446,7 @@ export class ChatView extends ItemView {
       box.createDiv({ cls: 'myu-voice', text: this.offerDoneText ?? 'Calendar\u2019s in. Your week starts painting in Today.' });
       return;
     }
-    const data = (component.data ?? {}) as Record<string, unknown>;
+    const data = component.data ?? {};
     const text = (v: unknown) => (typeof v === 'string' ? v.trim() : '');
     if (text(data.lead)) box.createDiv({ cls: 'myu-voice', text: text(data.lead) });
     if (text(data.gap_line)) box.createDiv({ cls: 'myu-quiet', text: text(data.gap_line) });

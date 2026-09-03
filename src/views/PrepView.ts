@@ -79,10 +79,10 @@ export class PrepView extends ItemView {
     this.linkQuery = '';
     this.linkResults = [];
     this.render();
-    await this.fetch();
+    await this.loadPrep();
   }
 
-  private async fetch(): Promise<void> {
+  private async loadPrep(): Promise<void> {
     if (!this.eventId) return;
     const res = await this.plugin.backend.getMeetingPrep(this.eventId);
     if (!res.ok || !res.data?.prep) {
@@ -97,7 +97,7 @@ export class PrepView extends ItemView {
 
   /** Quiet refetch — the stale chip's `refresh` and the post-link re-warm. */
   private refresh(): void {
-    void this.fetch();
+    void this.loadPrep();
   }
 
   // ── render ────────────────────────────────────────────────────────────────

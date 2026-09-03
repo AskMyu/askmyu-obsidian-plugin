@@ -1,0 +1,65 @@
+# The release, from a tag push. Nothing is built here: the committed main.js
+# IS the release build (the monorepo's release build stamps and syncs it), so
+# this checks, attests, and publishes exactly the bytes at the tag.
+#
+#   git tag -a 0.1.1 -m 0.1.1 && git push origin 0.1.1   → this runs
+#
+# Attestations answer the directory's "Missing GitHub artifact attestations":
+# each asset gets a signed provenance record tied to this repo and commit.
+name: Release
+
+on:
+  push:
+    tags:
+      - '[0-9]+.[0-9]+.[0-9]+'
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: The tag is the manifest version
+        run: |
+          V=$(node -p "require('./manifest.json').version")
+          if [ "$V" != "$GITHUB_REF_NAME" ]; then
+            echo "manifest.json says $V but the tag is $GITHUB_REF_NAME"; exit 1
+          fi
+          for f in main.js manifest.json styles.css; do [ -f "$f" ] || { echo "missing $f"; exit 1; }; done
+
+      - name: Gates
+        run: |
+          npm ci
+          npm run type-check
+          npm test
+          npm run verify
+
+      - name: Attest the release assets
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            main.js
+            manifest.json
+            styles.css
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          NOTES="docs/obsidian-notes/${GITHUB_REF_NAME}.md"
+          PRE=""
+          case "$GITHUB_REF_NAME" in 0.0.*) PRE="--prerelease" ;; esac
+          if [ -f "$NOTES" ]; then
+            gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" $PRE --notes-file "$NOTES" main.js manifest.json styles.css
+          else
+            gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" $PRE --notes "askMyu $GITHUB_REF_NAME" main.js manifest.json styles.css
+          fi

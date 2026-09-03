@@ -1,7 +1,7 @@
 {
   "id": "askmyu",
   "name": "askMyu",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "minAppVersion": "1.9.0",
   "description": "Capture your journal notes to askMyu, encrypted before they leave, and read your day beside your vault.",
   "author": "askMyu",

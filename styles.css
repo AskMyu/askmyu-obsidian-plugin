@@ -1,0 +1,960 @@
+/* AskMyu — quiet structure, on the user's theme.
+ *
+ * Every colour here is an Obsidian CSS variable, not a value of ours. This crowd
+ * installs themes deliberately and notices a plugin that ignores them; a pane
+ * that reads as part of their vault is the difference between "tool I chose" and
+ * "thing bolted on". The ONE exception is the amber accent — the register allows
+ * a single semantic colour per view, and it has to survive a theme that maps
+ * every neutral to something else.
+ *
+ * The rules being expressed (binding, from HANDOFF_MOBILE §"The register"):
+ *   · structure = hairline zones + whisper labels; no boxes, no cards, no glow
+ *   · ≤1 amber per view, only on a deviation; good news never glows
+ *   · serif = Myu's voice only, always under a label
+ *   · mono = digits and times only
+ *   · one interactive accent, and it is the theme's own
+ */
+
+/* ── Today pane ─────────────────────────────────────────────────────────── */
+
+.myu-today {
+  padding: 12px 14px 24px;
+  font-size: var(--font-ui-small);
+  color: var(--text-normal);
+}
+
+/* A zone is a hairline and a label. That is the whole vocabulary. */
+.myu-zone {
+  border-top: 1px solid var(--background-modifier-border);
+  margin-top: 18px;
+  padding-top: 10px;
+}
+
+/* Whisper labels: ≥11px with real contrast — the mockups' sizes are
+   illustrative, legibility is not. */
+.myu-whisper {
+  font-size: var(--font-ui-smaller);
+  font-weight: var(--font-semibold);
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+/* Zone labels are written lowercase in code; Obsidian's own headers are
+   sentence case — the first letter rises here, the code stays honest. */
+.myu-zone > .myu-whisper::first-letter,
+.myu-status-label::first-letter,
+.myu-onboard-role::first-letter,
+.myu-door-divider::first-letter { text-transform: uppercase; }
+
+.myu-hero {
+  margin-bottom: 14px;
+}
+
+/* Myu speaking. Serif, and only ever under a whisper label that says so.
+   READING size, not interface size: this is content, and the markdown Myu
+   renders inside it (tables, lists, quotes) already follows Appearance → Font →
+   Font size. Sizing the prose off the UI setting instead made a table tower
+   over the reply it belonged to, by exactly the gap between the reader's two
+   settings (operator, 2026-09-01). One setting governs both now. */
+.myu-voice {
+  font-family: var(--font-text);
+  font-size: var(--font-text-size);
+  line-height: 1.5;
+  color: var(--text-normal);
+}
+
+.myu-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 7px 0;
+}
+
+/* Digits and times, and nothing else. */
+.myu-time {
+  font-size: var(--font-ui-smaller);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  min-width: 52px;
+}
+
+.myu-row-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.myu-quiet {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  line-height: 1.5;
+}
+
+/* The interactive accent is the theme's own — one per view. */
+.myu-affordance {
+  /* An Obsidian button: theme background, border and text via the app's own
+     `button` rules; we only size it. (Was a monospace 11.5px text link with a
+     ▸ — a web design system inside someone else's theme; 2026-08-29.) */
+  font-size: var(--font-ui-small);
+  padding: var(--size-4-1) var(--size-4-3);
+  cursor: pointer;
+}
+
+.myu-affordance:hover {
+  color: var(--text-accent-hover);
+}
+
+/* THE deviation. One per view, never for good news. */
+.myu-warn {
+  color: var(--text-warning);
+}
+
+/* ── the mirror (A11) — "noticed this month" ─────────────────────────────── */
+
+/* Myu's most-inward voice: the serif, italicised. Still under a whisper label. */
+.myu-mirror-voice {
+  font-style: italic;
+}
+
+.myu-mirror-caveat {
+  font-style: italic;
+  margin: 0 0 6px;
+}
+
+.myu-mirror-obs {
+  margin-top: 8px;
+}
+
+.myu-mirror-forming {
+  font-style: normal;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+}
+
+.myu-mirror-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 4px;
+}
+
+/* Muted, not the accent: correction controls should be findable, never
+   inviting. The one accent per view stays with `open ▸`. */
+.myu-mirror-ctl {
+  font-size: var(--font-ui-small);
+  padding: var(--size-4-1) var(--size-4-3);
+  cursor: pointer;
+}
+
+.myu-mirror-ctl:hover {
+  color: var(--text-normal);
+}
+
+.myu-mirror-ctl-label {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+}
+
+.myu-mirror-receipts {
+  padding-left: 12px;
+  margin-top: 2px;
+}
+
+.myu-mirror-receipt {
+  margin: 2px 0;
+  font-size: var(--font-ui-smaller);
+}
+
+/* ── power-down register (consent, approval, backfill) ──────────────────── */
+
+/* Presence moments: warm, plain, unhurried. No accents, no chips, no
+   affordance shorthand — full sentences and ordinary buttons. */
+.myu-power-down .myu-prose {
+  font-size: var(--font-ui-medium);
+  line-height: 1.6;
+  color: var(--text-normal);
+  margin: 0 0 12px;
+}
+
+.myu-power-down .myu-prose.myu-quiet {
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+}
+
+/* The 4-digit approval code: the one place digits are the content. */
+.myu-code {
+  font-family: var(--font-monospace);
+  font-size: var(--font-ui-large);
+  letter-spacing: 0.32em;
+  text-align: center;
+  padding: 18px 0 8px;
+  color: var(--text-normal);
+}
+
+.myu-phrase-input {
+  width: 100%;
+  font-family: var(--font-monospace);
+}
+
+.myu-token-input {
+  width: 100%;
+}
+
+/* ── settings ───────────────────────────────────────────────────────────── */
+
+.myu-status {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 6px 0 14px;
+}
+
+.myu-status-label {
+  font-size: var(--font-ui-smaller);
+  font-weight: var(--font-semibold);
+  color: var(--text-muted);
+}
+
+.myu-status-value {
+  color: var(--text-normal);
+}
+
+.myu-list {
+  border-top: 1px solid var(--background-modifier-border);
+  margin: 6px 0 10px;
+}
+
+.myu-list-row {
+  padding: 6px 0;
+  border-bottom: 1px solid var(--background-modifier-border);
+  font-size: var(--font-ui-small);
+  color: var(--text-normal);
+}
+
+/* ── card view ──────────────────────────────────────────────────────────── */
+
+.myu-card-title {
+  font-size: var(--font-ui-large);
+  font-weight: 600;
+  color: var(--text-normal);
+}
+
+/* Chips by exception: an honest gap the user can close, never a status badge.
+   A confirmed identity shows nothing — silence means linked. Drawn as
+   Obsidian's own tags (the theme's --tag-* variables), not a web pill. */
+.myu-chip {
+  display: inline-block;
+  margin-top: 8px;
+  padding: var(--tag-padding-y) var(--tag-padding-x);
+  border: var(--tag-border-width) solid var(--tag-border-color);
+  border-radius: var(--tag-radius);
+  background: var(--tag-background);
+  font-size: var(--tag-size);
+  font-weight: var(--tag-weight);
+  color: var(--tag-color);
+  line-height: 1.4;
+}
+
+/* ── prep view ──────────────────────────────────────────────────────────── */
+
+.myu-prep-head {
+  margin-bottom: 8px;
+}
+
+.myu-prep-meeting {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+}
+
+.myu-prep-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 6px 0 4px;
+}
+
+/* The chip demanding action wears the theme's accent — the one colour a
+   theme has already chosen for "press this". */
+.myu-chip-amber {
+  border-color: var(--text-accent);
+  color: var(--text-accent);
+  background: var(--tag-background);
+  cursor: pointer;
+}
+.myu-chip-amber:hover { background: var(--tag-background-hover); color: var(--text-accent-hover); }
+
+.myu-claim {
+  font-size: var(--font-ui-small);
+  line-height: 1.5;
+  color: var(--text-normal);
+}
+
+.myu-prep-signal {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+/* Plain ink, deliberately — when an exception chip is present it holds the
+   card's amber; the dot never competes. */
+.myu-prep-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background: var(--text-muted);
+  flex: none;
+  transform: translateY(-1px);
+}
+
+.myu-fact-row {
+  padding: 2px 0;
+}
+
+.myu-prep-foot {
+  display: flex;
+  gap: 14px;
+  align-items: baseline;
+  border-top: 1px solid var(--background-modifier-border);
+  margin-top: 14px;
+  padding-top: 8px;
+}
+
+/* Evidence / notes / link-search: one quiet inset block, reused. */
+.myu-prep-evidence {
+  border-left: 2px solid var(--background-modifier-border);
+  padding: 6px 0 6px 10px;
+  margin: 8px 0;
+}
+
+.myu-prep-ref {
+  display: block;
+  padding: 2px 0;
+  text-decoration: none;
+}
+
+.myu-prep-search {
+  width: 100%;
+  background: transparent;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: var(--font-ui-small);
+  color: var(--text-normal);
+}
+
+.myu-prep-link-row {
+  display: block;
+  margin-top: 6px;
+  text-align: left;
+}
+
+/* Rail rows that open prep: whole row taps; accent only on the primary. */
+.myu-row-tappable {
+  /* A row you can press — a real <button> so the keyboard reaches it — that
+     still looks like a row. */
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  box-shadow: none;
+  padding: var(--size-4-1) var(--size-4-2);
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  border-radius: var(--radius-s);
+}
+
+.myu-affordance-inline {
+  color: var(--text-faint);
+  display: inline-flex;
+  align-items: center;
+}
+
+.myu-chevron {
+  color: var(--text-muted);
+  flex: none;
+}
+
+.myu-row-past {
+  color: var(--text-muted);
+}
+
+/* ── cue rows (the toast's vault analogue — ambient, in-pane) ───────────── */
+
+.myu-cues {
+  margin-bottom: 10px;
+}
+
+.myu-cue-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+/* ── chat ───────────────────────────────────────────────────────────────── */
+
+.myu-chat {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.myu-chat-thread {
+  flex: 1;
+  overflow-y: auto;
+  padding-bottom: 10px;
+}
+
+/* The user, plain. */
+.myu-chat-user {
+  font-size: var(--font-ui-small);
+  line-height: 1.55;
+  color: var(--text-normal);
+  margin: 12px 0 4px;
+  padding-left: 10px;
+  border-left: 2px solid var(--background-modifier-border);
+}
+
+/* Myu, serif, under its whisper — the one type shift, always labeled. */
+.myu-chat-myu {
+  margin: 12px 0 4px;
+}
+
+.myu-chat-block {
+  margin-top: 6px;
+}
+
+.myu-chat-offer {
+  border-left: 2px solid var(--background-modifier-border);
+  padding: 6px 0 6px 10px;
+  margin-top: 8px;
+}
+
+.myu-chat-save {
+  display: block;
+  margin-top: 14px;
+}
+
+.myu-chat-composer {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-top: 1px solid var(--background-modifier-border);
+  padding-top: 8px;
+}
+
+.myu-chat-input {
+  width: 100%;
+  resize: vertical;
+  background: transparent;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: var(--font-ui-small);
+  color: var(--text-normal);
+}
+
+/* P9 — the recovery ceremony */
+.myu-recovery-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px 14px;
+  margin: 12px 0;
+}
+.myu-recovery-word {
+  font-family: var(--font-monospace);
+  font-size: 0.9em;
+  padding: 4px 6px;
+  border-radius: 4px;
+  background: var(--background-secondary);
+}
+
+/* ── P10 onboarding transcript ─────────────────────────────────────────────
+   The whisper-label register the rest of the plugin speaks: the role is a
+   quiet mono eyebrow above each line, never fused into the sentence. */
+.myu-onboard-log {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin: 8px 0 18px;
+}
+.myu-onboard-line {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.myu-onboard-role {
+  font-size: var(--font-ui-smaller);
+  font-weight: var(--font-semibold);
+  color: var(--text-muted);
+}
+.myu-onboard-text {
+  white-space: pre-wrap;
+  line-height: 1.5;
+}
+.myu-onboard-you .myu-onboard-text {
+  color: var(--text-muted);
+}
+
+/* Status-bar item — the status bar's own font and size, like every other item */
+.myu-statusbar {
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+/* Doors: one primary, one quiet — never two identical links shoulder to shoulder */
+.myu-modal-doors {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--background-modifier-border);
+}
+.myu-modal-doors .myu-affordance {
+  display: block;
+  padding: 2px 0;
+}
+.myu-google-door {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-primary);
+  color: var(--text-normal);
+  cursor: pointer;
+}
+.myu-google-door:hover {
+  background: var(--background-modifier-hover);
+}
+.myu-google-mark {
+  display: inline-flex;
+  align-items: center;
+}
+.myu-door-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  margin-top: 10px;
+}
+.myu-door-primary {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+  padding: 6px 14px;
+  border-radius: 6px;
+}
+.myu-door-alt {
+  margin-top: 16px;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 0.9em;
+}
+
+/* "or" divider between the Google door and the email form */
+.myu-door-divider {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+  margin: 14px 0 6px;
+}
+
+/* Waiting states BREATHE — a static "thinking…" reads as a hang. The dots
+   walk and the line gently pulses; reduced-motion gets the plain ellipsis. */
+.myu-thinking::after {
+  content: '.';
+  display: inline-block;
+  width: 1.2em;
+  text-align: left;
+  animation: myu-dots 1.4s steps(1, end) infinite;
+}
+.myu-thinking {
+  animation: myu-breathe 2.4s ease-in-out infinite;
+}
+@keyframes myu-dots {
+  0% { content: '.'; }
+  33% { content: '..'; }
+  66% { content: '...'; }
+}
+@keyframes myu-breathe {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 0.95; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .myu-thinking { animation: none; }
+  .myu-thinking::after { animation: none; content: '…'; }
+}
+
+/* Past-conversations list */
+.myu-chat-past {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+  text-align: left;
+  gap: 2px;
+  padding: 8px 6px;
+  background: none;
+  border: none;
+  box-shadow: none;
+  font: inherit;
+  color: inherit;
+  border-radius: var(--radius-s);
+  cursor: pointer;
+}
+.myu-chat-past:hover {
+  background: var(--background-modifier-hover);
+}
+.myu-chat-past-preview {
+  font-size: 0.92em;
+}
+.myu-chat-top {
+  margin-bottom: 6px;
+}
+
+/* Panel behavior: the listening chip */
+.myu-chat-listen {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-left: 10px;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+}
+
+/* The brandmark — the square graphical mark, brand moments only (door +
+   settings), never panes/notes. Sized as a badge, centered at the door. */
+.myu-brand {
+  width: 48px;
+  height: 48px;
+  margin: 0 auto 12px;
+}
+.myu-brand svg {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  display: block;
+}
+.myu-brand-settings {
+  width: 30px;
+  height: 30px;
+  margin: 0 0 10px;
+  opacity: 0.9;
+}
+
+/* Disambiguation picker + manual-URL recovery */
+.myu-card-suggestion {
+  padding: 8px 6px;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+.myu-card-suggestion .myu-chip { margin-right: 6px; margin-top: 4px; }
+.myu-card-recover { margin-top: 12px; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.myu-manual-url { width: 100%; margin-bottom: 6px; }
+
+/* Create ⇄ sign-in switch at the foot of the signup modal */
+.myu-modal-switch {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--background-modifier-border);
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 0.9em;
+}
+
+/* ── chat replies are markdown (2026-08-28) ──────────────────────────────── */
+.myu-chat-block.myu-md > p { margin: 0 0 8px; }
+.myu-chat-block.myu-md > p:last-child { margin-bottom: 0; }
+.myu-chat-block.myu-md ul,
+.myu-chat-block.myu-md ol { margin: 4px 0 8px; padding-left: 1.25em; }
+.myu-chat-block.myu-md li { margin: 2px 0; }
+.myu-chat-block.myu-md h1,
+.myu-chat-block.myu-md h2,
+.myu-chat-block.myu-md h3,
+.myu-chat-block.myu-md h4 { font-size: var(--font-ui-medium); font-weight: 600; margin: 10px 0 4px; }
+/* A table in a side pane is wider than the pane. Scroll it, never the pane. */
+.myu-chat-block.myu-md table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; margin: 8px 0; font-size: var(--font-ui-small); }
+.myu-chat-block.myu-md th,
+.myu-chat-block.myu-md td { padding: 4px 8px; border: 1px solid var(--background-modifier-border); vertical-align: top; white-space: nowrap; }
+.myu-chat-block.myu-md td { white-space: normal; min-width: 9em; }
+.myu-chat-block.myu-md pre { overflow-x: auto; }
+.myu-chat-block.myu-md blockquote { margin: 6px 0; padding-left: 10px; border-left: 2px solid var(--background-modifier-border); }
+/* The user's own words keep their line breaks. */
+.myu-chat-user { white-space: pre-wrap; }
+
+/* ── canvas pane: one host per component, controls under the card (2026-08-28) ── */
+.myu-canvas-component { margin: 0 0 10px; }
+.myu-canvas-component > p:last-child { margin-bottom: 0; }
+.myu-canvas-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 6px 0 2px; }
+.myu-canvas-actions .myu-status { font-size: var(--font-ui-smaller); color: var(--text-muted); flex-basis: 100%; }
+.myu-canvas-actions .myu-help { flex-basis: 100%; font-size: var(--font-ui-smaller); }
+.myu-canvas-input { flex: 1 1 12em; min-width: 8em; }
+.myu-affordance.myu-cta { background: var(--interactive-accent); color: var(--text-on-accent); }
+
+/* ── canvas pane footer: the always-keep switch (2026-08-29) ─────────────── */
+.myu-canvas-footer { border-top: 1px solid var(--background-modifier-border); margin-top: 12px; padding-top: 8px; }
+.myu-canvas-footer .setting-item-name { font-size: var(--font-ui-small); }
+.myu-canvas-footer .setting-item-description { font-size: var(--font-ui-smaller); }
+
+/* ── chat: the Sources footer under a cited reply (2026-08-29) ───────────── */
+.myu-chat-sources { margin-top: 8px; font-size: var(--font-ui-smaller); color: var(--text-muted); }
+.myu-chat-source { display: flex; gap: 6px; align-items: baseline; margin-top: 2px; }
+.myu-chat-source .myu-mono { font-family: var(--font-monospace); color: var(--text-faint); }
+
+/* ── chat: related entries; canvas: scene headings (2026-08-29) ─────────── */
+.myu-chat-related { margin-top: 8px; font-size: var(--font-ui-smaller); }
+.myu-chat-related-row { display: block; width: 100%; text-align: left; margin-top: 3px; padding: 4px 8px; background: var(--background-secondary); border: 0; border-radius: 4px; color: var(--text-muted); cursor: pointer; }
+.myu-chat-related-row:hover { color: var(--text-normal); }
+.myu-canvas-scene { font-size: var(--font-ui-medium); margin: 14px 0 6px; padding-bottom: 4px; border-bottom: 1px solid var(--background-modifier-border); }
+
+/* ── keyboard + touch (2026-08-29) ───────────────────────────────────────── */
+.myu-row-tappable:hover,
+.myu-chat-past:hover,
+.myu-chat-related-row:hover { background: var(--background-modifier-hover); }
+.myu-affordance:focus-visible,
+.myu-mirror-ctl:focus-visible,
+.myu-row-tappable:focus-visible,
+.myu-chat-past:focus-visible,
+.myu-chat-related-row:focus-visible,
+.myu-pick-row:focus-visible,
+.myu-canvas-actions button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--background-modifier-border-focus);
+}
+.myu-icon-button { display: inline-flex; align-items: center; justify-content: center; --icon-size: var(--icon-s); }
+.myu-chevron { --icon-size: var(--icon-xs); }
+/* Touch: 44px targets, the platform minimum. */
+body.is-mobile .myu-affordance,
+body.is-mobile .myu-mirror-ctl,
+body.is-mobile .myu-row-tappable,
+body.is-mobile .myu-chat-past,
+body.is-mobile .myu-chat-related-row,
+body.is-mobile .myu-canvas-actions button { min-height: 44px; padding: var(--size-4-2) var(--size-4-3); }
+
+/* ── Today: the sync bar; the archive passphrase (2026-08-29) ────────────── */
+.myu-sync-bar { display: flex; align-items: center; gap: var(--size-4-2); margin-bottom: var(--size-4-2); }
+.myu-passphrase { display: flex; flex-wrap: wrap; gap: var(--size-4-1) var(--size-4-2); padding: var(--size-4-2); margin: var(--size-4-2) 0; font-family: var(--font-monospace); font-size: var(--font-ui-medium); user-select: all; }
+.myu-passphrase-word { padding: 2px 6px; background: var(--background-secondary); border-radius: var(--radius-s); }
+
+/* A settings section mounted inside a 1.13 definitions row (settingsMount.ts) */
+.myu-settings-section { display: block; padding: 0; border: 0; }
+.myu-settings-section > .setting-item:first-child { border-top: 0; padding-top: 0; }
+/* Text-only button: the sync whisper that opens the switch */
+.myu-link-button { background: none; border: 0; box-shadow: none; padding: 0; height: auto; color: var(--link-color); cursor: pointer; text-decoration-line: var(--link-decoration); }
+.myu-link-button:hover { color: var(--link-color-hover); text-decoration-line: var(--link-decoration-hover); }
+
+/* ── past conversations: date · preview, one row each (2026-08-29) ───────── */
+/* A <button> (invariant 18): the date small above, the preview ellipsized
+   below — stacked on purpose (a 300px sidebar has no room for two columns).
+   Obsidian's button rule gave it a fixed input height, which painted the two
+   lines on top of each other; height:auto is the whole fix. */
+.myu-chat-past {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  height: auto;
+  line-height: var(--line-height-tight);
+  padding: var(--size-4-2) var(--size-4-2);
+  border-bottom: 1px solid var(--background-modifier-border);
+  border-radius: 0;
+}
+.myu-chat-past:hover { background: var(--background-modifier-hover); }
+.myu-chat-past .myu-whisper { flex: none; color: var(--text-muted); font-weight: var(--font-normal); }
+.myu-chat-past-preview {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-normal);
+}
+
+/* ── every row-shaped <button>: undo the button chrome, once (2026-08-29) ──
+   Obsidian's `button` rule gives a fixed input height, nowrap and centring.
+   Right for a button; wrong for a row, a pill or a link that is a <button>
+   only so the keyboard can reach it (invariant 18). The sweep found the
+   Today "next" row, the composition picker and the prep chips squashed the
+   same way past conversations were. */
+.myu-row-tappable,
+.myu-chat-past,
+.myu-chat-related-row,
+.myu-pick-row,
+button.myu-chip,
+.myu-link-button {
+  height: auto;
+  white-space: normal;
+  justify-content: flex-start;
+  font-weight: inherit;
+  line-height: var(--line-height-tight);
+}
+.myu-row.myu-row-tappable { display: flex; align-items: baseline; gap: var(--size-4-3); }
+.myu-cue-row.myu-row-tappable { display: flex; }
+button.myu-chip { display: inline-flex; align-items: center; background: none; box-shadow: none; padding: 2px 8px; }
+.myu-pick-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  text-align: left;
+  padding: var(--size-4-2) var(--size-4-3);
+  margin-bottom: var(--size-4-1);
+  border: 1px solid var(--background-modifier-border);
+}
+.myu-pick-row .myu-whisper { font-size: var(--font-ui-smaller); }
+.myu-pick-row.is-selected { border-color: var(--interactive-accent); box-shadow: 0 0 0 1px var(--interactive-accent); }
+.myu-link-button { font-size: var(--font-ui-smaller); text-align: left; }
+.myu-sync-bar { margin-top: var(--size-4-1); }
+.myu-sync-bar .myu-whisper { font-size: var(--font-ui-smaller); }
+
+/* ── canvas: tools row, expired line; chat: conversation search (bucket 1) ── */
+.myu-canvas-tools { display: flex; gap: var(--size-4-2); align-items: center; margin: var(--size-4-2) 0 var(--size-4-1); }
+.myu-canvas-expired { display: flex; align-items: center; gap: var(--size-4-2); padding: var(--size-4-2); margin: var(--size-4-2) 0; border-left: 3px solid var(--text-warning); background: var(--background-secondary); border-radius: var(--radius-s); }
+.myu-chat-search { width: 100%; margin-bottom: var(--size-4-2); }
+
+/* ── chips, reply ratings, offers (bucket 1, 2026-08-29) ─────────────────── */
+.myu-chat-rating { display: flex; gap: var(--size-4-1); margin-top: var(--size-4-1); opacity: 0.55; }
+.myu-chat-rating:hover, .myu-chat-rating:focus-within { opacity: 1; }
+.myu-rating-btn { --icon-size: var(--icon-xs); padding: 2px var(--size-4-1); }
+.myu-offer-row { display: flex; align-items: center; gap: var(--size-4-2); padding: var(--size-4-1) 0; }
+.myu-offer-row .myu-claim { flex: 1; min-width: 0; }
+
+/* ── card: dispatch line, related zone (bucket 2) ─────────────────────────── */
+.myu-dispatch { margin: var(--size-4-2) 0; }
+.myu-row .myu-icon-button { --icon-size: var(--icon-xs); padding: 0 var(--size-4-1); }
+
+/* ── Today: the loop, insights (bucket 3) ─────────────────────────────────── */
+.myu-loop .myu-chat-rating { margin-top: var(--size-4-2); }
+
+/* narrow sidebars: an offer / help row lets its buttons drop under the text */
+.myu-offer-row { flex-wrap: wrap; }
+.myu-offer-row .myu-claim { flex: 1 1 100%; }
+
+/* ── Help Myu: its own sidebar tab ───────────────────────────────────────── */
+.myu-help-row .myu-canvas-actions { margin-top: var(--size-4-2); }
+
+/* ── LinkedIn matches: one card style everywhere ─────────────────────────── */
+.myu-help-matches { margin-top: var(--size-4-1); }
+.myu-card-recover { flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: flex-start; }
+
+/* ── Today: the setup checklist (2026-08-30) ─────────────────────────────── */
+.myu-setup-row { padding: var(--size-4-2) 0; border-bottom: 1px solid var(--background-modifier-border); }
+.myu-setup-row:last-of-type { border-bottom: 0; }
+.myu-setup-row .myu-canvas-actions { justify-content: flex-start; }
+.myu-setup .myu-link-button { margin-top: var(--size-4-2); }
+
+/* ── Today: this week (cold start) ───────────────────────────────────────── */
+.myu-week-row { padding: var(--size-4-2) 0; border-bottom: 1px solid var(--background-modifier-border); }
+.myu-week-row:last-of-type { border-bottom: 0; }
+.myu-week-external { border-left: 2px solid var(--background-modifier-border-hover); padding-left: var(--size-4-2); }
+.myu-week-row .myu-canvas-actions { justify-content: flex-start; }
+.myu-progress { height: 3px; background: var(--background-modifier-border); border-radius: var(--radius-s); overflow: hidden; margin: var(--size-4-1) 0; }
+.myu-progress-fill { height: 100%; background: var(--interactive-accent); }
+
+/* ── card: the per-card mail offer (cold start) ──────────────────────────── */
+.myu-mail-offer { padding: var(--size-4-2) var(--size-4-3); margin: var(--size-4-2) 0; border-left: 3px solid var(--text-accent); background: var(--background-secondary); border-radius: var(--radius-s); }
+.myu-mail-offer .myu-canvas-actions { justify-content: flex-start; }
+
+/* ── chat: the cold-start calendar offer, inline ─────────────────────────── */
+.myu-chat-offer { padding: var(--size-4-2) var(--size-4-3); margin: var(--size-4-2) 0; border-left: 3px solid var(--text-accent); background: var(--background-secondary); border-radius: var(--radius-s); }
+.myu-chat-offer .myu-canvas-actions { justify-content: flex-start; }
+
+/* ── settings: the development disclosure ────────────────────────────────── */
+.myu-dev-doors { margin-top: var(--size-4-4); border-top: 1px solid var(--background-modifier-border); padding-top: var(--size-4-2); }
+.myu-dev-doors > summary { cursor: var(--cursor); color: var(--text-muted); font-weight: var(--font-medium); padding: var(--size-4-1) 0; }
+.myu-dev-doors > summary:hover { color: var(--text-normal); }
+
+/* ── chat: the LinkedIn walk in the thread's own register ────────────────── */
+.myu-chat-li-name { font-weight: var(--font-medium); }
+.myu-linkedin-inline .myu-canvas-actions { justify-content: flex-start; }
+
+/* ── Today: another device asking to join ────────────────────────────────── */
+.myu-device-request { border-left: 3px solid var(--text-accent); padding-left: var(--size-4-3); }
+.myu-device-request .myu-canvas-actions { justify-content: flex-start; }
+
+/* ── canvas: the header that says which canvas this is ───────────────────── */
+.myu-canvas-head { display: flex; flex-direction: column; gap: var(--size-4-1); padding-bottom: var(--size-4-2); border-bottom: 1px solid var(--background-modifier-border); margin-bottom: var(--size-4-2); }
+.myu-canvas-heading { font-weight: var(--font-medium); }
+.myu-canvas-nav { display: flex; align-items: center; gap: var(--size-4-1); }
+.myu-canvas-nav .myu-canvas-pin { margin-left: auto; }
+
+/* ── chat: a canvas, in the conversation ─────────────────────────────────── */
+.myu-inline-canvas { border-left: 2px solid var(--background-modifier-border); padding-left: var(--size-4-3); margin: var(--size-4-2) 0; }
+.myu-inline-component { margin: var(--size-4-1) 0; border-radius: var(--radius-s); }
+.myu-inline-component.is-flashing { background: var(--text-highlight-bg); }
+.myu-fold > summary { cursor: var(--cursor); color: var(--text-muted); padding: var(--size-4-1) 0; }
+.myu-fold > summary:hover { color: var(--text-normal); }
+.myu-fold[open] > summary { color: var(--text-normal); }
+.myu-inline-canvas .myu-canvas-actions { justify-content: flex-start; }
+
+/* ── onboarding: the career read, folded in place like a book's aside ────── */
+.myu-onboard-read { border-left: 2px solid var(--background-modifier-border); padding-left: var(--size-4-3); margin: var(--size-4-2) 0; }
+
+/* ── chat: the inline canvas, compact ────────────────────────────────────── */
+.myu-inline-canvas-head { display: flex; align-items: baseline; gap: var(--size-4-2); }
+.myu-inline-scene { margin-top: var(--size-4-2); }
+.myu-inline-ask { margin: var(--size-4-2) 0; }
+.myu-inline-ask .myu-canvas-actions { justify-content: flex-start; margin-top: var(--size-4-1); }
+
+/* ── chat: wide markdown (tables) must scroll, not spill ─────────────────── */
+.myu-chat-myu .myu-md,
+.myu-chat-myu .myu-md .table-wrapper { overflow-x: auto; }
+/* A table arrives through Obsidian's renderer at its own type size, which in a
+   narrow pane towered over the reply it belongs to. Match the conversation. */
+.myu-chat-myu .myu-md table { border-collapse: collapse; }
+/* Layout only. The reader's font size governs the type — ours matches it. */
+.myu-chat-myu .myu-md table th,
+.myu-chat-myu .myu-md table td {
+  line-height: var(--line-height-tight);
+  padding: var(--size-4-1) var(--size-4-2);
+  vertical-align: top;
+}
+.myu-chat-myu .myu-md table th { font-weight: var(--font-medium); white-space: nowrap; }
+
+/* ── beta terms (2026-09-02): the checkbox at the door, the gate, the update row ── */
+.myu-terms-row {
+  margin: 10px 0 4px;
+}
+.myu-terms-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  cursor: pointer;
+  line-height: 1.4;
+}
+.myu-terms-box {
+  margin-top: 0.2em;
+  flex: none;
+}
+.myu-terms-sentence a {
+  text-decoration: underline;
+}
+/* A door that waits for the tick: still pressable, so pressing it can say why. */
+.myu-inert {
+  opacity: 0.55;
+}
+.myu-terms-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 6px 0 10px;
+}
+.myu-terms-gate .myu-terms-label,
+.myu-terms-update .myu-terms-label {
+  margin: 6px 0 12px;
+}
+/* A disabled affordance says so (the gate's Continue before the tick). */
+.myu-affordance:disabled {
+  opacity: 0.55;
+  cursor: default;
+}

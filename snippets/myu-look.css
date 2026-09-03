@@ -1,0 +1,76 @@
+/*
+ * Myu look — an optional CSS snippet for the AskMyu plugin.
+ *
+ * Myu's own identity, on Myu's surfaces only: the web app's cyan/amber
+ * duotone, a serif voice, a breath of glow. It never touches your notes or
+ * Obsidian's chrome, and it is not part of the plugin — it is yours to keep,
+ * edit, or delete.
+ *
+ * Install: copy this file into <vault>/.obsidian/snippets/ and enable it
+ * under Settings → Appearance → CSS snippets. Latest copy:
+ * https://github.com/AskMyu/askmyu-obsidian-plugin/raw/main/snippets/myu-look.css (In the monorepo:
+ * scripts/obsidian-dev.sh snippet-on / snippet-off.)
+ *
+ * Everything Myu renders carries a stable `.myu-*` class — see README,
+ * "Styling Myu" — so this is one look of many possible.
+ */
+body {
+  --myu-cy: #38bdf8;
+  --myu-cy2: #0369a1;
+  --myu-al: #fb923c;
+}
+.workspace .myu-affordance,
+.workspace .myu-affordance-inline {
+  color: var(--myu-cy);
+}
+.workspace .myu-affordance:hover {
+  color: var(--myu-al);
+}
+.workspace .myu-whisper,
+.workspace .myu-status-label,
+.workspace .myu-onboard-role {
+  color: var(--myu-cy2);
+}
+.workspace .myu-voice {
+  font-family: Georgia, 'Times New Roman', serif;
+}
+/* Myu's own register: monospace, letter-spaced, lowercase whispers — the
+   web app's labels. The default plugin look leaves labels in the UI font. */
+.workspace .myu-whisper,
+.workspace .myu-status-label,
+.workspace .myu-onboard-role,
+.workspace .myu-door-divider,
+.workspace .myu-mirror-forming,
+.workspace .myu-mirror-ctl-label,
+.workspace .myu-prep-meeting,
+.workspace .myu-statusbar {
+  font-family: var(--font-monospace);
+  font-weight: normal;
+  letter-spacing: 0.14em;
+  text-transform: lowercase;
+}
+.workspace .myu-zone > .myu-whisper::first-letter { text-transform: lowercase; }
+.workspace .myu-time,
+.workspace .myu-list-row {
+  font-family: var(--font-monospace);
+}
+.workspace .myu-chip-amber {
+  border-color: var(--myu-al);
+  color: var(--myu-al);
+}
+.workspace .myu-door-primary,
+.workspace .myu-google-door:hover {
+  box-shadow: 0 0 14px rgba(56, 189, 248, 0.22);
+}
+.workspace .myu-door-primary {
+  background: var(--myu-cy2);
+  color: #e8f4fb;
+}
+.workspace .myu-chat-offer,
+.workspace .myu-chat-past:hover {
+  border-left: 2px solid var(--myu-cy);
+  padding-left: 8px;
+}
+.workspace .myu-statusbar {
+  color: var(--myu-cy2);
+}

@@ -1,0 +1,32 @@
+{
+  "name": "obsidian-askmyu",
+  "version": "0.1.0",
+  "description": "AskMyu Obsidian plugin — capture your vault's journal, encrypted, and read Today beside your notes.",
+  "main": "main.js",
+  "type": "module",
+  "license": "Apache-2.0",
+  "scripts": {
+    "dev": "node scripts/esbuild.config.mjs",
+    "build": "node scripts/esbuild.config.mjs production",
+    "type-check": "tsc --noEmit",
+    "test": "node scripts/test.mjs",
+    "verify": "node scripts/verify-invariants.mjs"
+  },
+  "dependencies": {
+    "@scure/bip39": "^2.0.1",
+    "event-source-polyfill": "^1.0.31"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.28.0",
+    "@types/node": "^22",
+    "builtin-modules": "^4.0.0",
+    "esbuild": "^0.25.0",
+    "eslint": "^9.28.0",
+    "eslint-plugin-obsidianmd": "0.4.2",
+    "globals": "^16.2.0",
+    "obsidian": "^1.7.2",
+    "typescript": "~5.9.2",
+    "typescript-eslint": "^8.33.0",
+    "@types/event-source-polyfill": "^1.0.5"
+  }
+}

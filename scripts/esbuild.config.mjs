@@ -64,6 +64,9 @@ const context = await esbuild.context({
   entryPoints: [entry],
   define: { __BUILD_STAMP__: JSON.stringify(buildStamp) },
   bundle: true,
+  // snippets/myu-look.css rides along as TEXT — written into the vault only when the
+  // reader presses Install the look; the plugin's own stylesheet never loads it.
+  loader: { '.css': 'text' },
   external: [
     'obsidian',
     'electron',

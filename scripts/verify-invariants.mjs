@@ -383,7 +383,9 @@ check('invariant 16 — main.ts registers the live account/session notices', () 
 // Obsidian's guidelines (and every plugin people call polished): theme
 // variables for type, size and color; no font-family of our own, no px type,
 // no hardcoded colors except as var() fallbacks. The Myu look lives in
-// snippets/myu-look.css, the user's file — never inside the plugin.
+// snippets/myu-look.css — bundled as TEXT and written into the reader's
+// snippets folder only when they press Install the look; never loaded by
+// the plugin's own stylesheet.
 
 check('invariant 17 — styles.css sets no fonts, px type, or colors of its own', () => {
   const css = readFileSync('styles.css', 'utf8');

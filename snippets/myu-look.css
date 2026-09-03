@@ -6,8 +6,10 @@
  * Obsidian's chrome, and it is not part of the plugin — it is yours to keep,
  * edit, or delete.
  *
- * Install: copy this file into <vault>/.obsidian/snippets/ and enable it
- * under Settings → Appearance → CSS snippets. Latest copy:
+ * Install: Settings → AskMyu → Advanced → Myu look → Install the look (the
+ * plugin carries this file and writes it here on request; the same row turns
+ * it off or removes it). By hand: copy it into <vault>/.obsidian/snippets/ and
+ * enable it under Settings → Appearance → CSS snippets. Latest copy:
  * https://github.com/AskMyu/askmyu-obsidian-plugin/raw/main/snippets/myu-look.css (In the monorepo:
  * scripts/obsidian-dev.sh snippet-on / snippet-off.)
  *

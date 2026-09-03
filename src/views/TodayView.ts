@@ -285,7 +285,6 @@ export class TodayView extends ItemView {
     // eslint-disable-next-line obsidianmd/ui/sentence-case -- the documents' titles, and the agreement's own §12 wording
     const box = label.createEl('input', { cls: 'myu-terms-box', attr: { type: 'checkbox', 'aria-label': 'I agree to the Beta Participation Terms and the Privacy Policy' } });
     box.checked = this.termsAgreed;
-    // eslint-disable-next-line obsidianmd/ui/sentence-case -- as above
     label.createSpan({ cls: 'myu-terms-sentence', text: 'I agree to the Beta Participation Terms and the Privacy Policy.' });
     const actions = zone.createDiv({ cls: 'myu-mirror-actions' });
     const go = actions.createEl('button', { cls: 'myu-affordance myu-cta', text: 'Continue' });

@@ -2355,3 +2355,408 @@ test('the instant give — links name the people; the preview is honest about ra
   const capture = await fs.readFile('src/capture/CaptureService.ts', 'utf8');
   assert.match(capture, /if \(shouldStop\?\.\(\)\) \{ stopped = true; break; \}/, 'the walk stops when asked');
 });
+
+// ── settings, live findings 2026-09-03 ───────────────────────────────────────
+// Against production, a fresh BRAT install painted "Connect…" over a Google
+// account that was syncing, "No other devices are holding custody" over nine
+// devices, and an empty name field — every one a refused fetch painted as an
+// empty state — then "Delete my account" ABOVE a name row whose copy pointed
+// "above", and a pane that reshuffled its sections after every click.
+
+test('settings — a fetch that FAILED is said in the reader\'s words, never painted as "nothing here"', async () => {
+  const { loadFailure } = await import('../src/views/settingsLoad');
+  assert.equal(loadFailure({ ok: true, status: 200, error: null }), null);
+  assert.match(loadFailure(null)!, /could not be reached/);
+  assert.match(loadFailure({ ok: false, status: 0, error: 'offline' })!, /could not be reached/);
+  assert.match(loadFailure({ ok: false, status: 401, error: 'http_401' })!, /reopened/);
+  assert.match(loadFailure({ ok: false, status: 403, error: 'http_403' })!, /still being opened/);
+  assert.match(loadFailure({ ok: false, status: 428, error: 'terms_required' })!, /beta terms/);
+  assert.match(loadFailure({ ok: false, status: 429, error: 'http_429' })!, /pause/);
+  assert.match(loadFailure({ ok: false, status: 503, error: 'http_503' })!, /could not answer \(503\)/);
+  assert.match(loadFailure({ ok: false, status: 404, error: 'http_404' })!, /answered 404/);
+});
+
+test('settings — rerender goes through update() on 1.13 (definitions, one order) and display() before it', async () => {
+  const { AskMyuSettingTab } = await import('../src/views/SettingsTab');
+  const log: string[] = [];
+  const modern = { update: () => log.push('update'), settingItems: [{}], display: () => log.push('display') };
+  AskMyuSettingTab.prototype.rerender.call(modern as never);
+  const legacy = { display: () => log.push('display') };
+  AskMyuSettingTab.prototype.rerender.call(legacy as never);
+  // 1.13 before registration (update exists, nothing to render from): display() is what paints.
+  const unregistered = { update: () => log.push('update'), settingItems: [], display: () => log.push('display') };
+  AskMyuSettingTab.prototype.rerender.call(unregistered as never);
+  assert.deepEqual(log, ['update', 'display', 'display']);
+
+  const src = await (await import('node:fs/promises')).readFile('src/views/SettingsTab.ts', 'utf8');
+  assert.equal((src.match(/this\.display\(\)/g) ?? []).length, 1, 'display() is called from rerender() and nowhere else');
+  // The legacy display() paints the sections in the definitions' order, so a
+  // pre-1.13 host and a 1.13 host agree on where everything is.
+  const defs = [...src.matchAll(/section\((?:'[^']+'|"[^"]+"), \[[^\]]*\], \(r\) => this\.(render\w+)\(r, false\)/g)].map((m) => m[1]);
+  const body = src.slice(src.indexOf('override display(): void {'), src.indexOf('// ── P8: the shared surface'));
+  const legacyOrder = [...body.matchAll(/this\.(render\w+)\(containerEl\)/g)].map((m) => m[1]);
+  assert.equal(defs.length, 8);
+  assert.deepEqual(legacyOrder, defs, 'display() and getSettingDefinitions() paint the same order');
+});
+
+test('transport — a burst of 401s shares ONE re-mint, and each refused request is sent again on the new session', async () => {
+  const { Transport } = await import('../src/transport');
+  const { answerRequestsWith, httpRequests } = await import('./ui-stub');
+  const seen: Array<{ url: string; auth: string | undefined }> = [];
+  answerRequestsWith(async (opts) => {
+    const auth = (opts.headers as Record<string, string>).Authorization;
+    seen.push({ url: String(opts.url), auth });
+    if (auth === 'Bearer dead') return { status: 401, json: { error: 'session_expired' }, text: '' };
+    return { status: 200, json: { ok: 1 }, text: '' };
+  });
+  let remints = 0;
+  const t = new Transport({
+    baseUrl: 'https://x/api',
+    authToken: 'dead',
+    onUnauthorized: async () => {
+      remints += 1;
+      await new Promise((r) => setTimeout(r, 5));
+      t.setAuthToken('fresh');
+      return true;
+    },
+  });
+  const answers = await Promise.all([t.get('/account/devices'), t.get('/oauth/google/status'), t.post('/account/preferences', {})]);
+  assert.deepEqual(answers.map((a) => a.status), [200, 200, 200], 'every refused request got its second send');
+  assert.equal(remints, 1, 'one re-mint for the whole burst');
+  assert.equal(seen.filter((r) => r.auth === 'Bearer fresh').length, 3, 'the second sends carry the new session');
+  assert.equal(seen.length, 6);
+
+  // A re-mint that failed: the 401 stands, one send only.
+  seen.length = 0;
+  const dead = new Transport({ baseUrl: 'https://x/api', authToken: 'dead', onUnauthorized: async () => false });
+  assert.equal((await dead.get('/account/devices')).status, 401);
+  assert.equal(seen.length, 1, 'no second send without a new session');
+  answerRequestsWith(null);
+  httpRequests.length = 0;
+});
+
+test('transport — 403 {"err":"enc"} asks for a re-escrow and retries once; other refusals and anonymous calls never retry', async () => {
+  const { Transport } = await import('../src/transport');
+  const { answerRequestsWith, httpRequests } = await import('./ui-stub');
+  let calls = 0;
+  let escrows = 0;
+  let remints = 0;
+  let blocked = true;
+  answerRequestsWith(async (opts) => {
+    calls += 1;
+    const url = String(opts.url);
+    if (url.endsWith('/anon')) return { status: 401, json: {}, text: '' };
+    if (url.endsWith('/forbidden')) return { status: 403, json: { error: 'nope' }, text: '' };
+    if (blocked) return { status: 403, json: { err: 'enc' }, text: '' };
+    return { status: 200, json: {}, text: '' };
+  });
+  const t = new Transport({
+    baseUrl: 'https://x/api',
+    authToken: 'live',
+    onUnauthorized: async () => { remints += 1; return false; },
+    onEncryptionBlocked: async () => { escrows += 1; blocked = false; return true; },
+  });
+  const healed = await t.get('/account/devices');
+  assert.equal(healed.status, 200);
+  assert.equal(escrows, 1);
+  assert.equal(calls, 2, 'refused, re-escrowed, sent again');
+  calls = 0;
+  assert.equal((await t.get('/forbidden')).status, 403);
+  assert.equal(calls, 1, 'a 403 that is not the encryption gate is final');
+  calls = 0;
+  assert.equal((await t.post('/anon', {}, { anonymous: true })).status, 401);
+  assert.equal(calls, 1);
+  assert.equal(remints, 0, 'no session to mend for an anonymous call');
+  answerRequestsWith(null);
+  httpRequests.length = 0;
+});
+
+test('unlock — concurrent 401s share one re-mint, escrowed to the new session; concurrent 403-enc share one re-escrow', async () => {
+  const { UnlockMachine } = await import('../src/auth/UnlockMachine');
+  const log: string[] = [];
+  let auth: Record<string, unknown> = { token: 'plugin-token', device_id: 'dev-1', wrapped_mdek: 'blob', session_token: 'dead', account_id: 'acc', background_work_consented: true };
+  const api = {
+    exchangeToken: async () => {
+      log.push('exchange');
+      await new Promise((r) => setTimeout(r, 5));
+      return { ok: true, status: 200, data: { auth_token: 'fresh', account_id: 'acc', encryption_blocked: true }, error: null };
+    },
+    escrowMDEK: async () => {
+      log.push('escrow');
+      return { ok: true, status: 200, data: {}, error: null };
+    },
+  };
+  const deps = {
+    api: api as never,
+    keys: { isUnlocked: true, exportForEscrow: async () => 'k', set: () => undefined, clear: () => undefined } as never,
+    load: () => auth as never,
+    save: async (partial: Record<string, unknown>) => { auth = { ...auth, ...partial }; },
+    onSession: (token: string | null) => { log.push(`session:${token}`); },
+    onState: () => undefined,
+    deviceName: 'Obsidian — test',
+    mockMode: () => false,
+  };
+  const machine = new UnlockMachine(deps);
+  const [a, b] = await Promise.all([machine.onUnauthorized(), machine.onUnauthorized()]);
+  assert.deepEqual([a, b], [true, true]);
+  assert.deepEqual(log, ['exchange', 'session:fresh', 'escrow'], 'one exchange, one escrow, and the session set before the escrow that targets it');
+  assert.equal(auth.session_token, 'fresh');
+
+  log.length = 0;
+  const [c, d] = await Promise.all([machine.onEncryptionBlocked(), machine.onEncryptionBlocked()]);
+  assert.deepEqual([c, d], [true, true]);
+  assert.deepEqual(log, ['escrow'], 'one re-escrow for two askers');
+
+  // No key in memory: nothing to escrow, no retry promised.
+  const cold = new UnlockMachine({ ...deps, keys: { isUnlocked: false } as never });
+  assert.equal(await cold.onEncryptionBlocked(), false);
+});
+
+test('settings — the Account section keeps its reading order whatever answers first; the door out is last', async () => {
+  const { AskMyuSettingTab } = await import('../src/views/SettingsTab');
+  const later = <T,>(v: T, ms: number) => new Promise<T>((r) => setTimeout(() => r(v), ms));
+  const ok = (data: unknown) => ({ ok: true, status: 200, data, error: null });
+  const plugin = {
+    unlock: { current: 'unlocked' },
+    settings: { account_id: 'acc', device_id: 'dev-this' },
+    backend: {
+      listDevices: () => later(ok({ devices: [{ device_id: 'dev-this', device_name: 'Obsidian — Vault' }, { device_id: 'dev-2', device_name: 'Chrome on Linux' }] }), 12),
+      listAccountEmails: () => later(ok({ emails: [{ email: 'you@example.com', is_primary: true, verified: true }] }), 8),
+      getSelfCard: () => later(ok({ card: { header: { display_name: 'Masumi' } } }), 15), // slowest
+      getAccountCareer: () => later(ok({ status: 'no_data' }), 1),
+      getAccountPreferences: () => later(ok({ preferences: { preferred_address: 'Boss', coaching_preference: 'auto' } }), 1), // fastest
+    },
+  };
+  const tab = new AskMyuSettingTab({} as never, plugin as never);
+  const root = new FakeEl('div');
+  (tab as unknown as { renderAccount(el: FakeEl): void }).renderAccount(root);
+  await later(null, 40);
+  const texts = root.visibleTexts();
+  const at = (label: string) => {
+    const i = texts.indexOf(label);
+    assert.ok(i >= 0, `${label} rendered — saw: ${texts.join(' | ')}`);
+    return i;
+  };
+  const order = ['Devices', 'Chrome on Linux', 'Email addresses', 'you@example.com', 'Your name', 'What Myu calls you', 'How directly Myu speaks', 'Delete my account'].map(at);
+  assert.deepEqual([...order].sort((x, y) => x - y), order, `reading order held: ${texts.join(' | ')}`);
+  assert.ok(!texts.some((t) => /that is above/.test(t)), 'no row points at another by position');
+  assert.ok(root.find((e) => e.tag === 'input' && e.value === 'Masumi'), 'the saved name is in its field');
+  assert.ok(root.find((e) => e.tag === 'input' && e.value === 'Boss'), 'the saved address is in its field');
+});
+
+test('settings — a refused device list says so and offers Retry; Retry paints the list, never "no devices"', async () => {
+  const { AskMyuSettingTab } = await import('../src/views/SettingsTab');
+  let answers = 0;
+  const plugin = {
+    unlock: { current: 'unlocked' },
+    settings: { account_id: 'acc', device_id: 'dev-this' },
+    backend: {
+      listDevices: async () =>
+        answers++ === 0
+          ? { ok: false, status: 403, data: { err: 'enc' }, error: 'http_403' }
+          : { ok: true, status: 200, data: { devices: [{ device_id: 'dev-2', device_name: 'Chrome on Linux', last_used_at: '2026-09-03T06:00:00Z' }] }, error: null },
+    },
+  };
+  const tab = new AskMyuSettingTab({} as never, plugin as never);
+  const host = new FakeEl('div');
+  await (tab as unknown as { renderDevices(el: FakeEl): Promise<void> }).renderDevices(host);
+  let texts = host.visibleTexts();
+  assert.ok(texts.some((t) => t.startsWith("Couldn't load — This session is still being opened")), `says why: ${texts.join(' | ')}`);
+  assert.ok(!texts.some((t) => /no other devices|no devices/i.test(t)), 'a refusal is not an empty state');
+  assert.ok(await host.click('Retry'), 'Retry is offered');
+  await new Promise((r) => setTimeout(r, 5));
+  texts = host.visibleTexts();
+  assert.ok(texts.includes('Chrome on Linux') && texts.includes('Last used 2026-09-03'), `the retry painted the list: ${texts.join(' | ')}`);
+  assert.ok(!texts.some((t) => t.startsWith("Couldn't load")), 'the failure row is gone');
+});
+
+test('settings — a refused Google status never paints "Connect…" over a connected account; connected leads the copy', async () => {
+  const { AskMyuSettingTab } = await import('../src/views/SettingsTab');
+  const { Setting } = await import('./ui-stub');
+  let answers = 0;
+  const now = new Date().toISOString();
+  const connected = { ok: true, status: 200, error: null, data: { connected: true, split_consent: true, credentials: [{ credential_id: 'c1', email: 'you@example.com', is_primary: true, services: { calendar: { state: 'connected', last_sync_at: now, events_synced: 0 }, mail: { state: 'connected', last_sync_at: now }, meeting_notes: { state: 'connected', last_sync_at: now } } }] } };
+  const plugin = { settings: {}, backend: { googleOAuthStatus: async () => (answers++ === 0 ? { ok: false, status: 401, data: null, error: 'http_401' } : connected) } };
+  const tab = new AskMyuSettingTab({} as never, plugin as never);
+  const root = new FakeEl('div');
+  const row = new Setting(root).setName('Google Calendar & Gmail').setDesc('Connect and Myu preps…');
+  const host = root.createDiv();
+  await (tab as unknown as { renderIntegrationStatus(r: unknown, p: string, h: FakeEl): Promise<void> }).renderIntegrationStatus(row, 'google', host);
+  let texts = root.visibleTexts();
+  assert.ok(texts.some((t) => t.startsWith("Couldn't check whether it is connected")), texts.join(' | '));
+  assert.ok(!texts.includes('Connect…'), 'no invitation to connect on a refusal');
+  assert.ok(await root.click('Retry'));
+  await new Promise((r) => setTimeout(r, 5));
+  texts = root.visibleTexts();
+  assert.ok(texts.some((t) => t.startsWith('Connected as you@example.com. Read-only')), `connected leads, whatever the consent shape: ${texts.join(' | ')}`);
+  assert.ok(texts.includes('Calendar') && texts.includes('Mail'), 'the service rows follow');
+});
+
+// ── Weave Myu in: one row, a pane of recipes, a picker (2026-09-03) ──────────
+
+test('weave — one module owns the recipes: seven, unique, the folder woven in, each fenced so it survives its own fences', async () => {
+  const { weaveSnippets, weaveGuide, fence } = await import('../src/vault/weaveRecipes');
+  const snippets = weaveSnippets('Notes/Myu/');
+  assert.equal(snippets.length, 7);
+  assert.equal(new Set(snippets.map((s) => s.id)).size, 7, 'ids are unique');
+  assert.ok(snippets.every((s) => s.id === 'uri' || s.text.includes('Notes/Myu')), 'the folder is woven into every vault snippet');
+  assert.ok(!snippets.some((s) => s.text.includes('Notes/Myu//')), 'no trailing slash leaks into a path');
+  const guide = weaveGuide('Notes/Myu');
+  for (const s of snippets) assert.ok(guide.includes(`${s.name}\n\n${s.desc}\n\n`) && guide.includes(`\n${s.text}\n`), `${s.id} is in the guide with its words`);
+  // A snippet that IS a fence gets a longer fence around it, so the copy is the whole block.
+  assert.ok(guide.includes('````markdown\n```tasks\nnot done\npath includes Notes/Myu\n```\n````'), 'the Tasks block is wrapped in a four-tick fence');
+  assert.equal(fence('plain', 'text'), '```text\nplain\n```');
+  assert.ok(guide.startsWith('# Weave Myu in\n'), 'the pane carries its own title');
+  const note = weaveGuide('Myu', { asNote: true });
+  assert.ok(note.startsWith('---\nmyu-generated: true\n---\n'), 'as a note it is purgeable like everything Myu writes');
+  assert.ok(!note.includes('# Weave Myu in\n'), 'as a note the file name is the title');
+  assert.ok(guide.includes('app.plugins.plugins.askmyu.api'), 'the scripting API moved here from the settings pane');
+});
+
+test('weave — the picker lists the recipes and hands the chosen one back', async () => {
+  const { WeaveSnippetModal } = await import('../src/views/WeaveSnippetModal');
+  const picked: string[] = [];
+  const modal = new WeaveSnippetModal({} as never, 'Myu', (s) => picked.push(s.text));
+  const items = modal.getItems();
+  assert.equal(items.length, 7);
+  assert.ok(modal.getItemText(items[0]!).includes('Your day, inside every daily note'));
+  modal.onChooseItem(items[1]!);
+  assert.deepEqual(picked, ['![[Myu/Today]]']);
+});
+
+test('weave — the pane renders the guide, adds a copy button only where Obsidian left none, and offers to keep a copy only while Myu\'s folder is on', async () => {
+  const { WeaveView, addCopyButtons } = await import('../src/views/WeaveView');
+  const { markdownRenders } = await import('./ui-stub');
+  const before = markdownRenders.length;
+  const settings = { materialize_folder: 'Myu', materialize_consented: false, materialize_enabled: false };
+  const plugin = { settings, app: {}, materializer: { writeGuide: async () => 'Myu/Weave Myu in.md' } };
+  const view = new WeaveView({} as never, plugin as never);
+  await view.onOpen();
+  assert.equal(markdownRenders.length, before + 1, 'one render');
+  assert.ok(markdownRenders[before]!.startsWith('# Weave Myu in'), 'the guide is what is rendered');
+  assert.ok(!view.contentEl.visibleTexts().some((t) => t.startsWith('Keep a copy')), 'no write offered while the folder is off');
+  settings.materialize_consented = true;
+  settings.materialize_enabled = true;
+  await view.render();
+  assert.ok(view.contentEl.visibleTexts().includes('Keep a copy in Myu/'), 'the write is offered once the folder is on');
+
+  // Copy buttons: one per bare <pre>, none where Obsidian already put one.
+  const body = new FakeEl('div');
+  const bare = body.createEl('pre'); bare.createEl('code', { text: '![[Myu/Today]]' });
+  const dressed = body.createEl('pre'); dressed.createEl('code', { text: 'x' }); dressed.createEl('button', { cls: 'copy-code-button' });
+  assert.equal(addCopyButtons(body), 1);
+  assert.equal(body.querySelectorAll('.myu-copy-code').length, 1);
+});
+
+test('settings — Weave Myu in is one row with one door; the look links to the real file on GitHub', async () => {
+  const src = await (await import('node:fs/promises')).readFile('src/views/SettingsTab.ts', 'utf8');
+  const weave = src.slice(src.indexOf('private renderIntegrations('), src.indexOf('* The account itself'));
+  assert.equal((weave.match(/new Setting\(/g) ?? []).length, 2, 'the heading row (legacy) and the one recipes row — nothing else');
+  assert.ok(!/'Copy'/.test(weave), 'no blind Copy buttons remain');
+  assert.ok(/openWeave\(\)/.test(weave), 'the row opens the pane');
+  assert.ok(src.includes("const MYU_LOOK_URL = 'https://github.com/AskMyu/askmyu-obsidian-plugin/raw/main/snippets/myu-look.css'"), 'the look points at the raw file');
+  assert.ok(/descEl\.createEl\('a', \{ text: [^}]*href: MYU_LOOK_URL/.test(src), 'and it is a real link, not text');
+  assert.ok(!/release zip/.test(src), 'no promise of a zip that BRAT releases do not carry');
+});
+
+// ── the Myu look: bundled, installed on request, undone from the same row (2026-09-03) ──
+
+test('look — bundled as text and stamped with the build; an installed copy reads as this build\'s, an older build\'s, or not ours', async () => {
+  const { lookText, lookStamp, lookStanding, lookPath, LOOK_NAME } = await import('../src/look');
+  const text = lookText('0.0.246');
+  assert.ok(text.startsWith('/* @myu-look 0.0.246 '), 'the stamp names the build');
+  assert.ok(text.includes('--myu-cy:'), 'the look itself rides along as text');
+  assert.equal(lookStamp(text), '0.0.246');
+  assert.equal(lookStamp('body { color: red }'), null);
+  assert.equal(lookPath('.obsidian'), '.obsidian/snippets/myu-look.css');
+  assert.equal(lookPath('.config-alt'), '.config-alt/snippets/myu-look.css', 'the config folder is whatever the vault calls it');
+  assert.equal(LOOK_NAME, 'myu-look');
+  assert.deepEqual(lookStanding(null, '0.0.246'), { state: 'absent' });
+  assert.deepEqual(lookStanding(text, '0.0.246'), { state: 'current', version: '0.0.246' });
+  assert.deepEqual(lookStanding(lookText('0.0.240'), '0.0.246'), { state: 'different', version: '0.0.240' });
+  assert.deepEqual(lookStanding(`${text}\n/* mine */`, '0.0.246'), { state: 'different', version: '0.0.246' });
+  assert.deepEqual(lookStanding('body {}', '0.0.246'), { state: 'different', version: null });
+});
+
+test('look — install writes the stamped file and switches the snippet on; remove switches it off and deletes it; no switch → written, off', async () => {
+  const { LookInstaller, lookText, snippetSwitch } = await import('../src/look');
+  const files = new Map<string, string>();
+  const log: string[] = [];
+  const fs = {
+    exists: async (p: string) => files.has(p),
+    read: async (p: string) => files.get(p) ?? '',
+    write: async (p: string, t: string) => { files.set(p, t); },
+    remove: async (p: string) => { files.delete(p); },
+    mkdir: async (p: string) => { log.push(`mkdir:${p}`); },
+  };
+  const enabled = new Set<string>();
+  const app = { customCss: { enabledSnippets: enabled, setCssEnabledStatus: (n: string, on: boolean) => { if (on) enabled.add(n); else enabled.delete(n); log.push(`${on ? 'on' : 'off'}:${n}`); }, readSnippets: async () => { log.push('read'); } } };
+  const inst = new LookInstaller(fs, '.obsidian', '0.0.246', snippetSwitch(app, 'myu-look'));
+  assert.deepEqual(await inst.standing(), { state: 'absent' });
+  assert.equal(inst.isOn(), false);
+  assert.equal(await inst.install(), 'installed');
+  assert.equal(files.get('.obsidian/snippets/myu-look.css'), lookText('0.0.246'));
+  assert.deepEqual(log, ['mkdir:.obsidian/snippets', 'read', 'on:myu-look'], 'folder made, folder re-read, then switched on');
+  assert.equal(inst.isOn(), true);
+  assert.deepEqual(await inst.standing(), { state: 'current', version: '0.0.246' });
+  await inst.setOn(false);
+  assert.equal(inst.isOn(), false);
+  await inst.setOn(true);
+  await inst.remove();
+  assert.equal(files.size, 0, 'the file is gone');
+  assert.equal(inst.isOn(), false, 'and the snippet is off');
+  // An Obsidian without app.customCss: written, and the row sends people to Appearance.
+  const bare = new LookInstaller(fs, '.obsidian', '0.0.246', snippetSwitch({}, 'myu-look'));
+  assert.equal(bare.isOn(), null);
+  assert.equal(await bare.install(), 'installed_off');
+  assert.ok(files.has('.obsidian/snippets/myu-look.css'));
+});
+
+test('settings — the Myu look row: Install; then Turn off / Remove; an older or edited copy gets Update and Remove behind a confirm', async () => {
+  const { AskMyuSettingTab } = await import('../src/views/SettingsTab');
+  const { LookInstaller, lookText, snippetSwitch } = await import('../src/look');
+  const files = new Map<string, string>();
+  const fs = {
+    exists: async (p: string) => files.has(p),
+    read: async (p: string) => files.get(p) ?? '',
+    write: async (p: string, t: string) => { files.set(p, t); },
+    remove: async (p: string) => { files.delete(p); },
+    mkdir: async () => undefined,
+  };
+  const enabled = new Set<string>();
+  const app = { customCss: { enabledSnippets: enabled, setCssEnabledStatus: (n: string, on: boolean) => { if (on) enabled.add(n); else enabled.delete(n); } } };
+  const plugin = { app, manifest: { version: '0.0.246' }, lookInstaller: () => new LookInstaller(fs, '.obsidian', '0.0.246', snippetSwitch(app, 'myu-look')) };
+  const tab = new AskMyuSettingTab(app as never, plugin as never);
+  const host = new FakeEl('div');
+  const tick = () => new Promise((r) => setTimeout(r, 5));
+  const render = async () => { host.empty(); await (tab as unknown as { renderLook(el: FakeEl): Promise<void> }).renderLook(host); };
+  await render();
+  let texts = host.visibleTexts();
+  assert.ok(texts.includes('Install the look') && texts.some((t) => t.includes('.obsidian/snippets/myu-look.css')), `absent: offers Install and names the file — ${texts.join(' | ')}`);
+  assert.ok(await host.click('Install the look'));
+  await tick();
+  assert.equal(files.get('.obsidian/snippets/myu-look.css'), lookText('0.0.246'), 'installed this build\'s look');
+  assert.ok(enabled.has('myu-look'), 'and switched it on');
+  texts = host.visibleTexts();
+  assert.ok(texts.includes('Turn off') && texts.includes('Remove') && texts.some((t) => t.startsWith('Installed from 0.0.246 and on')), `current + on: ${texts.join(' | ')}`);
+  assert.ok(await host.click('Turn off'));
+  await tick();
+  texts = host.visibleTexts();
+  assert.ok(!enabled.has('myu-look') && texts.includes('Turn on') && texts.some((t) => t.startsWith('Installed from 0.0.246, off')), `current + off: ${texts.join(' | ')}`);
+  assert.ok(await host.click('Remove'));
+  await tick();
+  texts = host.visibleTexts();
+  assert.equal(files.size, 0, 'removed the file');
+  assert.ok(texts.includes('Install the look'), 'and offers Install again');
+  // A copy from an older build (or an edited one): nothing is replaced or deleted without asking.
+  files.set('.obsidian/snippets/myu-look.css', lookText('0.0.240'));
+  await render();
+  texts = host.visibleTexts();
+  assert.ok(texts.includes('Update the look') && texts.includes('Remove') && !texts.includes('Install the look') && texts.some((t) => t.startsWith('A copy from 0.0.240')), `different: ${texts.join(' | ')}`);
+  assert.ok(await host.click('Update the look'));
+  await tick();
+  assert.equal(files.get('.obsidian/snippets/myu-look.css'), lookText('0.0.240'), 'Update asks first — nothing replaced until the confirm');
+  const src = await (await import('node:fs/promises')).readFile('src/views/SettingsTab.ts', 'utf8');
+  assert.ok(!/['"`]\.obsidian/.test(src), 'no hardcoded .obsidian path — the vault\'s configDir is used');
+  assert.ok(/text: 'The file on GitHub', href: MYU_LOOK_URL/.test(src), 'the row still links to the file');
+});

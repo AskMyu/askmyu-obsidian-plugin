@@ -110,6 +110,9 @@ export interface PendingApproval {
 
 export class UnlockMachine {
   private state: UnlockState = 'disconnected';
+  /** The one re-mint / re-escrow in flight — every 401 / 403-enc of a burst joins it. */
+  private remint: Promise<boolean> | null = null;
+  private reescrow: Promise<boolean> | null = null;
   private transferKeys: ECDHKeyPair | null = null;
   private pollTimer: number | null = null;
 
@@ -661,7 +664,7 @@ export class UnlockMachine {
    * closed here costs a user some server-side freshness; failing open would
    * hand over a key they declined to give.
    */
-  private async escrowToSession(deviceId: string): Promise<void> {
+  private async escrowToSession(deviceId: string): Promise<boolean> {
     // Session escrow is the PLATFORM's session contract, not a plugin choice:
     // EncryptionEnforcementFilter blocks every non-whitelisted endpoint for an
     // encryption-enabled account until the session holds its escrowed key —
@@ -671,10 +674,13 @@ export class UnlockMachine {
     // session escrow client-side was a plugin-special misreading (live-run
     // finding, 2026-08-22) that left Tier-1 sessions unable to call anything.
     try {
-      await this.deps.api.escrowMDEK(await this.deps.keys.exportForEscrow(), deviceId);
+      const res = await this.deps.api.escrowMDEK(await this.deps.keys.exportForEscrow(), deviceId);
+      return res.ok;
     } catch {
       // Escrow failing doesn't cost us the local key; the next call that needs
-      // server-side decryption will surface it. Don't block unlock on it.
+      // server-side decryption will surface it — and the transport asks for a
+      // re-escrow on that answer. Don't block unlock on it.
+      return false;
     }
   }
 
@@ -689,18 +695,61 @@ export class UnlockMachine {
     }
   }
 
-  async onUnauthorized(): Promise<void> {
-    this.deps.onSession(null);
+  /**
+   * Transport saw a 401 — the session died mid-flight. Re-mint ONCE for
+   * everyone who noticed: a burst of parallel calls (the settings pane opens
+   * a dozen at a time) used to re-mint a session each, the key was escrowed to
+   * whichever session was current at that moment, and the transport kept a
+   * different one — every call after that was refused until a restart (live,
+   * 2026-09-03). Resolves true when the new session is usable, so the caller
+   * can send the refused request again.
+   */
+  onUnauthorized(): Promise<boolean> {
+    if (!this.remint) {
+      this.remint = this.remintSession().finally(() => {
+        this.remint = null;
+      });
+    }
+    return this.remint;
+  }
+
+  private async remintSession(): Promise<boolean> {
     const auth = this.deps.load();
-    if (!auth.token) return;
-    // Re-mint once; a revoked token lands in forget() inside mintSession.
+    if (!auth.token) {
+      this.deps.onSession(null);
+      return false;
+    }
+    // A revoked token lands in forget() inside mintSession; a transient
+    // failure leaves custody in place and the session cleared, as before.
     const minted = await this.mintSession(auth);
+    if (!minted) {
+      this.deps.onSession(null);
+      return false;
+    }
     // The re-minted session starts encryption_blocked like any other. If the
     // key is already in memory, it must be escrowed to THIS session too, or
     // every call after the recovery 403s (same class as the SSE session bug).
-    if (minted && this.deps.keys.isUnlocked && auth.device_id) {
-      await this.escrowToSession(auth.device_id);
+    if (this.deps.keys.isUnlocked && auth.device_id) return this.escrowToSession(auth.device_id);
+    return true;
+  }
+
+  /**
+   * Transport saw 403 `{"err":"enc"}` — this session holds no escrowed key:
+   * a session minted while the key was not yet in memory, or an escrow that
+   * lapsed. Re-escrow, once for everyone who noticed. True means the refused
+   * request is worth sending again.
+   */
+  onEncryptionBlocked(): Promise<boolean> {
+    if (!this.reescrow) {
+      this.reescrow = (async () => {
+        const auth = this.deps.load();
+        if (!this.deps.keys.isUnlocked || !auth.device_id || !auth.session_token) return false;
+        return this.escrowToSession(auth.device_id);
+      })().finally(() => {
+        this.reescrow = null;
+      });
     }
+    return this.reescrow;
   }
 
   /** Plugin unload. Memory only — nothing to flush, which is the point. */

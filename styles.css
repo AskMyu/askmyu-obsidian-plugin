@@ -958,3 +958,21 @@ button.myu-chip { display: inline-flex; align-items: center; background: none; b
   opacity: 0.55;
   cursor: default;
 }
+
+/* ── settings rows: the text keeps its column; a wide control drops below it in a narrow pane ──
+   Obsidian gives both columns `flex: 1 1 auto`, so a long description shrinks first and a
+   text field plus a button crush it to one word per line (live, 2026-09-03). */
+.myu-settings-section,
+.myu-settings { container-type: inline-size; }
+:is(.myu-settings-section, .myu-settings) .setting-item-info { flex: 1 1 0; min-width: 14em; }
+:is(.myu-settings-section, .myu-settings) .setting-item-control { flex: 0 1 auto; }
+@container (max-width: 34em) {
+  :is(.myu-settings-section, .myu-settings) .setting-item:not(:is(.mod-toggle, .setting-item-heading)) { flex-direction: column; align-items: stretch; }
+  :is(.myu-settings-section, .myu-settings) .setting-item:not(:is(.mod-toggle, .setting-item-heading)) .setting-item-info { min-width: 0; }
+  :is(.myu-settings-section, .myu-settings) .setting-item:not(:is(.mod-toggle, .setting-item-heading)) .setting-item-control { width: 100%; justify-content: flex-start; flex-wrap: wrap; }
+}
+
+/* ── weave: the recipes pane ── */
+.myu-weave { padding: var(--size-4-4); overflow: auto; }
+.myu-weave-body pre { position: relative; }
+.myu-copy-code { position: absolute; top: var(--size-4-1); right: var(--size-4-1); }

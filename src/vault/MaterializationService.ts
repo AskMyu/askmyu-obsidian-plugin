@@ -27,6 +27,7 @@ import type { AskMyuSettings } from '../settings';
 import { hashContent } from '../capture/noteMeta';
 import { decryptWithKey } from '../crypto/primitives';
 import { isWeeklyEditionFresh } from './WeeklyReviewWriter';
+import { WEAVE_NOTE } from './weaveRecipes';
 import { firstPresent, parseWhen, flattenMemoryPayload, buildSelfMarkdown, type JournalDayEntry, buildDayMarkdown, buildMonthCalendarMarkdown, buildMeetingHistoryMarkdown, buildJournalDayMarkdown, buildCompanyMarkdown,
   buildCommitmentsMarkdown,
   buildPeopleBase,
@@ -556,6 +557,18 @@ export class MaterializationService {
       return true;
     }
     return false;
+  }
+
+  /**
+   * The Weave guide as a note in Myu's folder — on request only (the pane's
+   * button), never on sync: it is the reader's to keep or edit, and a copy
+   * they edited is held like every other file here.
+   */
+  async writeGuide(content: string): Promise<string | null> {
+    if (!this.enabled()) return null;
+    const path = normalizePath(`${this.folder}/${WEAVE_NOTE}`);
+    const r = await this.writeHeld(path, content);
+    return r === 'written' || r === 'unchanged' ? path : null;
   }
 
   private async writeBaseOnce(): Promise<void> {

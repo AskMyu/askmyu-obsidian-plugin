@@ -114,6 +114,15 @@ export class FakeEl {
   visibleTexts(): string[] {
     return [...this.walk()].map((e) => e.text).filter(Boolean);
   }
+  /** One selector: a tag (`pre`), a class (`.copy-code-button`), or a comma list of those. */
+  querySelectorAll(selector: string): FakeEl[] {
+    const wants = selector.split(',').map((s) => s.trim()).filter(Boolean);
+    const matches = (e: FakeEl) => wants.some((w) => (w.startsWith('.') ? e.classes.has(w.slice(1)) : e.tag === w));
+    return [...this.walk()].filter((e) => e !== this && matches(e));
+  }
+  querySelector(selector: string): FakeEl | null {
+    return this.querySelectorAll(selector)[0] ?? null;
+  }
 }
 
 export class Modal {
@@ -197,8 +206,65 @@ class TextBuilder {
   }
 }
 
+class DropdownBuilder {
+  selectEl = new FakeEl('select');
+  private changeCb: ((v: string) => void) | null = null;
+  constructor(host: FakeEl) {
+    host.children.push(this.selectEl);
+    this.selectEl.parent = host;
+  }
+  addOption(value: string, label: string): this {
+    this.selectEl.createEl('option', { text: label, attr: { value } });
+    return this;
+  }
+  addOptions(options: Record<string, string>): this {
+    for (const [value, label] of Object.entries(options)) this.addOption(value, label);
+    return this;
+  }
+  setValue(v: string): this {
+    this.selectEl.value = v;
+    return this;
+  }
+  onChange(cb: (v: string) => void): this {
+    this.changeCb = cb;
+    return this;
+  }
+  choose(v: string): void {
+    this.selectEl.value = v;
+    this.changeCb?.(v);
+  }
+}
+
+class ExtraButtonBuilder {
+  extraSettingsEl = new FakeEl('button');
+  constructor(host: FakeEl) {
+    host.children.push(this.extraSettingsEl);
+    this.extraSettingsEl.parent = host;
+  }
+  setIcon(name: string): this {
+    this.extraSettingsEl.classes.add(`icon-${name}`);
+    return this;
+  }
+  setTooltip(t: string): this {
+    this.extraSettingsEl.text = t;
+    return this;
+  }
+  setDisabled(disabled: boolean): this {
+    this.extraSettingsEl.disabled = disabled;
+    return this;
+  }
+  onClick(cb: () => void): this {
+    this.extraSettingsEl.onclick = cb;
+    return this;
+  }
+}
+
 export class Setting {
   settingEl = new FakeEl('div');
+  /** Obsidian keeps a row's controls here; ours empties it to retry a fetch.
+      Detached in the stub — buttons land on settingEl, as every test expects. */
+  controlEl = new FakeEl('div');
+  descEl = new FakeEl('div');
   constructor(host: FakeEl) {
     host.children.push(this.settingEl);
     this.settingEl.parent = host;
@@ -231,6 +297,25 @@ export class Setting {
     cb(toggle as never);
     return this;
   }
+  addDropdown(cb: (d: DropdownBuilder) => unknown): this {
+    cb(new DropdownBuilder(this.settingEl));
+    return this;
+  }
+  addExtraButton(cb: (b: ExtraButtonBuilder) => unknown): this {
+    cb(new ExtraButtonBuilder(this.settingEl));
+    return this;
+  }
+}
+
+/** The settings tab's base. `display()` is the plugin's; Obsidian ≥1.13 adds `update()` — tests stand one in when they need it. */
+export class PluginSettingTab {
+  containerEl = new FakeEl('div');
+  constructor(
+    public app: unknown,
+    public plugin: unknown,
+  ) {}
+  display(): void {}
+  hide(): void {}
 }
 
 /** Notices land here so tests can assert what the user was told. */
@@ -288,7 +373,12 @@ export function normalizePath(path: string): string {
 export const httpRequests: Array<Record<string, unknown>> = [];
 export async function requestUrl(opts: Record<string, unknown>): Promise<Record<string, unknown>> {
   httpRequests.push(opts);
-  return { status: 200, json: {}, text: '' };
+  return requestUrlHandler ? requestUrlHandler(opts) : { status: 200, json: {}, text: '' };
+}
+/** A test that needs the wire to ANSWER (a 401, then a 200) installs one; null restores the silent 200. */
+export let requestUrlHandler: ((opts: Record<string, unknown>) => Promise<Record<string, unknown>>) | null = null;
+export function answerRequestsWith(handler: typeof requestUrlHandler): void {
+  requestUrlHandler = handler;
 }
 
 /** Views, for tests that poke a pane's public surface without opening it. */

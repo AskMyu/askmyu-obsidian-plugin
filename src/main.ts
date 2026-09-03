@@ -54,6 +54,9 @@ import { findEverythingMyuWrote, trashEverythingMyuWrote } from './vault/removeE
 import { surveyLinks, type LinkedPerson } from './capture/linkSurvey';
 import { FeedSearchModal } from './views/FeedSearchModal';
 import { HelpMyuView, HELP_VIEW_TYPE } from './views/HelpMyuView';
+import { WeaveView, WEAVE_VIEW_TYPE } from './views/WeaveView';
+import { LookInstaller, LOOK_NAME, snippetSwitch } from './look';
+import { WeaveSnippetModal } from './views/WeaveSnippetModal';
 import { DriveImportModal } from './views/DriveImportModal';
 import { COLD_START_OFF, parseColdStartFlags, type ColdStartFlags, type HelpMyuItem, type OAuthStatusResult } from './transport/api';
 import { routeOffer, addOffer, type CanvasOffer } from './composition/offers';
@@ -69,6 +72,9 @@ import { MyuFolderWatcher } from './capture/MyuFolderWatcher';
 import { MaterializeConsentModal } from './views/MaterializeConsentModal';
 import { OnboardingModal } from './views/OnboardingModal';
 import { SetupRecoveryModal } from './views/SetupRecoveryModal';
+
+/** At most one recovery-triggered repaint this often — a server that keeps refusing must not loop the pane. */
+const RECOVERY_REPAINT_MS = 30_000;
 
 /** How often Today refreshes itself. Ambient, not live. */
 const TODAY_REFRESH_MS = 5 * 60 * 1000;
@@ -151,6 +157,25 @@ export default class AskMyuPlugin extends Plugin {
     void this.loadIntegrationStatus(true);
     void this.syncOnOpen();
     return true;
+  }
+  /**
+   * The transport hit a wall a fresh session (401) or a fresh escrow (403 enc)
+   * clears. Let the machine try; when it worked, the refused request is sent
+   * again by the transport, the live stream re-opens on the new session, and
+   * whatever was painted from refused answers repaints. The repaint is
+   * throttled so a server that keeps refusing cannot turn recovery into a loop.
+   */
+  private lastRecoveryRepaint = 0;
+  private async recoverSession(kind: 'session' | 'escrow'): Promise<boolean> {
+    const ok = kind === 'session' ? await this.unlock.onUnauthorized() : await this.unlock.onEncryptionBlocked();
+    if (!ok || this.unlock.current !== 'unlocked') return ok;
+    if (kind === 'session') this.startLiveStream();
+    if (Date.now() - this.lastRecoveryRepaint > RECOVERY_REPAINT_MS) {
+      this.lastRecoveryRepaint = Date.now();
+      this.settingTab?.refreshIfVisible();
+      void this.refreshToday();
+    }
+    return ok;
   }
   /** A gated call answered 428: the pane shows the screen; the stream stops. */
   private onTermsRequired(body: unknown): void {
@@ -242,7 +267,8 @@ export default class AskMyuPlugin extends Plugin {
     this.transport = new Transport({
       baseUrl: this.settings.base_url,
       authToken: this.settings.session_token,
-      onUnauthorized: () => void this.unlock.onUnauthorized(),
+      onUnauthorized: () => this.recoverSession('session'),
+      onEncryptionBlocked: () => this.recoverSession('escrow'),
       onTermsRequired: (body) => this.onTermsRequired(body),
     });
 
@@ -322,6 +348,7 @@ export default class AskMyuPlugin extends Plugin {
     this.registerView(CARD_VIEW_TYPE, (leaf: WorkspaceLeaf) => new CardView(leaf, this));
     this.registerView(PREP_VIEW_TYPE, (leaf: WorkspaceLeaf) => new PrepView(leaf, this));
     this.registerView(HELP_VIEW_TYPE, (leaf: WorkspaceLeaf) => new HelpMyuView(leaf, this));
+    this.registerView(WEAVE_VIEW_TYPE, (leaf: WorkspaceLeaf) => new WeaveView(leaf, this));
     this.registerView(CHAT_VIEW_TYPE, (leaf: WorkspaceLeaf) => new ChatView(leaf, this));
     this.registerView(CANVAS_VIEW_TYPE, (leaf: WorkspaceLeaf) => new CanvasView(leaf, this));
     this.settingTab = new AskMyuSettingTab(this.app, this);
@@ -824,6 +851,14 @@ export default class AskMyuPlugin extends Plugin {
     this.addCommand({ id: 'new-conversation', name: 'Start a new conversation', callback: () => { void this.openChat({ text: '', send: false }); this.chatView()?.startNew(); } });
     this.addCommand({ id: 'cancel-backfill', name: 'Cancel bringing in notes', checkCallback: (checking) => { if (!this.backfillActive) return false; if (!checking) this.cancelBackfill(); return true; } });
     this.addCommand({ id: 'remove-myu-files', name: 'Remove everything Myu wrote', checkCallback: (checking) => { if (this.unlock.current !== 'unlocked' && Object.keys(this.settings.myu_file_hashes).length === 0) return false; if (!checking) this.removeEverythingMyuWrote(); return true; } });
+    this.addCommand({ id: 'weave-myu-in', name: 'Weave Myu in (recipes for your notes)', callback: () => void this.openWeave() });
+    this.addCommand({
+      id: 'insert-myu-snippet',
+      name: 'Insert a Myu snippet\u2026',
+      editorCallback: (editor) => {
+        new WeaveSnippetModal(this.app, this.settings.materialize_folder || 'Myu', (snippet) => editor.replaceSelection(snippet.text)).open();
+      },
+    });
     this.addCommand({ id: 'help-myu', name: 'Help Myu (people it cannot place)', checkCallback: (checking) => { if (this.unlock.current !== 'unlocked') return false; if (!checking) void this.openHelpMyu(); return true; } });
     this.addCommand({ id: 'search-myu', name: 'Search Myu (people, companies, memories)', checkCallback: (checking) => { if (this.unlock.current !== 'unlocked') return false; if (!checking) new FeedSearchModal(this.app, this).open(); return true; } });
     this.addCommand({ id: 'import-from-drive', name: 'Import meeting notes from Google Drive\u2026', checkCallback: (checking) => { if (this.unlock.current !== 'unlocked') return false; if (!checking) new DriveImportModal(this.app, this).open(); return true; } });
@@ -1110,6 +1145,27 @@ export default class AskMyuPlugin extends Plugin {
   }
 
   /** Help Myu — its own sidebar tab, reused like cards. */
+  /** The Myu look, over the vault's own adapter and config folder — whatever that folder is called. */
+  lookInstaller(): LookInstaller {
+    const a = this.app.vault.adapter;
+    return new LookInstaller(
+      { exists: (p) => a.exists(p), read: (p) => a.read(p), write: (p, t) => a.write(p, t), remove: (p) => a.remove(p), mkdir: (p) => a.mkdir(p) },
+      this.app.vault.configDir,
+      this.manifest.version,
+      snippetSwitch(this.app, LOOK_NAME),
+    );
+  }
+
+  /** The recipes pane — a document, so it opens in the main area, once. */
+  async openWeave(): Promise<void> {
+    const existing = this.app.workspace.getLeavesOfType(WEAVE_VIEW_TYPE);
+    const leaf = existing[0] ?? this.app.workspace.getLeaf('tab');
+    if (!existing.length) await leaf.setViewState({ type: WEAVE_VIEW_TYPE, active: true });
+    await this.app.workspace.revealLeaf(leaf);
+    const view = leaf.view;
+    if (view instanceof WeaveView) await view.render();
+  }
+
   async openHelpMyu(): Promise<void> {
     const existing = this.app.workspace.getLeavesOfType(HELP_VIEW_TYPE);
     const leaf = existing[0] ?? this.app.workspace.getRightLeaf(false);

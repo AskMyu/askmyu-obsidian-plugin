@@ -56,6 +56,23 @@ import { firstPresent, parseWhen } from '../vault/myuFiles';
 import { BUILD_STAMP } from '../buildStamp';
 import { normalizePreferences } from '../transport/api';
 import { appendBrand } from '../brand';
+import { PersonActionConfirmModal } from './PersonActionConfirmModal';
+import { loadFailure } from './settingsLoad';
+
+/** The optional look, as a file the reader saves — on the public repo. */
+const MYU_LOOK_URL = 'https://github.com/AskMyu/askmyu-obsidian-plugin/raw/main/snippets/myu-look.css';
+
+/** The two OAuth cards, before their status lands — and again after a refused status is retried. */
+const INTEGRATION_CARDS = {
+  google: {
+    name: 'Google Calendar & Gmail',
+    desc: 'Connect and Myu preps your meetings and reads the room from your threads. One browser tab for Google’s consent screen; it sends you right back.',
+  },
+  microsoft: {
+    name: 'Microsoft Outlook & calendar',
+    desc: 'Same idea for the Microsoft side of your life. One browser tab for the consent screen; it sends you right back.',
+  },
+} as const;
 
 export class AskMyuSettingTab extends PluginSettingTab {
   constructor(
@@ -71,7 +88,21 @@ export class AskMyuSettingTab extends PluginSettingTab {
    * stale one-shot render showing rows for a state that no longer exists.
    */
   refreshIfVisible(): void {
-    if (this.containerEl.isConnected) this.display();
+    if (this.containerEl.isConnected) this.rerender();
+  }
+
+  /**
+   * Re-render through the path Obsidian used to paint us. On 1.13+ that is
+   * `update()`: the definitions are re-read and the active tab repainted in
+   * place — groups, search, one section order. Before 1.13 it is `display()`.
+   * Calling `display()` on 1.13 painted the legacy flat layout, with its own
+   * section order, over a definitions render — so the pane reshuffled after
+   * every click (live, 2026-09-03). Every re-render in this file goes here.
+   */
+  rerender(): void {
+    const tab = this as unknown as { update?: () => void; settingItems?: unknown[] };
+    if (typeof tab.update === 'function' && Array.isArray(tab.settingItems) && tab.settingItems.length > 0) tab.update();
+    else this.display();
   }
 
   /**
@@ -93,7 +124,7 @@ export class AskMyuSettingTab extends PluginSettingTab {
       section('What Myu can read', ['consent', 'folders', 'tags', 'journal', 'sharing'], (r) => this.renderSharing(r, false)),
       section('Meeting notes', ['meetings', 'transcripts', 'capture'], (r) => this.renderMeetingNotes(r, false)),
       section("Myu's folder", ['materialize', 'people', 'companies', 'calendar', 'commitments', 'bases', 'sync', 'sync on open'], (r) => this.renderMaterialization(r, false)),
-      section('Weave Myu in', ['integrations', 'bases embed', 'tasks', 'daily notes'], (r) => this.renderIntegrations(r, false)),
+      section('Weave Myu in', ['integrations', 'recipes', 'snippets', 'bases embed', 'tasks', 'dataview', 'daily notes', 'template'], (r) => this.renderIntegrations(r, false)),
       section('Weekly review', ['review', 'week'], (r) => this.renderWeeklyReview(r, false)),
       section('Account', ['delete account', 'email', 'aliases', 'sign out', 'export', 'archive', 'uninstall'], (r) => this.renderAccount(r, false), () => this.plugin.unlock.current === 'unlocked'),
       section('Advanced', ['backend url', 'debug', 'snippet', 'styling'], (r) => this.renderAdvanced(r, false)),
@@ -103,14 +134,15 @@ export class AskMyuSettingTab extends PluginSettingTab {
   override display(): void {
     const { containerEl } = this;
     containerEl.empty();
+    containerEl.addClass('myu-settings');
 
     appendBrand(containerEl, 'myu-brand myu-brand-settings');
     this.renderConnection(containerEl);
     this.renderSharing(containerEl);
     this.renderMeetingNotes(containerEl);
     this.renderMaterialization(containerEl);
-    this.renderWeeklyReview(containerEl);
     this.renderIntegrations(containerEl);
+    this.renderWeeklyReview(containerEl);
     this.renderAccount(containerEl);
     this.renderAdvanced(containerEl);
   }
@@ -134,7 +166,7 @@ export class AskMyuSettingTab extends PluginSettingTab {
             if (!accepted) return;
             this.plugin.restartCapture();
             void this.plugin.materializer.materializeAll();
-            this.display();
+            this.rerender();
           }).open();
         }),
       );
@@ -156,7 +188,7 @@ export class AskMyuSettingTab extends PluginSettingTab {
           b.setButtonText('Syncing…').setDisabled(true);
           await this.plugin.materializer.materializeAll();
           notifyStatus('Synced — Myu’s folder is current.');
-          this.display();
+          this.rerender();
         }),
       );
 
@@ -222,70 +254,17 @@ export class AskMyuSettingTab extends PluginSettingTab {
 
   private renderIntegrations(root: HTMLElement, withHeading = true): void {
     if (withHeading) new Setting(root).setName('Weave Myu in').setHeading();
-    root.createEl('p', {
-      cls: 'myu-prose myu-quiet',
-      text:
-        'Myu never edits your files — these snippets are for you to paste into ' +
-        'the things you already own.',
-    });
-
-    const folder = this.plugin.settings.materialize_folder || 'Myu';
-    const snippets: Array<{ name: string; desc: string; text: string }> = [
-      {
-        name: 'Your day, inside every daily note',
-        desc: 'Add to your daily-note template. Every daily note — including ones the Calendar plugin creates — carries that day\'s schedule, meetings, and journal.',
-        text: `![[${folder}/Days/{{date:YYYY-MM-DD}}]]`,
-      },
-      {
-        name: 'The brief in your daily note',
-        desc: 'Add to your daily-note template; every daily note carries the morning brief.',
-        text: `![[${folder}/Today]]`,
-      },
-      {
-        name: 'The week, embedded',
-        desc: 'Same idea for your weekly note.',
-        text: `![[${folder}/Week]]`,
-      },
-      {
-        name: 'Myu commitments in a Tasks query',
-        desc: 'Anywhere you keep a Tasks block.',
-        text: '```tasks\nnot done\npath includes ' + folder + '\n```',
-      },
-      {
-        name: 'A button to today',
-        desc: 'Works from any note, QuickAdd macro, or launcher.',
-        text: 'obsidian://myu',
-      },
-      {
-        name: 'The people table, inside any note',
-        desc: 'Bases embed — the live CRM table lands wherever you paste this.',
-        text: `![[${folder}/People.base]]`,
-      },
-      {
-        name: 'Your people as a Dataview table',
-        desc: 'If you use Dataview; the bundled Base does this without it.',
-        text: '```dataview\ntable role, company, open_commitments\nfrom "' + folder + '/People"\n```',
-      },
-    ];
-
-    for (const snippet of snippets) {
-      new Setting(root)
-        .setName(snippet.name)
-        .setDesc(snippet.desc)
-        .addButton((b) =>
-          b.setButtonText('Copy').onClick(async () => {
-            await navigator.clipboard.writeText(snippet.text);
-            notifyStatus('Copied.');
-          }),
-        );
-    }
-
-    root.createEl('p', {
-      cls: 'myu-prose myu-quiet',
-      text:
-        'For scripts: app.plugins.plugins.askmyu.api — getBrief(), getPrep(id), ' +
-        'getPersonCard(name), getWeeklyReview(). Read-only; returns null while locked.',
-    });
+    // One row, one door. The recipes live in a pane where each snippet is a
+    // code block with a copy button — the text in view before it is copied.
+    // (Seven rows with a blind Copy each until 2026-09-03.)
+    new Setting(root)
+      .setName('Recipes')
+      .setDesc(
+        'Your day inside every daily note, the brief, the week, a Tasks query for your commitments, ' +
+          'the people table, a Dataview table, a button to Today. Myu never edits your files: you paste them, ' +
+          'or put one at the cursor with the command "Insert a Myu snippet…".',
+      )
+      .addButton((b) => b.setButtonText('Open the recipes').onClick(() => void this.plugin.openWeave()));
   }
 
   /**
@@ -304,50 +283,80 @@ export class AskMyuSettingTab extends PluginSettingTab {
 
     if (withHeading) new Setting(containerEl).setName('Account').setHeading();
 
+    // Every fetching row gets its place NOW, in reading order, and fills in
+    // when its answer lands — so the order never depends on which answer came
+    // first, and the door out stays last. (Live, 2026-09-03: the name and
+    // address rows appended themselves after "Delete my account", in whichever
+    // order the server answered, and the name's copy pointed "above" at a row
+    // that had landed below.)
     const devicesHost = containerEl.createDiv();
-    void this.renderDevices(devicesHost);
-
     const emailsHost = containerEl.createDiv();
+    const nameHost = containerEl.createDiv();
+    const addressHost = containerEl.createDiv();
+    const careerHost = containerEl.createDiv();
+    void this.renderDevices(devicesHost);
     void this.renderAccountEmails(emailsHost);
+    void this.renderProfile(nameHost, careerHost);
+    void this.renderPreferences(addressHost);
 
-    void this.renderPreferences(containerEl);
-    void this.renderProfile(containerEl);
-
+    // The door out — the web's DELETE-to-confirm, from inside the vault (parity
+    // review 2026-08-26). Last, on purpose: the one irreversible thing in the
+    // pane sits after everything it would take with it.
     new Setting(containerEl)
       .setName('Delete my account')
-      .setDesc('Irreversible. Everything Myu holds about you is deleted, immediately.')
+      .setDesc('Irreversible. Everything Myu holds about you is deleted, immediately. Your vault is untouched.')
       .addButton((b) =>
         b.setButtonText('Delete…').setWarning().onClick(() => {
-          new DeleteAccountModal(this.app, this.plugin, () => this.display()).open();
+          new DeleteAccountModal(this.app, this.plugin, () => this.rerender()).open();
         }),
       );
   }
 
+  /** A section that could not load says so — and offers the one thing that helps. */
+  private renderLoadFailure(host: HTMLElement, what: string, why: string, retry: () => void): void {
+    new Setting(host)
+      .setName(what)
+      .setDesc(`Couldn't load — ${why}`)
+      .addButton((b) => b.setButtonText('Retry').onClick(retry));
+  }
+
   /** The web's General → Profile: your name (account/update) and what Myu knows of your career (account/career). */
-  private async renderProfile(containerEl: HTMLElement): Promise<void> {
+  private async renderProfile(nameHost: HTMLElement, careerHost: HTMLElement): Promise<void> {
     const accountId = this.plugin.settings.account_id;
     if (!accountId) return;
-    const host = containerEl.createDiv();
+    const retry = () => {
+      nameHost.empty();
+      careerHost.empty();
+      void this.renderProfile(nameHost, careerHost);
+    };
     const [self, career] = await Promise.all([
       this.plugin.backend.getSelfCard().catch(() => null),
       this.plugin.backend.getAccountCareer(accountId).catch(() => null),
     ]);
+    const why = loadFailure(self);
+    if (why) {
+      this.renderLoadFailure(nameHost, 'Your name', why, retry);
+      return;
+    }
     const current = (self?.data as { card?: { header?: { display_name?: string } } } | null)?.card?.header?.display_name ?? '';
     let name = current;
-    new Setting(host)
+    new Setting(nameHost)
       .setName('Your name')
-      .setDesc('How Myu writes you into your own notes. Not what it calls you in conversation \u2014 that is above.')
+      .setDesc('How Myu writes you into your own notes.')
       .addText((t) => t.setPlaceholder('Your name').setValue(current).onChange((v) => { name = v; }))
       .addButton((b) => b.setButtonText('Save').onClick(async () => {
         const trimmed = name.trim();
         if (!trimmed || trimmed === current) return;
         const r = await this.plugin.backend.updateAccountName(accountId, trimmed);
-        if (r.ok && r.data?.success !== false) notifyStatus('Name saved.'); else notifyError(r.data?.message || "Couldn\u2019t save the name.");
+        if (r.ok && r.data?.success !== false) notifyStatus('Name saved.'); else notifyError(r.data?.message || "Couldn’t save the name.");
       }));
+    // The career row exists only when Myu knows something. A fetch that failed
+    // reads as "nothing known" here — accepted for a supplementary row; the
+    // name row above is the one that says so and carries the retry.
     const c = career?.data;
     if (c && c.status !== 'no_data' && (c.summary || c.resume_summary || c.linkedin_data_id || c.linkedin_id)) {
       const handle = c.linkedin_id || c.linkedin_data_id;
-      const row = new Setting(host).setName('Career, as Myu knows it').setDesc((c.summary || c.resume_summary || '').slice(0, 280));
+      const row = new Setting(careerHost).setName('Career, as Myu knows it').setDesc((c.summary || c.resume_summary || '').slice(0, 280));
       if (handle) row.addButton((b) => b.setButtonText('LinkedIn').onClick(() => window.open(`https://linkedin.com/in/${encodeURIComponent(handle)}`, '_blank')));
     }
   }
@@ -364,11 +373,21 @@ export class AskMyuSettingTab extends PluginSettingTab {
    */
   private async renderDevices(host: HTMLElement): Promise<void> {
     const res = await this.plugin.backend.listDevices().catch(() => null);
+    const why = loadFailure(res);
+    if (why) {
+      // Never "no other devices" on a refused fetch: that reads as a fact, and
+      // a reader with nine devices acted on it (live, 2026-09-03).
+      this.renderLoadFailure(host, 'Devices', why, () => {
+        host.empty();
+        void this.renderDevices(host);
+      });
+      return;
+    }
     const devices = res?.data?.devices ?? [];
     const mine = this.plugin.settings.device_id;
 
     if (devices.length === 0) {
-      new Setting(host).setName('Devices').setDesc('No other devices are holding custody of this account.');
+      new Setting(host).setName('Devices').setDesc('AskMyu lists no devices for this account yet.');
       return;
     }
 
@@ -397,7 +416,7 @@ export class AskMyuSettingTab extends PluginSettingTab {
           const done = await this.plugin.backend.removeDevice(id);
           if (done.ok) {
             notifyStatus(`${name} removed — its stored copy can no longer be opened.`);
-            this.display();
+            this.rerender();
           } else {
             notifyError("Couldn't remove that device. Check the connection and try again.");
           }
@@ -415,6 +434,14 @@ export class AskMyuSettingTab extends PluginSettingTab {
    */
   private async renderAccountEmails(host: HTMLElement): Promise<void> {
     const res = await this.plugin.backend.listAccountEmails().catch(() => null);
+    const why = loadFailure(res);
+    if (why) {
+      this.renderLoadFailure(host, 'Email addresses', why, () => {
+        host.empty();
+        void this.renderAccountEmails(host);
+      });
+      return;
+    }
     const emails = res?.data?.emails ?? [];
 
     new Setting(host)
@@ -422,7 +449,7 @@ export class AskMyuSettingTab extends PluginSettingTab {
       .setDesc('Any verified address can sign you in. Add one and Myu emails it a link to confirm.')
       .addButton((b) =>
         b.setButtonText('Add…').onClick(() => {
-          new AddAccountEmailModal(this.app, this.plugin, () => this.display()).open();
+          new AddAccountEmailModal(this.app, this.plugin, () => this.rerender()).open();
         }),
       );
 
@@ -449,7 +476,7 @@ export class AskMyuSettingTab extends PluginSettingTab {
           b.setButtonText('Make primary').onClick(async () => {
             await this.plugin.backend.setPrimaryAccountEmail(address);
             notifyStatus(`${address} is now your primary address.`);
-            this.display();
+            this.rerender();
           }),
         );
       }
@@ -458,7 +485,7 @@ export class AskMyuSettingTab extends PluginSettingTab {
           b.setButtonText('Remove').setWarning().onClick(async () => {
             await this.plugin.backend.removeAccountEmail(address);
             notifyStatus(`${address} removed.`);
-            this.display();
+            this.rerender();
           }),
         );
       }
@@ -467,24 +494,32 @@ export class AskMyuSettingTab extends PluginSettingTab {
 
   /** How Myu addresses you, and how directly it speaks. Account state, so it
       is written back rather than mirrored (rule 3). */
-  private async renderPreferences(containerEl: HTMLElement): Promise<void> {
+  private async renderPreferences(host: HTMLElement): Promise<void> {
     const res = await this.plugin.backend.getAccountPreferences().catch(() => null);
+    const why = loadFailure(res);
+    if (why) {
+      this.renderLoadFailure(host, 'What Myu calls you', why, () => {
+        host.empty();
+        void this.renderPreferences(host);
+      });
+      return;
+    }
     // `{ preferences: {...} }` in both directions — see normalizePreferences,
     // which owns that knowledge so a test can reach it.
     const prefs = normalizePreferences(res?.data);
     const address = typeof prefs.preferred_address === 'string' ? prefs.preferred_address : '';
     const coaching = typeof prefs.coaching_preference === 'string' ? prefs.coaching_preference : 'auto';
 
-    new Setting(containerEl)
+    new Setting(host)
       .setName('What Myu calls you')
-      .setDesc('Leave empty and Myu uses your name.')
+      .setDesc('In conversation. Leave empty and Myu uses your name.')
       .addText((t) =>
         t.setPlaceholder('E.g. Boss').setValue(address).onChange(async (value) => {
           await this.plugin.backend.updateAccountPreferences({ preferred_address: value.trim() });
         }),
       );
 
-    new Setting(containerEl)
+    new Setting(host)
       .setName('How directly Myu speaks')
       .setDesc('Auto follows the moment. The rest hold Myu to one register.')
       .addDropdown((d) =>
@@ -523,132 +558,179 @@ export class AskMyuSettingTab extends PluginSettingTab {
       this.plugin.backend.getSlackConnections().catch(() => null),
       this.plugin.backend.getZulipConnections().catch(() => null),
     ]);
+    // A list that could not be fetched says so in its own row — never the
+    // "nothing connected" copy, which invites connecting again. One retry
+    // re-asks for all four: a refusal rarely comes alone.
+    const retry = () => {
+      host.empty();
+      void this.renderOtherSources(host);
+    };
 
-    const imapRow = new Setting(host).setName('Other email (IMAP)');
-    const imapAccounts = imap?.data?.accounts ?? [];
-    imapRow.setDesc(
-      imapAccounts.length > 0
-        ? `Connected: ${imapAccounts.map((a) => a.email).filter(Boolean).join(', ')}`
-        : 'Fastmail, Proton (bridge), your own server — any IMAP mailbox.',
-    );
-    for (const account of imapAccounts) {
-      if (!account.credential_id) continue;
-      const id = account.credential_id;
+    const imapWhy = loadFailure(imap);
+    if (imapWhy) this.renderLoadFailure(host, 'Other email (IMAP)', imapWhy, retry);
+    else {
+      const imapRow = new Setting(host).setName('Other email (IMAP)');
+      const imapAccounts = imap?.data?.accounts ?? [];
+      imapRow.setDesc(
+        imapAccounts.length > 0
+          ? `Connected: ${imapAccounts.map((a) => a.email).filter(Boolean).join(', ')}`
+          : 'Fastmail, Proton (bridge), your own server — any IMAP mailbox.',
+      );
+      for (const account of imapAccounts) {
+        if (!account.credential_id) continue;
+        const id = account.credential_id;
+        imapRow.addButton((b) =>
+          b.setButtonText(`Remove ${account.email ?? ''}`).onClick(async () => {
+            await this.plugin.backend.removeGenericEmailAccount(id);
+            notifyStatus('Removed.');
+            this.rerender();
+          }),
+        );
+      }
       imapRow.addButton((b) =>
-        b.setButtonText(`Remove ${account.email ?? ''}`).onClick(async () => {
-          await this.plugin.backend.removeGenericEmailAccount(id);
-          notifyStatus('Removed.');
-          this.display();
-        }),
+        b.setButtonText('Add…').onClick(() => new AddSourceModal(this.app, this.plugin, 'imap', () => this.rerender()).open()),
       );
     }
-    imapRow.addButton((b) =>
-      b.setButtonText('Add…').onClick(() => new AddSourceModal(this.app, this.plugin, 'imap', () => this.display()).open()),
-    );
 
-    const caldavRow = new Setting(host).setName('Other calendars (CalDAV)');
-    const caldavAccounts = caldav?.data?.accounts ?? [];
-    caldavRow.setDesc(
-      caldavAccounts.length > 0
-        ? `Connected: ${caldavAccounts.map((a) => a.email).filter(Boolean).join(', ')}`
-        : 'Fastmail, iCloud, Nextcloud — any CalDAV calendar.',
-    );
-    for (const account of caldavAccounts) {
-      if (!account.credential_id) continue;
-      const id = account.credential_id;
+    const caldavWhy = loadFailure(caldav);
+    if (caldavWhy) this.renderLoadFailure(host, 'Other calendars (CalDAV)', caldavWhy, retry);
+    else {
+      const caldavRow = new Setting(host).setName('Other calendars (CalDAV)');
+      const caldavAccounts = caldav?.data?.accounts ?? [];
+      caldavRow.setDesc(
+        caldavAccounts.length > 0
+          ? `Connected: ${caldavAccounts.map((a) => a.email).filter(Boolean).join(', ')}`
+          : 'Fastmail, iCloud, Nextcloud — any CalDAV calendar.',
+      );
+      for (const account of caldavAccounts) {
+        if (!account.credential_id) continue;
+        const id = account.credential_id;
+        caldavRow.addButton((b) =>
+          b.setButtonText(`Remove ${account.email ?? ''}`).onClick(async () => {
+            await this.plugin.backend.removeCalDavAccount(id);
+            notifyStatus('Removed.');
+            this.rerender();
+          }),
+        );
+      }
       caldavRow.addButton((b) =>
-        b.setButtonText(`Remove ${account.email ?? ''}`).onClick(async () => {
-          await this.plugin.backend.removeCalDavAccount(id);
-          notifyStatus('Removed.');
-          this.display();
-        }),
+        b.setButtonText('Add…').onClick(() => new AddSourceModal(this.app, this.plugin, 'caldav', () => this.rerender()).open()),
       );
     }
-    caldavRow.addButton((b) =>
-      b.setButtonText('Add…').onClick(() => new AddSourceModal(this.app, this.plugin, 'caldav', () => this.display()).open()),
-    );
 
     // Without an admin's approval (cold start): a private iCal address, or an
     // .ics export — read-only by construction, no OAuth, no admin.
     let icalUrl = '';
     new Setting(host)
       .setName('Calendar link')
-      .setDesc('A private iCal address \u2014 Google Calendar: Settings \u2192 your calendar \u2192 secret address in iCal format; Outlook: Publish calendar. Read-only by construction.')
-      .addText((t) => t.setPlaceholder('https://\u2026/basic.ics').onChange((v) => { icalUrl = v.trim(); }))
+      .setDesc('A private iCal address — Google Calendar: Settings → your calendar → secret address in iCal format; Outlook: Publish calendar. Read-only by construction.')
+      .addText((t) => t.setPlaceholder('https://…/basic.ics').onChange((v) => { icalUrl = v.trim(); }))
       .addButton((b) => b.setButtonText('Read my week').onClick(async () => {
-        if (!/^(https:\/\/|webcal:\/\/)/i.test(icalUrl)) { notifyError('Paste the full address \u2014 it starts with https://'); return; }
+        if (!/^(https:\/\/|webcal:\/\/)/i.test(icalUrl)) { notifyError('Paste the full address — it starts with https://'); return; }
         const r = await this.plugin.backend.addIcalUrl(icalUrl).catch(() => null);
-        if (r?.ok && r.data?.success !== false) { notifyStatus(`Calendar added \u2014 ${r.data?.events_stored ?? 0} events. Your week starts painting in Today.`); void this.plugin.refreshTodayNow(); }
+        if (r?.ok && r.data?.success !== false) { notifyStatus(`Calendar added — ${r.data?.events_stored ?? 0} events. Your week starts painting in Today.`); void this.plugin.refreshTodayNow(); }
         else notifyError(r?.data?.error || 'That address did not read as a calendar. Check it ends with .ics and try again.');
       }));
     new Setting(host)
       .setName('Calendar file')
       .setDesc('An .ics export from any calendar. Read once; nothing to revoke.')
-      .addButton((b) => b.setButtonText('Upload an .ics\u2026').onClick(async () => {
+      .addButton((b) => b.setButtonText('Upload an .ics…').onClick(async () => {
         const picked = await pickFile('.ics,text/calendar');
         if (!picked) return;
         const r = await this.plugin.backend.uploadIcs(picked.bytes).catch(() => null);
-        if (r?.ok && r.data?.success !== false) { notifyStatus(`Calendar file read \u2014 ${r.data?.events_stored ?? 0} events. Your week starts painting in Today.`); void this.plugin.refreshTodayNow(); }
+        if (r?.ok && r.data?.success !== false) { notifyStatus(`Calendar file read — ${r.data?.events_stored ?? 0} events. Your week starts painting in Today.`); void this.plugin.refreshTodayNow(); }
         else notifyError(r?.data?.error || 'That file did not read as a calendar export. Export an .ics and try again.');
       }));
 
     // Slack — the web's card: each workspace with its own Disconnect; Connect
     // opens Slack's consent screen (the return lands on the web's integrations
     // page; this list refreshes when the tab is reopened).
-    const slackRows = (slack?.data?.connections ?? []).filter((c) => c.status !== 'disconnected');
-    const slackRow = new Setting(host)
-      .setName('Slack')
-      .setDesc(slackRows.length > 0 ? `${slackRows.length} workspace${slackRows.length === 1 ? '' : 's'} connected.` : 'Myu reads the DMs and channels you choose. Consent happens on Slack\u2019s own screen.');
-    for (const c of slackRows) {
-      const id = String(c.connection_id ?? '');
-      if (!id) continue;
-      new Setting(host)
-        .setName(String(c.workspace_name ?? 'Workspace'))
-        .setDesc([c.user_email, c.user_name].filter(Boolean).join(' \u00b7 '))
-        .addButton((b) => { let armed = false; b.setButtonText('Disconnect').onClick(async () => {
-          if (!armed) { armed = true; b.setButtonText('Disconnect \u2014 sure?').setWarning(); return; }
-          const r = await this.plugin.backend.slackDisconnect(id);
-          if (r.ok) { notifyStatus('Slack workspace disconnected.'); this.display(); } else notifyError("Couldn\u2019t disconnect.");
-        }); });
+    const slackWhy = loadFailure(slack);
+    if (slackWhy) this.renderLoadFailure(host, 'Slack', slackWhy, retry);
+    else {
+      const slackRows = (slack?.data?.connections ?? []).filter((c) => c.status !== 'disconnected');
+      const slackRow = new Setting(host)
+        .setName('Slack')
+        .setDesc(slackRows.length > 0 ? `${slackRows.length} workspace${slackRows.length === 1 ? '' : 's'} connected.` : 'Myu reads the DMs and channels you choose. Consent happens on Slack’s own screen.');
+      for (const c of slackRows) {
+        const id = String(c.connection_id ?? '');
+        if (!id) continue;
+        new Setting(host)
+          .setName(String(c.workspace_name ?? 'Workspace'))
+          .setDesc([c.user_email, c.user_name].filter(Boolean).join(' · '))
+          .addButton((b) => { let armed = false; b.setButtonText('Disconnect').onClick(async () => {
+            if (!armed) { armed = true; b.setButtonText('Disconnect — sure?').setWarning(); return; }
+            const r = await this.plugin.backend.slackDisconnect(id);
+            if (r.ok) { notifyStatus('Slack workspace disconnected.'); this.rerender(); } else notifyError("Couldn’t disconnect.");
+          }); });
+      }
+      slackRow.addButton((b) => b.setButtonText(slackRows.length ? 'Connect another…' : 'Connect…').onClick(async () => {
+        const r = await this.plugin.backend.slackConnect().catch(() => null);
+        const url = r?.data?.authorization_url;
+        if (r?.ok && url) { window.open(url, '_blank'); notifyStatus('Finish on Slack’s screen; the workspace shows here when you reopen settings.'); }
+        else notifyError('Could not start the Slack connect.');
+      }));
     }
-    slackRow.addButton((b) => b.setButtonText(slackRows.length ? 'Connect another\u2026' : 'Connect\u2026').onClick(async () => {
-      const r = await this.plugin.backend.slackConnect().catch(() => null);
-      const url = r?.data?.authorization_url;
-      if (r?.ok && url) { window.open(url, '_blank'); notifyStatus('Finish on Slack\u2019s screen; the workspace shows here when you reopen settings.'); }
-      else notifyError('Could not start the Slack connect.');
-    }));
 
     // Zulip — the web's card: a form (realm URL, email, API key) and per-realm Disconnect.
-    const zulipRows = (zulip?.data?.connections ?? []).filter((c) => c.status !== 'disconnected');
-    const zulipRow = new Setting(host)
-      .setName('Zulip')
-      .setDesc(zulipRows.length > 0 ? `${zulipRows.length} organization${zulipRows.length === 1 ? '' : 's'} connected.` : 'Connects with a bot email and API key from your Zulip settings.');
-    for (const c of zulipRows) {
-      const id = String(c.connection_id ?? '');
-      if (!id) continue;
-      new Setting(host)
-        .setName(String(c.workspace_name ?? c.workspace_id ?? 'Organization'))
-        .setDesc([c.user_email, c.user_name].filter(Boolean).join(' \u00b7 '))
-        .addButton((b) => { let armed = false; b.setButtonText('Disconnect').onClick(async () => {
-          if (!armed) { armed = true; b.setButtonText('Disconnect \u2014 sure?').setWarning(); return; }
-          const r = await this.plugin.backend.zulipDisconnect(id);
-          if (r.ok) { notifyStatus('Zulip organization disconnected.'); this.display(); } else notifyError("Couldn\u2019t disconnect.");
-        }); });
+    const zulipWhy = loadFailure(zulip);
+    if (zulipWhy) this.renderLoadFailure(host, 'Zulip', zulipWhy, retry);
+    else {
+      const zulipRows = (zulip?.data?.connections ?? []).filter((c) => c.status !== 'disconnected');
+      const zulipRow = new Setting(host)
+        .setName('Zulip')
+        .setDesc(zulipRows.length > 0 ? `${zulipRows.length} organization${zulipRows.length === 1 ? '' : 's'} connected.` : 'Connects with a bot email and API key from your Zulip settings.');
+      for (const c of zulipRows) {
+        const id = String(c.connection_id ?? '');
+        if (!id) continue;
+        new Setting(host)
+          .setName(String(c.workspace_name ?? c.workspace_id ?? 'Organization'))
+          .setDesc([c.user_email, c.user_name].filter(Boolean).join(' · '))
+          .addButton((b) => { let armed = false; b.setButtonText('Disconnect').onClick(async () => {
+            if (!armed) { armed = true; b.setButtonText('Disconnect — sure?').setWarning(); return; }
+            const r = await this.plugin.backend.zulipDisconnect(id);
+            if (r.ok) { notifyStatus('Zulip organization disconnected.'); this.rerender(); } else notifyError("Couldn’t disconnect.");
+          }); });
+      }
+      zulipRow.addButton((b) => b.setButtonText(zulipRows.length ? 'Connect another…' : 'Connect…').onClick(() => new ZulipConnectModal(this.app, this.plugin, () => this.rerender()).open()));
     }
-    zulipRow.addButton((b) => b.setButtonText(zulipRows.length ? 'Connect another\u2026' : 'Connect\u2026').onClick(() => new ZulipConnectModal(this.app, this.plugin, () => this.display()).open()));
   }
 
-  /** Async: the card shows CONNECTED-as-whom, or the Connect… button. */
+  /**
+   * Async: the card says CONNECTED — as whom — or offers Connect…; and when
+   * the status call was refused it says THAT. A refused call used to paint
+   * "Connect…" over an account that was already syncing (live, 2026-09-03):
+   * the reader saw the service rows syncing under a card inviting a connect.
+   */
   private async renderIntegrationStatus(row: Setting, provider: 'google' | 'microsoft', host: HTMLElement): Promise<void> {
     const res = provider === 'google'
       ? await this.plugin.backend.googleOAuthStatus().catch(() => null)
       : await this.plugin.backend.microsoftOAuthStatus().catch(() => null);
+    const why = loadFailure(res);
+    if (why) {
+      row.setDesc(`Couldn't check whether it is connected — ${why}`);
+      row.addButton((b) =>
+        b.setButtonText('Retry').onClick(() => {
+          row.controlEl.empty();
+          row.setDesc(INTEGRATION_CARDS[provider].desc);
+          host.empty();
+          void this.renderIntegrationStatus(row, provider, host);
+        }),
+      );
+      return;
+    }
     const connected = res?.data?.connected === true;
     const creds = (res?.data?.credentials ?? []).filter((c) => c.email || c.credential_id);
     const split = res?.data?.split_consent === true;
     if (connected) {
-      row.setDesc(`Connected — Myu is reading calendar and mail from ${creds.length === 1 ? (creds[0]?.email ?? 'it') : `${creds.length} accounts`}.`);
-      if (split) row.setDesc('Read-only. Myu prepares; it never sends anything. Each piece is its own permission \u2014 connect what you want, when you want.');
+      // "Connected" leads, whatever the consent shape — the split-consent copy
+      // used to REPLACE it, so a connected card never said so.
+      const who = creds.length === 1 ? `as ${creds[0]?.email ?? 'one account'}` : `— ${creds.length} accounts`;
+      row.setDesc(
+        split
+          ? `Connected ${who}. Read-only — Myu prepares and never sends. Each piece below is its own permission.`
+          : `Connected ${who}. Myu is reading calendar and mail from it.`,
+      );
       // The web's connection card: one row per signed-in account, with Set
       // primary and a two-press Disconnect (the web confirms inline too).
       for (const c of creds) {
@@ -657,7 +739,7 @@ export class AskMyuSettingTab extends PluginSettingTab {
         const line = new Setting(host).setName(c.email ?? id).setDesc(c.is_primary ? 'Primary — meetings and mail are read from this account first.' : '');
         if (!c.is_primary) line.addButton((b) => b.setButtonText('Set primary').onClick(async () => {
           const r = provider === 'google' ? await this.plugin.backend.googleSetPrimaryCredential(id) : await this.plugin.backend.microsoftSetPrimaryCredential(id);
-          if (r.ok && r.data?.success !== false) { notifyStatus(r.data?.message || 'Primary set.'); this.display(); } else notifyError(r.data?.error || "Couldn\u2019t set primary.");
+          if (r.ok && r.data?.success !== false) { notifyStatus(r.data?.message || 'Primary set.'); this.rerender(); } else notifyError(r.data?.error || "Couldn’t set primary.");
         }));
         // Scope-aware rows (cold start, slice 2): Calendar · Mail · Meeting notes,
         // each with its state and — with split consent — its own Connect.
@@ -665,15 +747,15 @@ export class AskMyuSettingTab extends PluginSettingTab {
         line.addButton((b) => {
           let armed = false;
           b.setButtonText('Disconnect').onClick(async () => {
-            if (!armed) { armed = true; b.setButtonText('Disconnect \u2014 sure?').setWarning(); return; }
+            if (!armed) { armed = true; b.setButtonText('Disconnect — sure?').setWarning(); return; }
             const r = provider === 'google' ? await this.plugin.backend.googleOAuthDisconnect(id) : await this.plugin.backend.microsoftOAuthDisconnect(id);
-            if (r.ok && r.data?.success !== false) { notifyStatus(r.data?.message || 'Disconnected.'); this.display(); } else { notifyError(r.data?.error || "Couldn\u2019t disconnect."); armed = false; b.setButtonText('Disconnect'); }
+            if (r.ok && r.data?.success !== false) { notifyStatus(r.data?.message || 'Disconnected.'); this.rerender(); } else { notifyError(r.data?.error || "Couldn’t disconnect."); armed = false; b.setButtonText('Disconnect'); }
           });
         });
       }
-      row.addButton((b) => b.setButtonText('Connect another\u2026').onClick(() => void this.startOAuth(provider)));
+      row.addButton((b) => b.setButtonText('Connect another…').onClick(() => void this.startOAuth(provider)));
     } else {
-      row.addButton((b) => b.setButtonText('Connect\u2026').onClick(() => void this.startOAuth(provider)));
+      row.addButton((b) => b.setButtonText('Connect…').onClick(() => void this.startOAuth(provider)));
     }
   }
 
@@ -735,7 +817,7 @@ export class AskMyuSettingTab extends PluginSettingTab {
         b.setButtonText('Deny').onClick(async () => {
           await this.plugin.backend.denyDeviceTransfer(request.request_id);
           notifyStatus('Denied.');
-          this.display();
+          this.rerender();
         }),
       );
       row.addButton((b) =>
@@ -748,11 +830,91 @@ export class AskMyuSettingTab extends PluginSettingTab {
               return;
             }
             new ApproveDeviceModal(this.app, this.plugin, request.request_id, request.public_key, () =>
-              this.display(),
+              this.rerender(),
             ).open();
           }),
       );
     }
+  }
+
+  /**
+   * The Myu look: install, turn on/off, update, remove — a CSS snippet in the
+   * reader's own config folder, written only when they press the button, and
+   * undone from the same row. Bundled with the build (no network), so what
+   * this row installs is the look for the plugin they are running.
+   */
+  private async renderLook(host: HTMLElement): Promise<void> {
+    const installer = this.plugin.lookInstaller();
+    const path = installer.path();
+    const again = () => {
+      host.empty();
+      void this.renderLook(host);
+    };
+    let standing;
+    try {
+      standing = await installer.standing();
+    } catch {
+      this.renderLoadFailure(host, 'Myu look', 'the snippets folder could not be read.', again);
+      return;
+    }
+    const on = installer.isOn();
+    const row = new Setting(host).setName('Myu look');
+    const linkToFile = () => {
+      row.descEl.appendText(' ');
+      row.descEl.createEl('a', { text: 'The file on GitHub', href: MYU_LOOK_URL, attr: { target: '_blank', rel: 'noopener' } });
+    };
+    const install = async () => {
+      const r = await installer.install().catch(() => null);
+      if (r === 'installed') notifyStatus('The Myu look is on. Turn it off or remove it from this row.');
+      else if (r === 'installed_off') notifyStatus(`Installed at ${path}. Turn it on under Appearance \u2192 CSS snippets.`);
+      else notifyError('Could not write the snippet. Check the vault folder is writable.');
+      again();
+    };
+
+    if (standing.state === 'absent') {
+      row.setDesc(`Myu\u2019s own look on Myu\u2019s panes only \u2014 cyan and amber, a serif voice. Optional: your theme stays yours. Installs as a CSS snippet at ${path}, yours to edit, turn off, or remove.`);
+      linkToFile();
+      row.addButton((b) => b.setButtonText('Install the look').setCta().onClick(() => void install()));
+      return;
+    }
+
+    if (standing.state === 'current') {
+      row.setDesc(
+        on === false
+          ? `Installed from ${standing.version}, off. The file is ${path} \u2014 yours to edit.`
+          : `Installed from ${standing.version}${on ? ' and on' : ''}. The file is ${path} \u2014 yours to edit; an edit is kept until you update it here.`,
+      );
+      if (on !== null) row.addButton((b) => b.setButtonText(on ? 'Turn off' : 'Turn on').onClick(async () => { await installer.setOn(!on).catch(() => undefined); again(); }));
+      row.addButton((b) =>
+        b.setButtonText('Remove').setWarning().onClick(async () => {
+          await installer.remove().catch(() => undefined);
+          notifyStatus('The Myu look is gone. Install it again any time.');
+          again();
+        }),
+      );
+      return;
+    }
+
+    // A copy from an older build, or one the reader edited or wrote: never replaced or deleted without asking.
+    row.setDesc(`${standing.version ? `A copy from ${standing.version}` : 'A copy Myu did not write'} is at ${path}. Updating replaces it with this build\u2019s look, edits included.`);
+    row.addButton((b) =>
+      b.setButtonText('Update the look').onClick(() =>
+        new PersonActionConfirmModal(
+          this.app,
+          { title: 'Replace the installed look?', body: `${path} is replaced with the look for ${this.plugin.manifest.version}. Any edits you made to it are lost \u2014 copy them out first if you want them.`, cta: 'Replace it' },
+          (yes) => { if (yes) void install(); },
+        ).open(),
+      ),
+    );
+    row.addButton((b) =>
+      b.setButtonText('Remove').setWarning().onClick(() =>
+        new PersonActionConfirmModal(
+          this.app,
+          { title: 'Remove the look?', body: `${path} is deleted. It may carry edits of yours.`, cta: 'Remove it' },
+          async (yes) => { if (!yes) return; await installer.remove().catch(() => undefined); notifyStatus('The Myu look is gone.'); again(); },
+        ).open(),
+      ),
+    );
   }
 
   // ── connection ────────────────────────────────────────────────────────────
@@ -792,7 +954,7 @@ export class AskMyuSettingTab extends PluginSettingTab {
           'Your notes teach Myu what you did — not where you are right now. ' +
           'Two minutes: your arc and your current moment. Briefs get sharper the same day.',
         )
-        .addButton((b) => b.setButtonText('Start…').setCta().onClick(() => this.plugin.openOnboarding(() => this.display())));
+        .addButton((b) => b.setButtonText('Start…').setCta().onClick(() => this.plugin.openOnboarding(() => this.rerender())));
     }
 
     if (state !== 'disconnected' && this.plugin.settings.recovery_pending) {
@@ -809,13 +971,13 @@ export class AskMyuSettingTab extends PluginSettingTab {
           b
             .setButtonText('Set up recovery phrase…')
             .setCta()
-            .onClick(() => new SetupRecoveryModal(this.app, this.plugin, () => this.display()).open()),
+            .onClick(() => new SetupRecoveryModal(this.app, this.plugin, () => this.rerender()).open()),
         )
         .addButton((b) =>
           b.setButtonText('I used the web instead').onClick(async () => {
             this.plugin.settings.recovery_pending = false;
             await this.plugin.saveSettings();
-            this.display();
+            this.rerender();
           }),
         );
     }
@@ -831,20 +993,9 @@ export class AskMyuSettingTab extends PluginSettingTab {
       // The Google connect — earned, not demanded (vault-only start is a full
       // citizen). One browser hop for the consent screen; the callback lands
       // on /connected/obsidian, which deep-links straight back here.
-      const googleRow = new Setting(root)
-        .setName('Google Calendar & Gmail')
-        .setDesc(
-          'Connect and Myu preps your meetings and reads the room from your ' +
-          'threads. One browser tab for Google’s consent screen; it sends you ' +
-          'right back.',
-        );
+      const googleRow = new Setting(root).setName(INTEGRATION_CARDS.google.name).setDesc(INTEGRATION_CARDS.google.desc);
       const googleCreds = root.createDiv();
-      const microsoftRow = new Setting(root)
-        .setName('Microsoft Outlook & calendar')
-        .setDesc(
-          'Same idea for the Microsoft side of your life. One browser tab for ' +
-          'the consent screen; it sends you right back.',
-        );
+      const microsoftRow = new Setting(root).setName(INTEGRATION_CARDS.microsoft.name).setDesc(INTEGRATION_CARDS.microsoft.desc);
       const microsoftCreds = root.createDiv();
       // STATUS-AWARE (live finding, 2026-08-25: an already-connected account
       // was shown "Connect…", reading as never-synced). Async fill-in — the
@@ -895,7 +1046,7 @@ export class AskMyuSettingTab extends PluginSettingTab {
             if (res.ok) {
               this.plugin.settings.background_work_consented = res.data?.background_work_consented ?? v;
               await this.plugin.saveSettings();
-              this.display();
+              this.rerender();
             } else {
               notifyStatus('Could not change it — check the connection.');
               tg.setValue(consented === true);
@@ -914,7 +1065,7 @@ export class AskMyuSettingTab extends PluginSettingTab {
           b
             .setButtonText('Create my account…')
             .setCta()
-            .onClick(() => new SignupModal(this.app, this.plugin, () => this.display()).open()),
+            .onClick(() => new SignupModal(this.app, this.plugin, () => this.rerender()).open()),
         );
 
       let pasted = '';
@@ -935,7 +1086,7 @@ export class AskMyuSettingTab extends PluginSettingTab {
             .onClick(async () => {
               if (!pasted) return;
               await this.plugin.connect(pasted);
-              this.display();
+              this.rerender();
             }),
         );
       return;
@@ -953,7 +1104,7 @@ export class AskMyuSettingTab extends PluginSettingTab {
             .setButtonText('Approve')
             .setCta()
             .onClick(() => {
-              new ApprovalModal(this.app, this.plugin.unlock, () => this.display()).open();
+              new ApprovalModal(this.app, this.plugin.unlock, () => this.rerender()).open();
             }),
         );
     }
@@ -968,7 +1119,7 @@ export class AskMyuSettingTab extends PluginSettingTab {
         .addButton((b) =>
           b.setButtonText('Try now').onClick(async () => {
             await this.plugin.unlock.unlockFromServerKEK();
-            this.display();
+            this.rerender();
           }),
         );
     }
@@ -980,7 +1131,7 @@ export class AskMyuSettingTab extends PluginSettingTab {
         b.setWarning().setButtonText('Disconnect').onClick(async () => {
           await this.plugin.unlock.disconnect();
           notifyStatus('AskMyu disconnected. Nothing further leaves this vault.');
-          this.display();
+          this.rerender();
         }),
       );
   }
@@ -1022,7 +1173,7 @@ export class AskMyuSettingTab extends PluginSettingTab {
           .setButtonText(nothingShared ? 'Choose folders' : 'Change')
           .setCta()
           .onClick(() => {
-            new ConsentModal(this.app, this.plugin, () => this.display()).open();
+            new ConsentModal(this.app, this.plugin, () => this.rerender()).open();
           }),
       );
   }
@@ -1046,7 +1197,7 @@ export class AskMyuSettingTab extends PluginSettingTab {
       .setDesc('A separate consent from journal capture — meeting notes are a different kind of data.')
       .addButton((b) =>
         b.setButtonText(folders.length === 0 ? 'Choose folders' : 'Change').onClick(() => {
-          new MeetingConsentModal(this.app, this.plugin, () => this.display()).open();
+          new MeetingConsentModal(this.app, this.plugin, () => this.rerender()).open();
         }),
       );
   }
@@ -1074,13 +1225,13 @@ export class AskMyuSettingTab extends PluginSettingTab {
             void (async () => {
               this.plugin.settings.weekly_review_enabled = false;
               await this.plugin.saveSettings();
-              this.display();
+              this.rerender();
             })();
             return;
           }
           // Turning it ON always goes through the exposure warning — a toggle is
           // too small a gesture for a permanent, syncing artefact.
-          this.plugin.offerWeeklyReview(() => this.display());
+          this.plugin.offerWeeklyReview(() => this.rerender());
         }),
       );
 
@@ -1116,9 +1267,8 @@ export class AskMyuSettingTab extends PluginSettingTab {
       .setName('If you uninstall')
       .setDesc('Everything under Myu/ stays exactly as it is and needs no plugin to open. Notes stop refreshing; nothing breaks. The plugin\u2019s own data.json (your token and wrapped key) goes with it, so no custody is left on this device. Your account is untouched \u2014 delete it above, or on the web.');
 
-    new Setting(root)
-      .setName('Myu look')
-      .setDesc(`Optional styling ships as a CSS snippet, not a setting. Get snippets/myu-look.css from github.com/AskMyu/askmyu-obsidian-plugin (it is also in the release zip), copy it into ${this.app.vault.configDir}/snippets/, and enable it under Appearance \u2192 CSS snippets.`);
+    const lookHost = root.createDiv();
+    void this.renderLook(lookHost);
 
     new Setting(root)
       .setName('Subscription')
@@ -1150,7 +1300,7 @@ export class AskMyuSettingTab extends PluginSettingTab {
         .addButton((b) =>
           b.setButtonText('Send now').onClick(async () => {
             await this.plugin.capture.flushQueue();
-            this.display();
+            this.rerender();
           }),
         );
     }

@@ -24,8 +24,22 @@ export interface TransportOptions {
   baseUrl: string;
   /** Session token from the token→session exchange. Null before connect. */
   authToken: string | null;
-  /** Called when the backend says the session is gone, so auth can relock. */
-  onUnauthorized?: () => void;
+  /**
+   * Called when the backend says the session is gone (401). May re-mint one;
+   * resolve `true` when it did, and the request that saw the 401 is sent once
+   * more, on the new session. Every request refused while a recovery is in
+   * flight waits for THAT recovery — never starts its own (live, 2026-09-03:
+   * a burst of settings fetches after a session died each re-minted a session
+   * of its own; the key was escrowed to one while the transport kept another,
+   * and every call after that was refused until a restart).
+   */
+  onUnauthorized?: () => Promise<boolean> | boolean | void;
+  /**
+   * Called on 403 `{"err":"enc"}` — the encryption gate: this session holds
+   * no escrowed key. May re-escrow; resolve `true` when it did, and the
+   * refused request is sent once more. Same single-flight rule.
+   */
+  onEncryptionBlocked?: () => Promise<boolean> | boolean | void;
   /**
    * Called on 428 — the beta-terms gate (2026-09-02). The session is fine; the
    * account has not agreed to the current terms. The body is the 428 payload
@@ -44,8 +58,18 @@ export interface ApiResponse<T = Record<string, unknown>> {
 
 export type { EncryptedJournalPayload } from './assertEncrypted';
 
+/** The two walls a request can hit that a fresh session or a fresh escrow clears. */
+type Recovery = 'session' | 'escrow';
+
+/** A 403 from the encryption gate, as distinct from any other forbidden. */
+export function isEncryptionBlocked(status: number, data: unknown): boolean {
+  return status === 403 && !!data && typeof data === 'object' && (data as { err?: unknown }).err === 'enc';
+}
+
 export class Transport {
   private opts: TransportOptions;
+  /** One recovery in flight per kind; every request refused by that wall awaits it. */
+  private recoveries = new Map<Recovery, Promise<boolean>>();
 
   constructor(opts: TransportOptions) {
     this.opts = opts;
@@ -84,41 +108,67 @@ export class Transport {
     return { ...(origin ? { Origin: origin } : {}), ...extra };
   }
 
+  /** Headers for one send — read at send time, so a retry carries the session a recovery minted. */
+  private headersFor(extra: Record<string, string>, authed: boolean): Record<string, string> {
+    const headers = this.baseHeaders(extra);
+    if (authed && this.opts.authToken) headers['Authorization'] = `Bearer ${this.opts.authToken}`;
+    return headers;
+  }
+
+  /** Which recovery a refused answer calls for, if any. */
+  private recoveryFor(status: number, data: unknown): Recovery | null {
+    if (status === 401) return 'session';
+    if (isEncryptionBlocked(status, data)) return 'escrow';
+    return null;
+  }
+
+  /** Run the recovery for `kind`, or join the one already running. */
+  private recover(kind: Recovery): Promise<boolean> {
+    const running = this.recoveries.get(kind);
+    if (running) return running;
+    const hook = kind === 'session' ? this.opts.onUnauthorized : this.opts.onEncryptionBlocked;
+    const recovery = Promise.resolve()
+      .then(() => hook?.())
+      .then(
+        (recovered) => recovered === true,
+        () => false,
+      )
+      .finally(() => {
+        this.recoveries.delete(kind);
+      });
+    this.recoveries.set(kind, recovery);
+    return recovery;
+  }
+
   /**
-   * Authenticated POST. Every backend call in the plugin goes through here.
+   * Send; if the answer is a wall a recovery can clear, wait for the (shared)
+   * recovery and send ONCE more. `send` builds the request when called, so
+   * the second send carries whatever the recovery changed. Anonymous requests
+   * never recover: there is no session to mend.
    *
    * `throw: false` on requestUrl so 4xx/5xx come back as responses — Obsidian's
    * default throws, which would turn every expected 401 into an unhandled
    * rejection in a background interval.
    */
-  async post<T = Record<string, unknown>>(
-    path: string,
-    body: Record<string, unknown> = {},
-    opts: { anonymous?: boolean; headers?: Record<string, string> } = {},
-  ): Promise<ApiResponse<T>> {
-    const headers: Record<string, string> = this.baseHeaders({ 'Content-Type': 'application/json', ...(opts.headers ?? {}) });
-    if (!opts.anonymous && this.opts.authToken) {
-      headers['Authorization'] = `Bearer ${this.opts.authToken}`;
-    }
-
+  private async exchange<T>(send: () => Promise<RequestUrlResponse>, authed: boolean): Promise<ApiResponse<T>> {
     let res: RequestUrlResponse;
     try {
-      res = await requestUrl({
-        url: `${this.opts.baseUrl}${path}`,
-        method: 'POST',
-        headers,
-        body: JSON.stringify(body),
-        throw: false,
-      });
+      res = await send();
     } catch (err) {
       // Genuinely offline, DNS failure, TLS refusal. Not an auth problem —
       // callers (the queue especially) must be able to tell those apart.
       return { status: 0, ok: false, data: null, error: networkErrorCode(err) };
     }
-
-    if (res.status === 401) this.opts.onUnauthorized?.();
-
-    const data = parseJson<T>(res);
+    let data = parseJson<T>(res);
+    const kind = authed ? this.recoveryFor(res.status, data) : null;
+    if (kind && (await this.recover(kind))) {
+      try {
+        res = await send();
+      } catch (err) {
+        return { status: 0, ok: false, data: null, error: networkErrorCode(err) };
+      }
+      data = parseJson<T>(res);
+    }
     if (res.status === 428) this.opts.onTermsRequired?.(data);
     return {
       status: res.status,
@@ -128,29 +178,37 @@ export class Transport {
     };
   }
 
+  /** Authenticated POST. Every backend call in the plugin goes through here. */
+  async post<T = Record<string, unknown>>(
+    path: string,
+    body: Record<string, unknown> = {},
+    opts: { anonymous?: boolean; headers?: Record<string, string> } = {},
+  ): Promise<ApiResponse<T>> {
+    const authed = !opts.anonymous && !!this.opts.authToken;
+    return this.exchange<T>(
+      () =>
+        requestUrl({
+          url: `${this.opts.baseUrl}${path}`,
+          method: 'POST',
+          headers: this.headersFor({ 'Content-Type': 'application/json', ...(opts.headers ?? {}) }, authed),
+          body: JSON.stringify(body),
+          throw: false,
+        }),
+      authed,
+    );
+  }
+
   /**
    * Authenticated POST with a caller-assembled binary body (the resume upload's
    * hand-built multipart — requestUrl has no FormData). Same auth, same error
    * taxonomy as post().
    */
   async postRaw<T = Record<string, unknown>>(path: string, body: ArrayBuffer, contentType: string): Promise<ApiResponse<T>> {
-    const headers: Record<string, string> = this.baseHeaders({ 'Content-Type': contentType });
-    if (this.opts.authToken) headers['Authorization'] = `Bearer ${this.opts.authToken}`;
-    let res: RequestUrlResponse;
-    try {
-      res = await requestUrl({ url: `${this.opts.baseUrl}${path}`, method: 'POST', headers, body, throw: false });
-    } catch (err) {
-      return { status: 0, ok: false, data: null, error: networkErrorCode(err) };
-    }
-    if (res.status === 401) this.opts.onUnauthorized?.();
-    const data = parseJson<T>(res);
-    if (res.status === 428) this.opts.onTermsRequired?.(data);
-    return {
-      status: res.status,
-      ok: res.status >= 200 && res.status < 300,
-      data,
-      error: errorCodeOf(data) ?? (res.status >= 400 ? `http_${res.status}` : null),
-    };
+    const authed = !!this.opts.authToken;
+    return this.exchange<T>(
+      () => requestUrl({ url: `${this.opts.baseUrl}${path}`, method: 'POST', headers: this.headersFor({ 'Content-Type': contentType }, authed), body, throw: false }),
+      authed,
+    );
   }
 
   /**
@@ -161,25 +219,11 @@ export class Transport {
     path: string,
     opts?: { headers?: Record<string, string> },
   ): Promise<ApiResponse<T>> {
-    const headers: Record<string, string> = this.baseHeaders({ ...opts?.headers });
-    if (this.opts.authToken) headers['Authorization'] = `Bearer ${this.opts.authToken}`;
-
-    let res: RequestUrlResponse;
-    try {
-      res = await requestUrl({ url: `${this.opts.baseUrl}${path}`, method: 'GET', headers, throw: false });
-    } catch (err) {
-      return { status: 0, ok: false, data: null, error: networkErrorCode(err) };
-    }
-
-    if (res.status === 401) this.opts.onUnauthorized?.();
-    const data = parseJson<T>(res);
-    if (res.status === 428) this.opts.onTermsRequired?.(data);
-    return {
-      status: res.status,
-      ok: res.status >= 200 && res.status < 300,
-      data,
-      error: errorCodeOf(data) ?? (res.status >= 400 ? `http_${res.status}` : null),
-    };
+    const authed = !!this.opts.authToken;
+    return this.exchange<T>(
+      () => requestUrl({ url: `${this.opts.baseUrl}${path}`, method: 'GET', headers: this.headersFor({ ...opts?.headers }, authed), throw: false }),
+      authed,
+    );
   }
 
   /**

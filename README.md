@@ -38,6 +38,13 @@ artifacts — `main.js`, `manifest.json`, `styles.css`.
   duplicate — appear as rows in Today, each one decision. Cards show what is
   around a person (related people, memories, where a memory came from), and
   "what's up with X" on demand.
+- **Weave Myu in.** Settings → Weave Myu in → *Open the recipes*: embeds for
+  your daily and weekly notes, a Tasks query for your commitments, the people
+  table, a Dataview table, a button to Today — each a code block with a copy
+  button, the text in view. *Insert a Myu snippet…* puts one at the cursor.
+  Nothing is written to your vault unless you press *Keep a copy in Myu/*.
+  For scripts: `app.plugins.plugins.askmyu.api` — `getBrief()`, `getPrep(id)`,
+  `getPersonCard(name)`, `getWeeklyReview()`; read-only, null while locked.
 - **Connections, in place.** Google and Microsoft accounts with Set primary and
   Disconnect per account; Slack and Zulip connect and disconnect from settings.
 - **Entities (B2).** `[[Marcus Webb]]` in a note is a person-tag, for free. The
@@ -111,8 +118,8 @@ Consequences worth knowing before you install:
 ## Capabilities (what the plugin accesses)
 
 - **Network** — only the AskMyu backend you configure; every endpoint is listed below.
-- **File system** — the vault, through Obsidian's Vault API only: reads the notes and folders you allow in Settings → What Myu can read; writes only under the `Myu/` folder (and `Myu/Canvas/`, `Myu/Conversations/`) after your explicit consent. Never outside the vault.
-- **Clipboard** — two user-initiated copies: your recovery phrase (Settings → Security) and the Bases embed snippet. Nothing is read from the clipboard except to clear the phrase you just copied.
+- **File system** — the vault, through Obsidian's Vault API only: reads the notes and folders you allow in Settings → What Myu can read; writes only under the `Myu/` folder (and `Myu/Canvas/`, `Myu/Conversations/`) after your explicit consent, plus one CSS snippet in your vault's config folder (`.obsidian/snippets/myu-look.css`) when you press *Install the look* — removable from the same row. Never outside the vault.
+- **Clipboard** — user-initiated copies only: your recovery phrase (the key ceremony) and a recipe from the Weave Myu in pane (the copy button on its code block). Nothing is read from the clipboard except to clear the phrase you just copied.
 - **Account** — required. AskMyu is a service; the plugin is a client for it.
 - **Pricing** — free during the beta. Creating an account means agreeing to the [Beta Participation Terms](https://www.askmyu.com/beta-program-participation-terms) and the [Privacy Policy](https://www.askmyu.com/privacy-policy): a checkbox at the door, and the backend records which version you agreed to. An account that has not agreed yet sees one screen asking, and nothing else, until it does.
 
@@ -246,9 +253,13 @@ words), `.myu-whisper` (quiet labels), `.myu-chat-block`, `.myu-canvas-component
 CSS snippet, the same way you style any plugin. The plugin itself never
 overrides your theme.
 
-One look ships with the repo: [`snippets/myu-look.css`](snippets/myu-look.css)
-(raw file: `https://github.com/AskMyu/askmyu-obsidian-plugin/raw/main/snippets/myu-look.css`; it is also inside every
-release zip). Myu's own identity — the web app's accents, a serif voice. Save
-it into `<vault>/.obsidian/snippets/` and enable it under **Settings →
-Appearance → CSS snippets**. It is yours after that — edit it, or delete it.
+One look ships with the plugin: [`snippets/myu-look.css`](snippets/myu-look.css)
+— Myu's own identity, the web app's accents, a serif voice. **Settings → AskMyu
+→ Advanced → Myu look → Install the look** writes it into your vault's config
+folder (`.obsidian/snippets/myu-look.css`) and turns it on; the same row turns
+it off, updates it after a plugin update, or removes it. Nothing is fetched:
+the look for the build you are running is the look it installs. The file is
+yours after that — edit it (the row will not overwrite an edited copy without
+asking), or take the raw file from
+`https://github.com/AskMyu/askmyu-obsidian-plugin/raw/main/snippets/myu-look.css` and manage it by hand.
 

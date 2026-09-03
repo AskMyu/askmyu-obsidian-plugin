@@ -16,6 +16,7 @@ mkdirSync(OUT, { recursive: true });
 await esbuild.build({
   entryPoints: ['tests/invariants.test.ts'],
   bundle: true,
+  loader: { '.css': 'text' },
   platform: 'node',
   format: 'cjs',
   target: 'node20',
@@ -55,6 +56,7 @@ await esbuild.build({
     ...internalTests,
   ],
   bundle: true,
+  loader: { '.css': 'text' },
   platform: 'node',
   format: 'cjs',
   target: 'node20',

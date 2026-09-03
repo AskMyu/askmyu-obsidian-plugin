@@ -279,7 +279,7 @@ export class MockApi implements AskMyuApi {
     });
   }
 
-  async listEntities(tab: CardEntityType) {
+  async listEntities(tab: CardEntityType, _opts: { changedSince?: number } = {}) {
     const offline = this.guard<{ entities?: EntityHeadline[] }>();
     if (offline) return offline;
 
@@ -594,9 +594,67 @@ export class MockApi implements AskMyuApi {
   async importFromDrive(fileIds: string[]): Promise<ApiResponse<{ success?: boolean; results?: Array<{ file_id: string; status: string; title?: string }>; imported_count?: number }>> { return this.guard<{ success?: boolean }>() ?? ok({ success: true, results: fileIds.map((f) => ({ file_id: f, status: 'imported', title: 'Platform weekly' })), imported_count: fileIds.length }); }
   async dismissDriveSuggestion(): Promise<ApiResponse> { return this.guard() ?? ok<Record<string, unknown>>({}); }
 
+  /** The six Today reads in one answer — each part the payload its own method serves. */
+  async getTodayBundle(_start: string, _end: string, _timezone: string): Promise<ApiResponse<import('./api').TodayBundle>> {
+    const offline = this.guard<import('./api').TodayBundle>();
+    if (offline) return offline;
+    const part = async <T>(p: Promise<ApiResponse<T>>): Promise<T | null> => { const r = await p.catch(() => null); return r?.ok ? (r.data ?? null) : null; };
+    const [brief, events, mirror, weekly, loop, help] = await Promise.all([
+      part(this.getBrief()), part(this.getCalendarEvents()), part(this.getMirrorEdition()), part(this.getWeeklyReview()), part(this.getPersonalLoop()), part(this.getHelpMyuQueue()),
+    ]);
+    return ok({ brief: brief as Record<string, unknown> | null, events: events as Record<string, unknown> | null, mirror, weekly, loop, help_queue: help, server_time: Date.now() });
+  }
+
+  /**
+   * What changed since `since`: the mock has no clock of its own, so a first
+   * sync (since 0) returns everything and a later one returns nothing —
+   * unless a test nudged `mockChangedAt` above `since`. Pages by unit
+   * (a card, a meeting, a journal day) so paging itself is exercised.
+   */
+  mockChangedAt = 1_700_000_000_000;
+  async getVaultChanges(since: number, cursor: string | null = null, pageSize = 50): Promise<ApiResponse<import('./api').VaultChangesPage>> {
+    const offline = this.guard<import('./api').VaultChangesPage>();
+    if (offline) return offline;
+    type Unit = { kind: 'person' | 'company' | 'meeting' | 'day'; item: unknown };
+    const units: Unit[] = [];
+    if (since < this.mockChangedAt) {
+      for (const tab of ['person', 'company'] as const) {
+        const listed = await this.listEntities(tab);
+        for (const e of listed.data?.entities ?? []) {
+          const card = await this.getCard(tab, e.entity_id);
+          units.push({ kind: tab, item: { ...(card.data ?? {}), entity_id: e.entity_id, changed_at: this.mockChangedAt } });
+        }
+      }
+      const meetings = await this.listMeetings();
+      for (const m of meetings.data?.meetings ?? []) units.push({ kind: 'meeting', item: m });
+      const journal = await this.getJournalEntries();
+      const byDay = new Map<string, Array<Record<string, unknown>>>();
+      for (const entry of journal.data?.entries ?? []) {
+        const when = typeof entry.timestamp === 'number' ? new Date(entry.timestamp) : new Date(String(entry.date ?? entry.created_at ?? ''));
+        if (Number.isNaN(when.getTime())) continue;
+        const day = when.toISOString().slice(0, 10);
+        byDay.set(day, [...(byDay.get(day) ?? []), entry]);
+      }
+      for (const [day, entries] of byDay) units.push({ kind: 'day', item: { day, entries } });
+    }
+    const offset = cursor ? Number(cursor) || 0 : 0;
+    const slice = units.slice(offset, offset + pageSize);
+    const page: import('./api').VaultChangesPage = { server_time: Date.now(), since, people: [], companies: [], meetings: [], journal_days: [], next_cursor: offset + pageSize < units.length ? String(offset + pageSize) : null };
+    if (offset === 0) { page.self = (await this.getSelfCard()).data ?? null; page.removed = []; }
+    for (const u of slice) {
+      if (u.kind === 'person') page.people!.push(u.item as import('./api').VaultChangeCard);
+      else if (u.kind === 'company') page.companies!.push(u.item as import('./api').VaultChangeCard);
+      else if (u.kind === 'meeting') page.meetings!.push(u.item as Record<string, unknown>);
+      else page.journal_days!.push(u.item as { day: string; entries: Array<Record<string, unknown>> });
+    }
+    return ok(page);
+  }
+
   async getFeatures(): Promise<ApiResponse<Record<string, unknown>>> {
     return this.guard<Record<string, unknown>>() ?? ok({
       cold_start: { split_consent: true, onboarding_payback: true, offer_block: true, week_state: true, per_card_offer: true, self_card_legible: true },
+      // Batched reads (2026-09-03): the mock serves the bundle and the delta feed from its own fixtures.
+      today_bundle: true, vault_changes: true, entities_changed_ids: true, entity_changed_at: true, retry_after_header: true,
       // The beta-terms block (2026-09-02): the demo account has agreed to the current bundle.
       terms: { current_version: MOCK_TERMS_VERSION, required: [], satisfied: true, accepted_versions: { beta_participation: MOCK_TERMS_VERSION, privacy_policy: MOCK_TERMS_VERSION }, urls: { ...TERMS_FALLBACK_URLS }, gate_enabled: true },
     });

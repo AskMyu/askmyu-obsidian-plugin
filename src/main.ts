@@ -58,7 +58,7 @@ import { WeaveView, WEAVE_VIEW_TYPE } from './views/WeaveView';
 import { LookInstaller, LOOK_NAME, snippetSwitch } from './look';
 import { WeaveSnippetModal } from './views/WeaveSnippetModal';
 import { DriveImportModal } from './views/DriveImportModal';
-import { COLD_START_OFF, parseColdStartFlags, type ColdStartFlags, type HelpMyuItem, type OAuthStatusResult } from './transport/api';
+import { COLD_START_OFF, parseColdStartFlags, parseBackendFlags, BACKEND_FLAGS_OFF, type BackendFlags, type ColdStartFlags, type HelpMyuItem, type OAuthStatusResult } from './transport/api';
 import { routeOffer, addOffer, type CanvasOffer } from './composition/offers';
 import { burnoutRow, goalMilestoneRow } from './views/wellbeingRows';
 import { BUILD_STAMP } from './buildStamp';
@@ -72,12 +72,15 @@ import { MyuFolderWatcher } from './capture/MyuFolderWatcher';
 import { MaterializeConsentModal } from './views/MaterializeConsentModal';
 import { OnboardingModal } from './views/OnboardingModal';
 import { SetupRecoveryModal } from './views/SetupRecoveryModal';
+import { RefreshGate } from './refreshGate';
 
 /** At most one recovery-triggered repaint this often — a server that keeps refusing must not loop the pane. */
 const RECOVERY_REPAINT_MS = 30_000;
 
 /** How often Today refreshes itself. Ambient, not live. */
 const TODAY_REFRESH_MS = 5 * 60 * 1000;
+/** Never two Today fetches closer than this, whatever asks — see refreshGate.ts. */
+const TODAY_REFRESH_GAP_MS = 5_000;
 /** How often to prove the live stream is up and re-read pending device requests. */
 const LIVE_WATCHDOG_MS = 45 * 1000;
 
@@ -120,6 +123,7 @@ export default class AskMyuPlugin extends Plugin {
   async loadFeatures(): Promise<void> {
     const res = await this.backend.getFeatures().catch(() => null);
     this.flags = res?.ok ? parseColdStartFlags(res.data) : COLD_START_OFF;
+    this.backendFlags = res?.ok ? parseBackendFlags(res.data) : BACKEND_FLAGS_OFF;
     if (res?.ok) this.terms = parseTermsState(res.data);
   }
 
@@ -226,6 +230,8 @@ export default class AskMyuPlugin extends Plugin {
   myuWatcher!: MyuFolderWatcher;
   /** First-run choreography line, rendered by TodayView ("6 of 38 · Jim…"). */
   materializeProgress: string | null = null;
+  /** The batched-reads flags from /features; off until it answers, and on an older backend. */
+  backendFlags: BackendFlags = BACKEND_FLAGS_OFF;
 
   /**
    * P8.6 — the DOCUMENTED public surface: `app.plugins.plugins.askmyu.api`,
@@ -331,9 +337,12 @@ export default class AskMyuPlugin extends Plugin {
       save: () => this.saveSettings(),
       canRun: () => this.unlock.current === 'unlocked',
       findTheirPage: (name) => this.personIndex.find(name)?.path ?? null,
+      flags: () => this.backendFlags,
       onProgress: (line) => {
         this.materializeProgress = line;
-        void this.refreshToday();
+        // Paint the line; fetch only when the sweep is over and the day may have changed.
+        if (line === null) void this.refreshToday();
+        else this.paintProgress();
       },
     });
 
@@ -559,7 +568,15 @@ export default class AskMyuPlugin extends Plugin {
     // card's section was recomputed, a meeting's extraction finished. (The
     // wire strips these payloads to bare eventType — see the audit — so each
     // is a trigger, never a diff.)
-    this.sse.subscribe('entities_changed', () => { void this.materializer.refreshPeople(); void this.refreshToday(); void this.chatView()?.revalidateLinkedInAsk(); });
+    this.sse.subscribe('entities_changed', (payload) => {
+      // With ids (backend, 2026-09-03): refetch exactly those, now; the next
+      // delta pass catches what async enrichment touches later. Without: by since.
+      const ids = Array.isArray(payload.entity_ids) ? payload.entity_ids.filter((id): id is string => typeof id === 'string') : [];
+      if (ids.length && this.backendFlags.entities_changed_ids) void this.materializer.refreshPeopleByIds(ids);
+      else void this.materializer.refreshPeople();
+      void this.refreshToday();
+      void this.chatView()?.revalidateLinkedInAsk();
+    });
     this.sse.subscribe('personal_loop.updated', () => void this.refreshToday());
     this.sse.subscribe('insight_ready', (payload) => {
       const title = typeof payload.title === 'string' ? payload.title.trim() : '';
@@ -1351,11 +1368,28 @@ export default class AskMyuPlugin extends Plugin {
    * revealed. `isDeferred` is undefined on older builds, which reads falsy and
    * keeps the pre-1.7.2 behaviour intact.
    */
-  private async refreshToday(): Promise<void> {
+  /**
+   * Every "refresh Today" in this file lands here: coalesced, paced, one fetch
+   * in flight. The sync button passes `now`. (The unpaced version, called once
+   * per progress line, is what tripped the WAF on 2026-09-03.)
+   */
+  private todayGate = new RefreshGate(() => this.fetchTodayLeaves(), TODAY_REFRESH_GAP_MS);
+  private refreshToday(opts: { now?: boolean } = {}): Promise<void> {
+    return this.todayGate.request(opts);
+  }
+  private async fetchTodayLeaves(): Promise<void> {
     for (const leaf of this.app.workspace.getLeavesOfType(TODAY_VIEW_TYPE)) {
       if (leaf.isDeferred) continue;
       const view = leaf.view;
       if (view instanceof TodayView) await view.refresh();
+    }
+  }
+  /** A progress line is a PAINT, never a fetch: the pane updates one row. */
+  private paintProgress(): void {
+    for (const leaf of this.app.workspace.getLeavesOfType(TODAY_VIEW_TYPE)) {
+      if (leaf.isDeferred) continue;
+      const view = leaf.view;
+      if (view instanceof TodayView) view.paintProgress();
     }
   }
 
@@ -1511,7 +1545,7 @@ export default class AskMyuPlugin extends Plugin {
     notifyStatus(`Bringing in ${files.length} existing meeting ${files.length === 1 ? 'note' : 'notes'}…`);
     await this.meetingCapture.backfill(files, (done, total) => {
       this.materializeProgress = `Reading your meeting notes — ${done} of ${total}`;
-      void this.refreshToday();
+      this.paintProgress();
     });
     this.materializeProgress = null;
     void this.refreshToday();
@@ -1664,7 +1698,7 @@ export default class AskMyuPlugin extends Plugin {
     const result = await this.capture.backfill(files, (done, total) => {
       this.statusBarEl?.setText(`myu \u00b7 reading ${done}/${total}`);
       this.materializeProgress = `Reading your notes \u2014 ${done} of ${total}`;
-      if (done % 5 === 0 || done === total) void this.refreshToday();
+      this.paintProgress();
     }, () => this.backfillStop);
     this.backfillActive = false;
     this.materializeProgress = null;
@@ -1677,7 +1711,7 @@ export default class AskMyuPlugin extends Plugin {
 
   /** Public door to the Today refresh, for dialogs that changed a checklist row. */
   refreshTodayNow(): Promise<void> {
-    return this.refreshToday();
+    return this.refreshToday({ now: true });
   }
 
   /** Open the chat pane seeded — every conversational affordance lands here. */

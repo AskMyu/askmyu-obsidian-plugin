@@ -148,6 +148,10 @@ export interface AskMyuSettings extends PersistedAuth {
   memories_by_day: Record<string, string[]>;
   /** Epoch ms of the last open-sync (full pass on vault open). Throttles it. */
   last_open_sync: number;
+  /** Server time of the last /vault/changes read (0 = never; the next sync is a first sync). */
+  vault_changes_since: number;
+  /** Per entity, the `changed_at` we last wrote — a card with the same stamp is skipped. */
+  myu_entity_changed_at: Record<string, number>;
 
   /** P9 — signed up here, recovery not hardened yet. Drives the prompt row. */
   recovery_pending: boolean;
@@ -228,6 +232,8 @@ export const DEFAULT_SETTINGS: AskMyuSettings = {
   last_history_materialize: 0,
   memories_by_day: {},
   last_open_sync: 0,
+  vault_changes_since: 0,
+  myu_entity_changed_at: {},
 
   recovery_pending: false,
 

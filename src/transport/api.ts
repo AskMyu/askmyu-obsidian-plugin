@@ -179,7 +179,11 @@ export interface AskMyuApi {
   getJournalChats(journalId: string): Promise<ApiResponse<{ chats?: Array<Record<string, unknown>>; offer?: DeliveredOffer }>>;
 
   /** The ranked entity list behind the People/Companies tabs on every surface. */
-  listEntities(tab: CardEntityType): Promise<ApiResponse<{ entities?: EntityHeadline[] }>>;
+  listEntities(tab: CardEntityType, opts?: { changedSince?: number }): Promise<ApiResponse<{ entities?: EntityHeadline[]; server_time?: number }>>;
+  /** The six Today reads in one answer (flag `today_bundle`). */
+  getTodayBundle(start: string, end: string, timezone: string): Promise<ApiResponse<TodayBundle>>;
+  /** What changed in the vault's material since `since` (flag `vault_changes`), one page. */
+  getVaultChanges(since: number, cursor?: string | null, pageSize?: number): Promise<ApiResponse<VaultChangesPage>>;
   getCard(entityType: CardEntityType, entityId: string): Promise<ApiResponse<{ card?: CardSpecLite; response_type?: string; suggestions?: Array<Record<string, unknown>>; linkedin_known?: boolean }>>;
 
   /** The mirror (A11) — same endpoint every review surface reads. */
@@ -507,6 +511,53 @@ export function parseColdStartFlags(data: unknown): ColdStartFlags {
   const c = (data && typeof data === 'object' ? (data as Record<string, unknown>).cold_start : null) as Record<string, unknown> | null;
   const on = (k: keyof ColdStartFlags) => c?.[k] === true;
   return { split_consent: on('split_consent'), onboarding_payback: on('onboarding_payback'), offer_block: on('offer_block'), week_state: on('week_state'), per_card_offer: on('per_card_offer'), self_card_legible: on('self_card_legible') };
+}
+
+/**
+ * `GET /features` — the batched-reads flags (backend, 2026-09-03). Absent on an
+ * older backend = off, and every per-item path stays as the fallback.
+ */
+export interface BackendFlags { today_bundle: boolean; vault_changes: boolean; entities_changed_ids: boolean; entity_changed_at: boolean; retry_after_header: boolean }
+export const BACKEND_FLAGS_OFF: BackendFlags = { today_bundle: false, vault_changes: false, entities_changed_ids: false, entity_changed_at: false, retry_after_header: false };
+export function parseBackendFlags(data: unknown): BackendFlags {
+  const d = data && typeof data === 'object' ? (data as Record<string, unknown>) : null;
+  const on = (k: keyof BackendFlags) => d?.[k] === true;
+  return { today_bundle: on('today_bundle'), vault_changes: on('vault_changes'), entities_changed_ids: on('entities_changed_ids'), entity_changed_at: on('entity_changed_at'), retry_after_header: on('retry_after_header') };
+}
+
+/**
+ * `GET /today/bundle` — the six Today reads in one answer. Each part is the
+ * exact payload its own endpoint serves, and each is nullable: a part that
+ * failed is null with its message under `errors`; the bundle itself is 200.
+ */
+export interface TodayBundle {
+  brief?: Record<string, unknown> | null;
+  events?: Record<string, unknown> | null;
+  mirror?: { edition?: MirrorEdition } | null;
+  weekly?: { edition?: WeeklyEdition } | null;
+  loop?: { loop?: PersonalLoop | null; coupled_loops?: CoupledLoop[] } | null;
+  help_queue?: { queue?: HelpMyuItem[]; total_count?: number } | null;
+  server_time?: number;
+  errors?: Record<string, string>;
+}
+
+/**
+ * `GET /vault/changes` — everything that changed since a server time, paged.
+ * Cards are the single-card payloads plus `entity_id` and `changed_at`; a card
+ * that could not build is `{ success: false, error, entity_id }`. `self` and
+ * `removed` ride on the first page only; a journal day can split across pages.
+ */
+export interface VaultChangeCard { entity_id?: string; changed_at?: number; card?: CardSpecLite; success?: boolean; error?: string }
+export interface VaultChangesPage {
+  server_time?: number;
+  since?: number;
+  self?: { card?: CardSpecLite } | null;
+  people?: VaultChangeCard[];
+  companies?: VaultChangeCard[];
+  meetings?: Array<Record<string, unknown>>;
+  journal_days?: Array<{ day?: string; entries?: Array<Record<string, unknown>> }>;
+  removed?: string[];
+  next_cursor?: string | null;
 }
 
 /** One service on a Google/Microsoft credential (scope-aware status). */
@@ -987,12 +1038,25 @@ export class Api implements AskMyuApi {
     return this.transport.post('/calendar/events', { start_date: start, end_date: end });
   }
 
-  listEntities(tab: CardEntityType) {
+  listEntities(tab: CardEntityType, opts: { changedSince?: number } = {}) {
     // The same ranked list the mobile People/Companies tabs and the web entity
     // panel use — people and companies both, so the lookup covers both.
-    return this.transport.get<{ entities?: EntityHeadline[] }>(
-      `/feed/entities?tab=${tab === 'company' ? 'companies' : 'people'}`,
+    // `changed_since` (server ms) filters server-side, before sentence generation.
+    const since = opts.changedSince && opts.changedSince > 0 ? `&changed_since=${opts.changedSince}` : '';
+    return this.transport.get<{ entities?: EntityHeadline[]; server_time?: number }>(
+      `/feed/entities?tab=${tab === 'company' ? 'companies' : 'people'}${since}`,
     );
+  }
+
+  getTodayBundle(start: string, end: string, timezone: string) {
+    return this.transport.get<TodayBundle>(
+      `/today/bundle?start_date=${encodeURIComponent(start)}&end_date=${encodeURIComponent(end)}&timezone=${encodeURIComponent(timezone)}`,
+    );
+  }
+
+  getVaultChanges(since: number, cursor: string | null = null, pageSize = 50) {
+    const q = [`since=${Math.max(0, Math.floor(since))}`, `page_size=${pageSize}`, ...(cursor ? [`cursor=${encodeURIComponent(cursor)}`] : [])].join('&');
+    return this.transport.get<VaultChangesPage>(`/vault/changes?${q}`);
   }
 
   getCard(entityType: CardEntityType, entityId: string) {

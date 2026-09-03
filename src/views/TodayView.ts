@@ -30,6 +30,7 @@ import { ApproveDeviceModal } from './ApproveDeviceModal';
 import { ApprovalModal } from './ApprovalModal';
 import { notifyError } from '../notify';
 import { approvalFailureText } from './approvalCopy';
+import { readsFromBundle, type TodayReads } from './todayReads';
 
 /**
  * "About 4 minutes left" — from the SERVER's `expires_at`. The window is
@@ -127,6 +128,34 @@ export class TodayView extends ItemView {
     this.contentEl.empty();
   }
 
+  /**
+   * The six reads — one bundle call when the backend offers it (`today_bundle`),
+   * six calls otherwise. The pane cannot tell the difference; the server can.
+   */
+  private async readToday(): Promise<TodayReads> {
+    const start = localDate(new Date());
+    const end = localDate(addDays(new Date(), 7));
+    if (this.plugin.backendFlags?.today_bundle) {
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+      const reads = readsFromBundle(await this.plugin.backend.getTodayBundle(start, end, tz).catch(() => null));
+      if (reads.helpQueue) this.plugin.helpQueue = reads.helpQueue;
+      else await this.plugin.loadHelpQueue().catch(() => undefined);
+      return reads;
+    }
+    const [brief, events, mirror, weekly, loop] = await Promise.all([
+      this.plugin.backend.getBrief(),
+      this.plugin.backend.getCalendarEvents(start, end),
+      // The mirror rides along but never decides the view's error state — its
+      // absence is a designed condition, not a failure to report.
+      this.plugin.backend.getMirrorEdition().catch(() => null),
+      this.plugin.backend.getWeeklyReview().catch(() => null),
+      // The web's personal-loop strip and its Help Myu queue ride along the same way.
+      this.plugin.backend.getPersonalLoop().catch(() => null),
+      this.plugin.loadHelpQueue().catch(() => undefined),
+    ]);
+    return { brief, events, mirror, weekly, loop, helpQueue: null };
+  }
+
   /** Called by the plugin's 5-minute interval and after state changes. */
   async refresh(): Promise<void> {
     const state = this.plugin.unlock.current;
@@ -150,17 +179,8 @@ export class TodayView extends ItemView {
       return;
     }
 
-    const [briefRes, eventsRes, mirrorRes, weeklyRes, loopRes] = await Promise.all([
-      this.plugin.backend.getBrief(),
-      this.plugin.backend.getCalendarEvents(localDate(new Date()), localDate(addDays(new Date(), 7))),
-      // The mirror rides along but never decides the view's error state — its
-      // absence is a designed condition, not a failure to report.
-      this.plugin.backend.getMirrorEdition().catch(() => null),
-      this.plugin.backend.getWeeklyReview().catch(() => null),
-      // The web's personal-loop strip and its Help Myu queue ride along the same way.
-      this.plugin.backend.getPersonalLoop().catch(() => null),
-      this.plugin.loadHelpQueue().catch(() => undefined),
-    ]);
+    const reads = await this.readToday();
+    const { brief: briefRes, events: eventsRes, mirror: mirrorRes, weekly: weeklyRes, loop: loopRes } = reads;
     this.loop = loopRes?.ok ? (loopRes.data?.loop ?? null) : null;
     // The instant give: what the vault's links already say, once a scope exists and setup is still showing.
     this.giveLine = null;
@@ -649,8 +669,29 @@ export class TodayView extends ItemView {
   private renderMaterializeProgress(root: HTMLElement): void {
     const line = this.plugin.materializeProgress;
     if (!line) return;
-    const row = root.createDiv({ cls: 'myu-cue-row' });
+    const row = root.createDiv({ cls: 'myu-cue-row myu-materialize-progress' });
     row.createSpan({ cls: 'myu-quiet', text: line });
+  }
+
+  /**
+   * The progress line moved: repaint THAT ROW, nothing else, no fetch. A row
+   * that does not exist yet (the sweep just started) means one local render;
+   * a line that went away means the row goes. (Every line used to be a full
+   * refresh — six backend calls — 2026-09-03.)
+   */
+  paintProgress(): void {
+    const line = this.plugin.materializeProgress;
+    const row = this.contentEl.querySelector('.myu-materialize-progress');
+    if (line && row) {
+      const span = row.querySelector('span');
+      if (span) span.textContent = line;
+      return;
+    }
+    if (!line && row) {
+      row.remove();
+      return;
+    }
+    if (line && !row && !this.loading && !this.errorState) this.render();
   }
 
   /**

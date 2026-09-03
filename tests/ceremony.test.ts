@@ -2937,3 +2937,260 @@ test('Today — signed in but not approved is its own screen: the way forward, t
   texts = (view['contentEl'] as FakeEl).visibleTexts();
   assert.ok(texts.includes('Get this device approved…') && !texts.some((t) => /Locked/.test(t)), `refresh paints the blocked screen: ${texts.join(' | ')}`);
 });
+
+// ── the request budget and the Today gate (2026-09-03, the WAF incident) ─────
+
+test('budget — a bucket paces a stream, a 429 rests only its endpoint for exactly Retry-After, a bare 403 rests everything', async () => {
+  const { RequestBudget, retryAfterMs } = await import('../src/transport/budget');
+  let t = 1_000_000;
+  const slept: number[] = [];
+  const sleep = async (ms: number) => { slept.push(ms); t += ms; };
+  const b = new RequestBudget({ perSecond: 5, burst: 3, defaultPauseMs: 60_000, wafPauseMs: 300_000, maxWaitMs: 30_000, now: () => t });
+  for (let i = 0; i < 3; i++) assert.deepEqual(await b.acquire('/a', sleep), { ok: true }, 'the burst goes at once');
+  assert.deepEqual(slept, []);
+  await b.acquire('/a', sleep);
+  assert.deepEqual(slept, [200], 'the fourth waits one token at 5/s');
+  // A 429 with Retry-After: that endpoint rests for exactly that long; another endpoint does not.
+  b.pause('/card/person?id=1', 7_000);
+  assert.equal(b.waitFor('/card/person?id=2'), 7_000, 'the pause is per endpoint, query stripped');
+  assert.ok(b.waitFor('/feed/brief') < 7_000, 'other endpoints carry on');
+  b.pause('/x', null);
+  assert.equal(b.waitFor('/x'), 60_000, 'no Retry-After → the default');
+  // retry_after: 0 is the invalidated-request case (start over) — no rest at all.
+  b.pause('/y', 0);
+  assert.ok(b.waitFor('/y') < 60_000, 'an explicit zero rests nothing — the request is invalidated, waiting is the wrong move');
+  // Past the cap: a synthetic pause, nothing on the wire.
+  const r = await b.acquire('/x', sleep);
+  assert.deepEqual(r, { ok: false, retryAfterMs: 60_000 });
+  // A bare 403 — the WAF — rests everything, long and flat.
+  b.pauseAll();
+  assert.equal(b.waitFor('/feed/brief'), 300_000);
+  assert.equal(b.pausedMs(), 300_000);
+  // Retry-After parsing: header seconds, header date, body seconds, nothing.
+  assert.equal(retryAfterMs({ 'retry-after': '42' }, null), 42_000);
+  assert.equal(retryAfterMs({ 'Retry-After': new Date(1_005_000).toUTCString() }, null, 1_000_000), 5_000, 'an HTTP date, whole seconds');
+  assert.equal(retryAfterMs({}, { retry_after: 9 }), 9_000);
+  assert.equal(retryAfterMs(undefined, { error: 'x' }), null);
+});
+
+test('transport — a 429 rests the endpoint and the next call to it is answered as a pause without touching the wire; a bare 403 is the WAF', async () => {
+  const { Transport } = await import('../src/transport');
+  const { RequestBudget } = await import('../src/transport/budget');
+  const { answerRequestsWith, httpRequests } = await import('./ui-stub');
+  const wire: string[] = [];
+  answerRequestsWith(async (opts) => {
+    const url = String(opts.url);
+    wire.push(url);
+    if (url.endsWith('/card/person?id=1')) return { status: 429, headers: { 'retry-after': '120' }, json: { error: 'rate_limit_exceeded', retry_after: 120 }, text: '' };
+    if (url.endsWith('/waf')) return { status: 403, headers: {}, json: null, text: 'Forbidden' };
+    return { status: 200, headers: {}, json: { ok: 1 }, text: '' };
+  });
+  let t = 5_000_000;
+  const budget = new RequestBudget({ perSecond: 100, burst: 100, maxWaitMs: 1_000, now: () => t });
+  const tr = new Transport({ baseUrl: 'https://x/api', authToken: 'live', budget });
+  const first = await tr.get('/card/person?id=1');
+  assert.equal(first.status, 429);
+  const second = await tr.get('/card/person?id=2');
+  assert.equal(second.status, 429);
+  assert.equal(second.error, 'paused', 'the endpoint rests; the second call never went out');
+  assert.deepEqual(second.data, { retry_after: 120 }, 'and says how long');
+  assert.equal(wire.filter((u) => u.includes('/card/person')).length, 1);
+  assert.equal((await tr.get('/feed/brief')).status, 200, 'another endpoint is unaffected');
+  t += 121_000;
+  assert.equal((await tr.get('/card/person?id=2')).status, 200, 'after Retry-After it goes again');
+  // The WAF: a bare 403, then everything is paused.
+  assert.equal((await tr.get('/waf')).status, 403);
+  const blocked = await tr.get('/feed/brief');
+  assert.equal(blocked.error, 'paused', 'every endpoint rests after a WAF 403');
+  assert.ok(budget.pausedMs() >= 299_000 && budget.pausedMs() <= 300_000);
+  answerRequestsWith(null);
+  httpRequests.length = 0;
+});
+
+test('refresh gate — fifty asks in a burst are two fetches; the person\'s own ask goes at once; a trailing run catches what arrived mid-fetch', async () => {
+  const { RefreshGate } = await import('../src/refreshGate');
+  let t = 100_000;
+  const log: string[] = [];
+  const timers = { now: () => t, sleep: async (ms: number) => { t += ms; log.push(`sleep:${ms}`); } };
+  let resolveRun: (() => void) | null = null;
+  const gate = new RefreshGate(async () => { log.push(`run@${t}`); await new Promise<void>((r) => { resolveRun = r; }); }, 5_000, timers);
+  // The first ask starts a fetch at once; forty-nine more land while it is in flight.
+  const first = gate.request();
+  await new Promise((r) => setTimeout(r, 0));
+  assert.equal(gate.runs, 1, 'one fetch in flight');
+  const asks = Array.from({ length: 49 }, () => gate.request());
+  assert.equal(gate.runs, 1, 'still one — the rest fold into a trailing run');
+  resolveRun!();
+  await new Promise((r) => setTimeout(r, 0));
+  assert.equal(gate.runs, 2, 'plus exactly one trailing run for what arrived mid-fetch');
+  resolveRun!();
+  await Promise.all([first, ...asks]);
+  assert.deepEqual(log, ['run@100000', 'sleep:5000', 'run@105000'], 'the trailing run waited the gap');
+  // Asks that land during a gap wait are folded into the run that follows — no extra fetch.
+  log.length = 0;
+  const during = Array.from({ length: 10 }, () => gate.request());
+  await new Promise((r) => setTimeout(r, 0));
+  resolveRun!();
+  await Promise.all(during);
+  assert.deepEqual(log, ['sleep:5000', 'run@110000'], 'ten asks in a gap are one fetch after it');
+  // The person presses Sync: no gap for them.
+  log.length = 0;
+  const p = gate.request({ now: true });
+  await new Promise((r) => setTimeout(r, 0));
+  resolveRun!();
+  await p;
+  assert.deepEqual(log, ['run@110000'], 'immediate');
+});
+
+test('Today — a progress line repaints one row and fetches nothing', async () => {
+  const { TodayView } = await import('../src/views/TodayView');
+  const view = Object.create(TodayView.prototype) as InstanceType<typeof TodayView> & Record<string, unknown>;
+  let fetched = 0;
+  const plugin = { materializeProgress: 'Myu is writing your people — 1 of 116' as string | null, backend: { getBrief: async () => { fetched += 1; return { ok: true, status: 200, data: {}, error: null }; } } };
+  view['plugin'] = plugin;
+  view['loading'] = false;
+  view['errorState'] = null;
+  const content = new FakeEl('div');
+  view['contentEl'] = content;
+  let renders = 0;
+  view['render'] = () => { renders += 1; const row = content.createDiv({ cls: 'myu-cue-row myu-materialize-progress' }); row.createSpan({ cls: 'myu-quiet', text: plugin.materializeProgress ?? '' }); };
+  view.paintProgress();
+  assert.equal(renders, 1, 'no row yet → one local render');
+  plugin.materializeProgress = 'Myu is writing your people — 2 of 116';
+  view.paintProgress();
+  assert.equal(renders, 1, 'the row exists → no render');
+  assert.ok(content.visibleTexts().includes('Myu is writing your people — 2 of 116'), 'the row says the new line');
+  plugin.materializeProgress = null;
+  view.paintProgress();
+  assert.equal(content.querySelectorAll('.myu-materialize-progress').length, 0, 'the line went away → the row goes');
+  assert.equal(fetched, 0, 'and nothing was fetched at any point');
+});
+
+// ── batched reads (backend 2026-09-03): the bundle, the delta feed, the ids ──
+
+test('features — the batched-reads flags parse only booleans and default off', async () => {
+  const { parseBackendFlags, BACKEND_FLAGS_OFF } = await import('../src/transport/api');
+  assert.deepEqual(parseBackendFlags(null), BACKEND_FLAGS_OFF);
+  assert.deepEqual(parseBackendFlags({ today_bundle: 'yes', vault_changes: 1 }), BACKEND_FLAGS_OFF, 'truthy is not true');
+  assert.deepEqual(parseBackendFlags({ today_bundle: true, vault_changes: true, entities_changed_ids: true, entity_changed_at: true, retry_after_header: true }), { today_bundle: true, vault_changes: true, entities_changed_ids: true, entity_changed_at: true, retry_after_header: true });
+});
+
+test('Today — one bundle unpacks into the six reads the pane knows; a null part fails alone; a refused bundle refuses brief and events', async () => {
+  const { readsFromBundle } = await import('../src/views/todayReads');
+  const ok = { ok: true, status: 200, error: null, data: { brief: { brief: { date: '2026-09-03' } }, events: { events: [] }, mirror: null, weekly: { edition: { week: 'W36' } }, loop: { loop: null }, help_queue: { queue: [{ id: 'h1' }] }, server_time: 1, errors: { mirror: 'timeout' } } };
+  const r = readsFromBundle(ok as never);
+  assert.equal(r.brief.ok, true);
+  assert.deepEqual(r.brief.data, { brief: { date: '2026-09-03' } }, 'the part is the endpoint\'s own payload');
+  assert.equal(r.events.ok, true);
+  assert.equal(r.mirror, null, 'a null part reads as absent, like a caught failure did');
+  assert.equal(r.weekly?.ok, true);
+  assert.deepEqual(r.helpQueue, [{ id: 'h1' }]);
+  const refused = readsFromBundle({ ok: false, status: 429, data: null, error: 'paused' });
+  assert.equal(refused.brief.ok, false);
+  assert.equal(refused.brief.error, 'paused', 'the pane sees the same refusal it would have from the brief call');
+  assert.equal(refused.helpQueue, null, 'and asks the old way for the queue');
+  const half = readsFromBundle({ ok: true, status: 200, error: null, data: { brief: null, events: { events: [] }, errors: { brief: 'brief failed' } } } as never);
+  assert.equal(half.brief.ok, false);
+  assert.equal(half.brief.error, 'brief failed', 'a failed part carries its own message');
+});
+
+test('sync — the delta feed replaces a card call per person: pages merge journal days, stamps skip unchanged cards, removed people go to the trash, and the cursor advances only on a whole read', async () => {
+  const { MaterializationService } = await import('../src/vault/MaterializationService');
+  const { TFile } = await import('./ui-stub');
+  const w = ((globalThis as { window?: Record<string, unknown> }).window ??= {});
+  w['setTimeout'] ??= setTimeout;
+  const files = new Map<string, string>();
+  const log: string[] = [];
+  const tfile = (path: string) => Object.assign(new TFile(), { path });
+  const fmOf = (text: string) => { const m = /^---\n([\s\S]*?)\n---/.exec(text); const fm: Record<string, string> = {}; for (const line of (m?.[1] ?? '').split('\n')) { const i = line.indexOf(':'); if (i > 0) fm[line.slice(0, i).trim()] = line.slice(i + 1).trim(); } return fm; };
+  const app = {
+    vault: {
+      getAbstractFileByPath: (p: string) => (files.has(p) ? tfile(p) : null),
+      cachedRead: async (f: { path: string }) => files.get(f.path) ?? '',
+      process: async (f: { path: string }, fn: (s: string) => string) => { files.set(f.path, fn(files.get(f.path) ?? '')); },
+      create: async (p: string, c: string) => { files.set(p, c); },
+      createFolder: async () => undefined,
+      getMarkdownFiles: () => [...files.keys()].map(tfile),
+      getFirstLinkpathDest: () => null,
+    },
+    metadataCache: { getFileCache: (f: { path: string }) => ({ frontmatter: fmOf(files.get(f.path) ?? '') }) },
+    fileManager: { trashFile: async (f: { path: string }) => { files.delete(f.path); log.push(`trash:${f.path}`); } },
+  };
+  const settings: Record<string, unknown> = {
+    account_id: 'acc', materialize_folder: 'Myu', materialize_consented: true, materialize_enabled: true, materialize_people: true, materialize_commitments: false,
+    materialize_meetings_history: true, materialize_journal_history: true, materialize_calendar: false, materialize_today: false,
+    myu_checkbox_state: {}, myu_file_hashes: {}, myu_entity_changed_at: {}, memories_by_day: {}, vault_changes_since: 0, last_people_materialize: 0, last_history_materialize: 0,
+  };
+  const ok = (data: unknown) => ({ ok: true, status: 200, data, error: null });
+  const card = (name: string, id: string) => ({ entity_id: id, header: { display_name: name, subtitle: 'Founder' }, sections: [] });
+  const pages = [
+    { server_time: 9_000, since: 0, self: { card: card('You', 'me') }, people: [{ entity_id: 'rel-1', changed_at: 100, card: card('Marcus Webb', 'rel-1') }, { entity_id: 'rel-2', changed_at: 200, card: card('Priya Raman', 'rel-2') }], companies: [{ entity_id: 'co-1', changed_at: 50, card: card('Acme', 'co-1') }], meetings: [{ meeting_id: 'm1', title: 'Kickoff', meeting_date: '2026-09-01T10:00:00Z' }], journal_days: [{ day: '2026-09-01', entries: [{ journal_id: 'j1', content: 'morning', timestamp: Date.parse('2026-09-01T08:00:00Z') }] }], removed: ['rel-gone'], next_cursor: 'p2' },
+    { server_time: 9_000, since: 0, people: [], companies: [], meetings: [], journal_days: [{ day: '2026-09-01', entries: [{ journal_id: 'j2', content: 'evening', timestamp: Date.parse('2026-09-01T20:00:00Z') }] }], next_cursor: null },
+  ];
+  const api = {
+    listEntities: async (tab: string, opts?: { changedSince?: number }) => { log.push(`list:${tab}:${opts?.changedSince ?? 'all'}`); return ok({ entities: tab === 'person' ? [{ entity_type: 'person', entity_id: 'rel-1', display_name: 'Marcus Webb', organization: 'Acme', item_count: 0, top_urgency: 'low', changed_at: 100 }] : [] }); },
+    getVaultChanges: async (since: number, cursor: string | null) => { log.push(`changes:${since}:${cursor ?? '-'}`); return ok(cursor === 'p2' ? pages[1] : pages[0]); },
+    getCard: async (_t: string, id: string) => { log.push(`card:${id}`); return ok({ card: card('X', id) }); },
+    getRelationshipMemories: async (id: string) => { log.push(`memories:${id}`); return ok({ memories: [] }); },
+    getMeetingDetail: async (id: string) => { log.push(`meeting:${id}`); return ok({ meeting: { meeting_id: id, title: 'Kickoff' }, key_points: ['x'] }); },
+    getJournalChats: async (id: string) => { log.push(`chats:${id}`); return ok({ chats: [] }); },
+    listVaultCommitments: async () => ok({ commitments: [] }),
+  };
+  // A page for a person the server has since removed.
+  files.set('Myu/People/Gone Person.md', '---\ntype: myu-person\nmyu-id: rel-gone\n---\n# Gone');
+  const svc = new MaterializationService({
+    app: app as never, api: () => api as never, settings: () => settings as never, save: async () => undefined, canRun: () => true,
+    findTheirPage: () => null, onProgress: (line) => { if (line) log.push(`progress:${line}`); }, contentKey: () => ({}) as CryptoKey,
+    flags: () => ({ today_bundle: true, vault_changes: true, entities_changed_ids: true, entity_changed_at: true, retry_after_header: true }), paceMs: 0,
+  });
+
+  const first = await svc.syncChanges('full');
+  assert.equal(first.people, 2, 'two people written from the feed');
+  assert.ok(files.get('Myu/People/Marcus Webb.md')?.includes('Marcus Webb'), 'the page comes from the card in the feed');
+  assert.ok(files.get('Myu/People/Priya Raman.md'), 'a person the changed-list did not name is still written, from the card');
+  assert.ok(files.get('Myu/Companies/Acme.md'));
+  assert.ok(files.get('Myu/Me.md'), 'self rides on the first page');
+  assert.ok(files.has('Myu/Meetings/2026-09-01 Kickoff.md'), 'a meeting row became a note (detail fetched)');
+  const day = files.get('Myu/Journal/2026-09-01.md') ?? '';
+  assert.ok(day.includes('morning') && day.includes('evening'), `a day split across two pages is one note: ${day.slice(0, 120)}`);
+  assert.ok(log.includes('trash:Myu/People/Gone Person.md'), 'a removed person goes to the trash');
+  assert.ok(!log.some((l) => l.startsWith('card:')), 'no single-card call was made');
+  assert.equal(settings.vault_changes_since, 9_000, 'the server time becomes the next since');
+  assert.deepEqual(settings.myu_entity_changed_at, { 'rel-1': 100, 'rel-2': 200, 'co-1': 50 });
+  assert.ok(log.includes('changes:0:-') && log.includes('changes:0:p2'), 'both pages read with since 0');
+
+  // Second pass, delta: the same stamps → nothing rewritten, no memories fetched, since advances.
+  log.length = 0;
+  pages[0].removed = []; pages[0].self = null as never;
+  const second = await svc.syncChanges('delta');
+  assert.equal(second.people, 0);
+  assert.ok(log.includes('list:person:9000') && log.includes('changes:9000:-'), `asks by since: ${log.join(' ')}`);
+  assert.ok(!log.some((l) => l.startsWith('memories:')), 'unchanged cards cost nothing');
+
+  // A refused page keeps the old since so the next sync re-asks.
+  log.length = 0;
+  const refusing = { ...api, getVaultChanges: async () => ({ ok: false, status: 429, data: null, error: 'paused' }) };
+  const svc2 = new MaterializationService({ app: app as never, api: () => refusing as never, settings: () => settings as never, save: async () => undefined, canRun: () => true, findTheirPage: () => null, onProgress: () => undefined, contentKey: () => ({}) as CryptoKey, flags: () => ({ today_bundle: true, vault_changes: true, entities_changed_ids: true, entity_changed_at: true, retry_after_header: true }), paceMs: 0 });
+  settings.vault_changes_since = 9_000;
+  await svc2.syncChanges('delta');
+  assert.equal(settings.vault_changes_since, 9_000, 'since did not move on a refused page');
+
+  // entities_changed with ids: exactly those cards, now.
+  log.length = 0;
+  await svc.refreshPeopleByIds(['rel-1', 'nope']);
+  assert.deepEqual(log.filter((l) => l.startsWith('card:')), ['card:rel-1'], 'one card call, for the named id only');
+});
+
+test('sync — two overlapping full sweeps are one: the ambient ratchet cannot start a second while the open sweep runs', async () => {
+  const { MaterializationService } = await import('../src/vault/MaterializationService');
+  let sweeps = 0;
+  const svc = new MaterializationService({
+    app: { vault: { getAbstractFileByPath: () => null, create: async () => undefined, createFolder: async () => undefined, getMarkdownFiles: () => [] } } as never,
+    api: () => ({ listEntities: async () => ({ ok: true, status: 200, data: { entities: [] }, error: null }), getVaultChanges: async () => { sweeps += 1; await new Promise((r) => setTimeout(r, 20)); return { ok: true, status: 200, data: { server_time: 1, people: [], next_cursor: null }, error: null }; }, listVaultCommitments: async () => ({ ok: true, status: 200, data: { commitments: [] }, error: null }) }) as never,
+    settings: () => ({ materialize_consented: true, materialize_enabled: true, materialize_people: true, materialize_today: false, materialize_commitments: false, materialize_calendar: false, materialize_folder: 'Myu', myu_file_hashes: {}, myu_entity_changed_at: {}, vault_changes_since: 0, last_people_materialize: 0, last_history_materialize: Date.now() }) as never,
+    save: async () => undefined, canRun: () => true, findTheirPage: () => null, onProgress: () => undefined, contentKey: () => null,
+    flags: () => ({ today_bundle: true, vault_changes: true, entities_changed_ids: true, entity_changed_at: true, retry_after_header: true }), paceMs: 0,
+  });
+  await Promise.all([svc.materializeAll(), svc.materializeAll(), svc.refreshAmbient()]);
+  assert.equal(sweeps, 1, 'one feed read for three overlapping asks');
+});

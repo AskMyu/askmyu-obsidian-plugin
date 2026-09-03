@@ -16,6 +16,7 @@
 
 import { requestUrl, type RequestUrlResponse } from 'obsidian';
 import { assertEncrypted, type EncryptedJournalPayload } from './assertEncrypted';
+import { RequestBudget, retryAfterMs } from './budget';
 
 export { assertEncrypted, PlaintextRefusedError } from './assertEncrypted';
 
@@ -46,6 +47,8 @@ export interface TransportOptions {
    * (`terms_required`, `terms_version`, `urls`). A screen, never a re-mint.
    */
   onTermsRequired?: (body: unknown) => void;
+  /** The request budget — one per transport; tests hand in a fast one. */
+  budget?: RequestBudget;
 }
 
 export interface ApiResponse<T = Record<string, unknown>> {
@@ -61,6 +64,18 @@ export type { EncryptedJournalPayload } from './assertEncrypted';
 /** The two walls a request can hit that a fresh session or a fresh escrow clears. */
 type Recovery = 'session' | 'escrow';
 
+/**
+ * The WAF's 403 is BARE: no JSON, or JSON that names no error. The backend's
+ * own refusals always say why (`{"err":"enc"}`, `{"error":"..."}`), and those
+ * must never rest the whole plugin.
+ */
+export function isWafRefusal(status: number, data: unknown): boolean {
+  if (status !== 403) return false;
+  if (!data || typeof data !== 'object') return true;
+  const d = data as Record<string, unknown>;
+  return !('err' in d) && !('error' in d);
+}
+
 /** A 403 from the encryption gate, as distinct from any other forbidden. */
 export function isEncryptionBlocked(status: number, data: unknown): boolean {
   return status === 403 && !!data && typeof data === 'object' && (data as { err?: unknown }).err === 'enc';
@@ -70,9 +85,12 @@ export class Transport {
   private opts: TransportOptions;
   /** One recovery in flight per kind; every request refused by that wall awaits it. */
   private recoveries = new Map<Recovery, Promise<boolean>>();
+  /** Every call takes a turn here — see budget.ts for the three rules. */
+  readonly budget: RequestBudget;
 
   constructor(opts: TransportOptions) {
     this.opts = opts;
+    this.budget = opts.budget ?? new RequestBudget();
   }
 
   setAuthToken(token: string | null): void {
@@ -150,7 +168,14 @@ export class Transport {
    * default throws, which would turn every expected 401 into an unhandled
    * rejection in a background interval.
    */
-  private async exchange<T>(send: () => Promise<RequestUrlResponse>, authed: boolean): Promise<ApiResponse<T>> {
+  private async exchange<T>(path: string, send: () => Promise<RequestUrlResponse>, authed: boolean): Promise<ApiResponse<T>> {
+    // The budget first: a resting endpoint, a WAF pause, or an empty bucket
+    // is waited out here — or, past the cap, answered as a pause without a
+    // byte on the wire.
+    const turn = await this.budget.acquire(path);
+    if (!turn.ok) {
+      return { status: 429, ok: false, data: { retry_after: Math.ceil(turn.retryAfterMs / 1000) } as unknown as T, error: 'paused' };
+    }
     let res: RequestUrlResponse;
     try {
       res = await send();
@@ -162,6 +187,8 @@ export class Transport {
     let data = parseJson<T>(res);
     const kind = authed ? this.recoveryFor(res.status, data) : null;
     if (kind && (await this.recover(kind))) {
+      const again = await this.budget.acquire(path);
+      if (!again.ok) return { status: 429, ok: false, data: null, error: 'paused' };
       try {
         res = await send();
       } catch (err) {
@@ -169,6 +196,7 @@ export class Transport {
       }
       data = parseJson<T>(res);
     }
+    this.noteRefusal(path, res, data);
     if (res.status === 428) this.opts.onTermsRequired?.(data);
     return {
       status: res.status,
@@ -176,6 +204,16 @@ export class Transport {
       data,
       error: errorCodeOf(data) ?? (res.status >= 400 ? `http_${res.status}` : null),
     };
+  }
+
+  /**
+   * What a refusal means for the budget: 429 rests that endpoint for exactly
+   * Retry-After; a bare 403 (not the encryption gate) is the WAF and rests
+   * everything.
+   */
+  private noteRefusal(path: string, res: RequestUrlResponse, data: unknown): void {
+    if (res.status === 429) this.budget.pause(path, retryAfterMs(res.headers, data));
+    else if (isWafRefusal(res.status, data)) this.budget.pauseAll();
   }
 
   /** Authenticated POST. Every backend call in the plugin goes through here. */
@@ -186,6 +224,7 @@ export class Transport {
   ): Promise<ApiResponse<T>> {
     const authed = !opts.anonymous && !!this.opts.authToken;
     return this.exchange<T>(
+      path,
       () =>
         requestUrl({
           url: `${this.opts.baseUrl}${path}`,
@@ -206,6 +245,7 @@ export class Transport {
   async postRaw<T = Record<string, unknown>>(path: string, body: ArrayBuffer, contentType: string): Promise<ApiResponse<T>> {
     const authed = !!this.opts.authToken;
     return this.exchange<T>(
+      path,
       () => requestUrl({ url: `${this.opts.baseUrl}${path}`, method: 'POST', headers: this.headersFor({ 'Content-Type': contentType }, authed), body, throw: false }),
       authed,
     );
@@ -221,6 +261,7 @@ export class Transport {
   ): Promise<ApiResponse<T>> {
     const authed = !!this.opts.authToken;
     return this.exchange<T>(
+      path,
       () => requestUrl({ url: `${this.opts.baseUrl}${path}`, method: 'GET', headers: this.headersFor({ ...opts?.headers }, authed), throw: false }),
       authed,
     );

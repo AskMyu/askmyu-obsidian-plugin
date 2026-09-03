@@ -71,6 +71,8 @@ export interface EntityHeadline {
   subtitle?: string;
   /** ISO timestamp of the last recorded contact — feeds `days quiet`. */
   last_contact?: string;
+  /** Server ms: the latest change across the row, its memories, sections, health (2026-09-03). */
+  changed_at?: number;
 }
 
 // ── prep (P4.1) ─────────────────────────────────────────────────────────────

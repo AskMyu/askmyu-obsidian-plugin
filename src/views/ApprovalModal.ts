@@ -16,6 +16,7 @@
 
 import { App, Modal, Setting } from 'obsidian';
 import type { UnlockMachine } from '../auth/UnlockMachine';
+import { approvalFailureText } from './approvalCopy';
 
 type Stage = 'choose' | 'waiting' | 'phrase' | 'done' | 'failed';
 
@@ -61,11 +62,11 @@ export class ApprovalModal extends Modal {
     } else {
       this.stage = 'failed';
       this.message =
-        a.status === 'denied'
-          ? 'That request was declined on the other device.'
-          : a.status === 'expired'
-            ? 'The request timed out. You can start again.'
-            : 'Something went wrong finishing the handover. You can start again.';
+        a.status === 'failed'
+          ? approvalFailureText(a.failure)
+          : a.status === 'denied'
+            ? 'That request was declined on the other device.'
+            : 'The request timed out. You can start again.';
     }
     this.render();
   }

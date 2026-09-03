@@ -122,7 +122,20 @@ export interface PendingApproval {
  */
 export type ApprovalProgress =
   | { status: 'pending'; requestId: string; code: string; startedAt: number }
-  | { status: 'denied' | 'expired' | 'failed' };
+  | { status: 'denied' | 'expired' }
+  | { status: 'failed'; failure: ApprovalFailure };
+
+/**
+ * WHICH call failed and what the server said — so the pane can name it. "The
+ * approval did not finish" was all a person saw on prod (2026-09-03) when
+ * the transfer request had answered 429: three requests an hour, and a tester
+ * had spent them.
+ */
+export interface ApprovalFailure {
+  step: 'request' | 'poll' | 'handover';
+  status: number;
+  error: string | null;
+}
 
 export class UnlockMachine {
   private state: UnlockState = 'disconnected';
@@ -477,7 +490,7 @@ export class UnlockMachine {
     const res = await this.deps.api.requestDeviceTransfer(auth.device_id, this.transferKeys.publicKey, this.deps.deviceName);
     if (!res.ok || !res.data) {
       this.transferKeys = null;
-      this.setApproval({ status: 'failed' });
+      this.setApproval({ status: 'failed', failure: { step: 'request', status: res.status, error: res.error } });
       return null;
     }
 
@@ -497,11 +510,13 @@ export class UnlockMachine {
     this.stopPolling();
     const started = Date.now();
 
-    const settle = (outcome: 'denied' | 'expired' | 'failed') => {
+    const settle = (outcome: ApprovalProgress) => {
       this.stopPolling();
       this.transferKeys = null;
-      this.setApproval({ status: outcome });
+      this.setApproval(outcome);
     };
+    const verdict = (status: 'denied' | 'expired'): ApprovalProgress => ({ status });
+    const failed = (step: ApprovalFailure['step'], status: number, error: string | null): ApprovalProgress => ({ status: 'failed', failure: { step, status, error } });
 
     const tick = async () => {
       if (this.approvalState?.status !== 'pending' || this.approvalState.requestId !== requestId) {
@@ -509,14 +524,19 @@ export class UnlockMachine {
         return;
       }
       if (Date.now() - started > 10 * 60 * 1000) {
-        settle('expired');
+        settle(verdict('expired'));
         return;
       }
 
       const res = await this.deps.api.pollDeviceTransfer(requestId);
       if (!res.ok || !res.data) {
-        if (res.error === 'offline' || res.error === 'network_error') return; // keep waiting
-        settle('failed');
+        // Transient — offline, a pause (429), a server hiccup (5xx): the
+        // request is still alive on the server, so keep asking. Only a
+        // definitive answer ends the wait.
+        if (res.error === 'offline' || res.error === 'network_error' || res.status === 429 || res.status >= 500) return;
+        // The server no longer knows the request: it aged out, not "an error".
+        if (res.status === 400 || res.status === 404 || res.status === 410) settle(verdict('expired'));
+        else settle(failed('poll', res.status, res.error));
         return;
       }
 
@@ -524,13 +544,13 @@ export class UnlockMachine {
       this.stopPolling();
 
       if (res.data.status !== 'approved' || !res.data.encrypted_mdek) {
-        settle(res.data.status === 'denied' ? 'denied' : 'expired');
+        settle(verdict(res.data.status === 'denied' ? 'denied' : 'expired'));
         return;
       }
 
       const completed = await this.completeApproval(res.data.encrypted_mdek);
       if (completed) this.setApproval(null);
-      else settle('failed');
+      else settle(failed('handover', 0, null));
     };
 
     this.pollTimer = window.setInterval(() => void tick(), this.deps.pollIntervalMs ?? 2000);

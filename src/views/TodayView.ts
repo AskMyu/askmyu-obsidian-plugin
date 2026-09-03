@@ -29,6 +29,7 @@ import { surveyLine } from '../capture/linkSurvey';
 import { ApproveDeviceModal } from './ApproveDeviceModal';
 import { ApprovalModal } from './ApprovalModal';
 import { notifyError } from '../notify';
+import { approvalFailureText } from './approvalCopy';
 
 /**
  * "About 4 minutes left" — from the SERVER's `expires_at`. The window is
@@ -617,7 +618,7 @@ export class TodayView extends ItemView {
     if (approval) {
       root.createEl('p', {
         cls: 'myu-prose myu-warn',
-        text: approval.status === 'denied' ? 'That request was declined on the other device.' : approval.status === 'expired' ? 'The request timed out.' : 'The approval did not finish.',
+        text: approval.status === 'failed' ? approvalFailureText(approval.failure) : approval.status === 'denied' ? 'That request was declined on the other device.' : 'The request timed out.',
       });
     }
     const doors = root.createDiv({ cls: 'myu-door-stack' });

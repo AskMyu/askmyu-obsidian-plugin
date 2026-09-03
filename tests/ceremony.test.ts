@@ -2824,6 +2824,42 @@ test('approval — the machine owns it: a dialog closing does not cancel; denial
   assert.equal(machine.approval, null);
   assert.ok(moves.includes('approval:none'));
 
+  // A refused request names its cause: the prod case was 429 — three requests an hour.
+  const limited = new UnlockMachine({
+    api: { requestDeviceTransfer: async () => ({ ok: false, status: 429, data: null, error: 'rate_limit_exceeded' }) } as never,
+    keys: { isUnlocked: false, clear: () => undefined, set: () => undefined } as never,
+    load: () => ({ token: 't', device_id: 'dev-1', wrapped_mdek: null, session_token: 's', account_id: 'acc', background_work_consented: null }) as never,
+    save: async () => undefined, onSession: () => undefined, onState: () => undefined, deviceName: 'x', mockMode: () => true, pollIntervalMs: 10,
+  });
+  assert.equal(await limited.beginApproval(), null);
+  assert.deepEqual(limited.approval, { status: 'failed', failure: { step: 'request', status: 429, error: 'rate_limit_exceeded' } });
+  const { approvalFailureText } = await import('../src/views/approvalCopy');
+  assert.match(approvalFailureText({ step: 'request', status: 429, error: 'rate_limit_exceeded' }), /Too many approval requests in the last hour/);
+  assert.match(approvalFailureText({ step: 'request', status: 0, error: 'offline' }), /^Could not start the approval\. askMyu could not be reached/);
+  assert.match(approvalFailureText({ step: 'poll', status: 403, error: 'http_403' }), /^Could not check on the approval\. This session is still being opened/);
+  assert.match(approvalFailureText({ step: 'handover', status: 0, error: null }), /key handover/);
+
+  // While waiting, a pause or a server hiccup is not a verdict; a request the server forgot has aged out.
+  let pollAnswer: { ok: boolean; status: number; data: unknown; error: string | null } = { ok: false, status: 503, data: null, error: 'http_503' };
+  const flaky = new UnlockMachine({
+    api: {
+      requestDeviceTransfer: async () => ({ ok: true, status: 200, data: { request_id: 'req-2', verification_code: '9999' }, error: null }),
+      pollDeviceTransfer: async () => pollAnswer,
+    } as never,
+    keys: { isUnlocked: false, clear: () => undefined, set: () => undefined } as never,
+    load: () => ({ token: 't', device_id: 'dev-1', wrapped_mdek: null, session_token: 's', account_id: 'acc', background_work_consented: null }) as never,
+    save: async () => undefined, onSession: () => undefined, onState: () => undefined, deviceName: 'x', mockMode: () => true, pollIntervalMs: 10,
+  });
+  await flaky.beginApproval();
+  await settle();
+  assert.equal(flaky.approval?.status, 'pending', 'a 503 while polling keeps waiting');
+  pollAnswer = { ok: false, status: 429, data: null, error: 'http_429' };
+  await settle();
+  assert.equal(flaky.approval?.status, 'pending', 'so does a 429');
+  pollAnswer = { ok: false, status: 404, data: null, error: 'request_not_found' };
+  await settle();
+  assert.equal(flaky.approval?.status, 'expired', 'a request the server no longer knows has aged out');
+
   // Approved: the handover runs, then the record clears (the unlock itself is adoptMDEK's, covered by transfer.e2e).
   await machine.beginApproval();
   (machine as unknown as { completeApproval: () => Promise<boolean> }).completeApproval = async () => true;
@@ -2882,6 +2918,8 @@ test('Today — signed in but not approved is its own screen: the way forward, t
   assert.ok(texts.includes('That request was declined on the other device.') && texts.includes('Try again'), texts.join(' | '));
   root = blocked(mk('existing_account', { status: 'expired' }));
   assert.ok(root.visibleTexts().includes('The request timed out.'));
+  root = blocked(mk('existing_account', { status: 'failed', failure: { step: 'request', status: 429, error: 'rate_limit_exceeded' } }));
+  assert.ok(root.visibleTexts().some((t) => t.startsWith('Too many approval requests in the last hour')), 'a refused request says why, not "did not finish"');
 
   // The other reasons a device is blocked keep their own words and doors.
   assert.ok(blocked(mk('device_revoked', null)).visibleTexts().some((t) => t.startsWith('This device was removed from your account')));

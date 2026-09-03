@@ -120,6 +120,11 @@ export class AskMyuSettingTab extends PluginSettingTab {
       items: [{ name: heading, aliases, render: (setting: Setting) => mountInRow(setting, render) }],
     });
     return [
+      // The brandmark, first — the one brand moment in settings. A render item
+      // outside any group, unsearchable, so 1.13's definitions render paints it
+      // exactly where display() does (live, 2026-09-03: it only ever appeared
+      // after a legacy repaint, never on open).
+      { name: 'askMyu', searchable: false, render: (setting: Setting) => mountInRow(setting, (root) => appendBrand(root, 'myu-brand myu-brand-settings')) },
       section('Connection', ['account', 'sign in', 'devices', 'backend', 'token'], (r) => this.renderConnection(r, false)),
       section('What Myu can read', ['consent', 'folders', 'tags', 'journal', 'sharing'], (r) => this.renderSharing(r, false)),
       section('Meeting notes', ['meetings', 'transcripts', 'capture'], (r) => this.renderMeetingNotes(r, false)),
@@ -365,7 +370,7 @@ export class AskMyuSettingTab extends PluginSettingTab {
    * Devices holding custody, with the revoke.
    *
    * This is the kill switch the listing copy already promises — "removing this
-   * device in AskMyu deletes the wrapping key, which makes the local blob
+   * device in askMyu deletes the wrapping key, which makes the local blob
    * permanently inert." Until now the plugin could only ever be ON the
    * receiving end of that. THIS device is marked and cannot be revoked from
    * here: pulling your own custody out from under yourself mid-session is a
@@ -387,7 +392,7 @@ export class AskMyuSettingTab extends PluginSettingTab {
     const mine = this.plugin.settings.device_id;
 
     if (devices.length === 0) {
-      new Setting(host).setName('Devices').setDesc('AskMyu lists no devices for this account yet.');
+      new Setting(host).setName('Devices').setDesc('askMyu lists no devices for this account yet.');
       return;
     }
 
@@ -1071,7 +1076,7 @@ export class AskMyuSettingTab extends PluginSettingTab {
       let pasted = '';
       new Setting(root)
         .setName('Plugin token')
-        .setDesc('Already use Myu? Create a token in AskMyu → settings → integrations. You will only see it once.')
+        .setDesc('Already use Myu? Create a token in askMyu → settings → integrations. You will only see it once.')
         .addText((t) => {
           t.setPlaceholder('Paste the token').onChange((v) => {
             pasted = v.trim();
@@ -1093,11 +1098,14 @@ export class AskMyuSettingTab extends PluginSettingTab {
     }
 
     if (state === 'blocked' && !this.plugin.unlock.genesisPending) {
+      const inFlight = this.plugin.unlock.approval;
       new Setting(root)
         .setName('Approve this device')
         .setDesc(
-          'Your notes are encrypted with a key only your devices hold. Approve this ' +
-            'one from a device you are already signed in on, or use your recovery phrase.',
+          inFlight?.status === 'pending'
+            ? `Waiting for approval — enter ${inFlight.code} on a device that is already signed in. It finishes on its own; the Today pane shows the same code.`
+            : 'Your notes are encrypted with a key only your devices hold. Approve this ' +
+                'one from a device you are already signed in on, or use your recovery phrase.',
         )
         .addButton((b) =>
           b
@@ -1111,7 +1119,7 @@ export class AskMyuSettingTab extends PluginSettingTab {
 
     if (state === 'relocked') {
       new Setting(root)
-        .setName('Locked until this device reaches AskMyu')
+        .setName('Locked until this device reaches askMyu')
         .setDesc(
           'This vault holds your notes encrypted; the key that opens them is on the ' +
             'server, fetched fresh each time Obsidian starts. Capture is paused until then.',
@@ -1130,7 +1138,7 @@ export class AskMyuSettingTab extends PluginSettingTab {
       .addButton((b) =>
         b.setWarning().setButtonText('Disconnect').onClick(async () => {
           await this.plugin.unlock.disconnect();
-          notifyStatus('AskMyu disconnected. Nothing further leaves this vault.');
+          notifyStatus('askMyu disconnected. Nothing further leaves this vault.');
           this.rerender();
         }),
       );
@@ -1328,7 +1336,7 @@ export class AskMyuSettingTab extends PluginSettingTab {
       );
     new Setting(dev)
       .setName('Use mock backend')
-      .setDesc('Runs against an in-memory stand-in instead of AskMyu. For development before the server endpoints land.')
+      .setDesc('Runs against an in-memory stand-in instead of askMyu. For development before the server endpoints land.')
       .addToggle((t) =>
         t.setValue(this.plugin.settings.use_mock_backend).onChange(async (v) => {
           this.plugin.settings.use_mock_backend = v;

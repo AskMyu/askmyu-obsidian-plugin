@@ -26,7 +26,7 @@ export function lookPath(configDir: string): string {
 
 /** The installed text: a stamp naming the build that wrote it, then the look. */
 export function lookText(version: string): string {
-  return `/* @myu-look ${version} — installed by the AskMyu plugin. Yours to edit, turn off, or remove: Settings → AskMyu → Advanced → Myu look. */\n${lookSource}`;
+  return `/* @myu-look ${version} — installed by the askMyu plugin. Yours to edit, turn off, or remove: Settings → askMyu → Advanced → Myu look. */\n${lookSource}`;
 }
 
 /** The build that wrote an installed copy, or null for a file Myu did not write. */

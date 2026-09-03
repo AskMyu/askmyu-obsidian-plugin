@@ -1909,6 +1909,7 @@ test('settings (1.13) — a section renders INSIDE its definitions row; nothing 
   const sections = [...src.matchAll(/section\('([^']+)'|section\("([^"]+)"/g)].map((m) => m[1] ?? m[2]);
   assert.deepEqual(sections, ['Connection', 'What Myu can read', 'Meeting notes', "Myu's folder", 'Weave Myu in', 'Weekly review', 'Account', 'Advanced'], 'every display() section, Account included, is a definition');
   assert.ok(!/settingEl\.parentElement/.test(src), 'no section renders beside its row any more');
+  assert.ok(/searchable: false, render: \(setting: Setting\) => mountInRow\(setting, \(root\) => appendBrand\(root, 'myu-brand myu-brand-settings'\)\)/.test(src), 'the brandmark is a definitions item too — 1.13 paints it on open, not only after a legacy repaint');
 });
 
 test('reveal a setting — the link lands ON the switch: scrolled, flashed with Obsidian\'s own class, focused', async () => {
@@ -2280,7 +2281,7 @@ test('the first run is the pane, not a ladder — no modal on enable, rows in To
   assert.match(first, /await this\.openToday\(\)/);
   const enable = main.slice(main.indexOf('First enable, nothing configured'), main.indexOf('override onunload'));
   assert.ok(!/new SignupModal/.test(enable), 'nothing opens on enable');
-  assert.match(enable, /notifyStatus\('AskMyu is installed/, 'a Notice, and the pane');
+  assert.match(enable, /notifyStatus\('askMyu is installed/, 'a Notice, and the pane');
   const today = await fs.readFile('src/views/TodayView.ts', 'utf8');
   const rows = today.slice(today.indexOf('private setupRows()'), today.indexOf('return rows;'));
   const order = ['Keep what Myu knows in your vault', 'Choose what Myu may read', 'Bring in what you have already written', 'Share meeting notes', 'Tell Myu who you are'].map((t) => rows.indexOf(t));
@@ -2759,4 +2760,142 @@ test('settings — the Myu look row: Install; then Turn off / Remove; an older o
   const src = await (await import('node:fs/promises')).readFile('src/views/SettingsTab.ts', 'utf8');
   assert.ok(!/['"`]\.obsidian/.test(src), 'no hardcoded .obsidian path — the vault\'s configDir is used');
   assert.ok(/text: 'The file on GitHub', href: MYU_LOOK_URL/.test(src), 'the row still links to the file');
+});
+
+// ── a device signed in but not approved: the approval lives on the machine (2026-09-03) ──
+// Operator: "someone can flip between interfaces (browser and obsidian) and end up
+// losing the flow of the signin/login process." Until now the dialog owned the poll
+// and cancelled it on close; the Today pane called this state "Locked — try now".
+
+test('approval — the machine owns it: a dialog closing does not cancel; denial and cancel are recorded; approval clears it', async () => {
+  const { UnlockMachine } = await import('../src/auth/UnlockMachine');
+  const { ApprovalModal } = await import('../src/views/ApprovalModal');
+  // The machine polls on window timers; the test host has a bare window.
+  const w = ((globalThis as { window?: Record<string, unknown> }).window ??= {});
+  w['setInterval'] ??= setInterval;
+  w['clearInterval'] ??= clearInterval;
+  let status: 'pending' | 'denied' | 'approved' = 'pending';
+  const moves: string[] = [];
+  const api = {
+    requestDeviceTransfer: async () => ({ ok: true, status: 200, data: { request_id: 'req-1', verification_code: '4242' }, error: null }),
+    pollDeviceTransfer: async () => ({ ok: true, status: 200, data: status === 'approved' ? { status: 'approved', encrypted_mdek: 'raw' } : { status }, error: null }),
+  };
+  const machine = new UnlockMachine({
+    api: api as never,
+    keys: { isUnlocked: false, clear: () => undefined, set: () => undefined } as never,
+    load: () => ({ token: 't', device_id: 'dev-1', wrapped_mdek: null, session_token: 's', account_id: 'acc', background_work_consented: null }) as never,
+    save: async () => undefined,
+    onSession: () => undefined,
+    onState: (st, d) => { moves.push(`state:${st}:${d ?? ''}`); },
+    onApproval: () => { moves.push(`approval:${machine.approval?.status ?? 'none'}`); },
+    deviceName: 'Obsidian — test',
+    mockMode: () => true,
+    pollIntervalMs: 10,
+  });
+  const settle = () => new Promise((r) => setTimeout(r, 40));
+
+  const pending = await machine.beginApproval();
+  assert.equal(pending?.verificationCode, '4242');
+  assert.equal(machine.approval?.status, 'pending');
+  assert.deepEqual(moves, ['approval:pending'], 'the pane is told the moment it starts');
+
+  // The dialog is a window onto it: it shows the machine's code, and closing changes nothing.
+  const modal = new ApprovalModal({} as never, machine, () => undefined);
+  modal.open();
+  assert.ok(modal.contentEl.visibleTexts().includes('4242'), `the dialog shows the code in flight — ${modal.contentEl.visibleTexts().join(' | ')}`);
+  modal.close();
+  await settle();
+  assert.equal(machine.approval?.status, 'pending', 'closing the dialog is not cancelling');
+
+  // Declined on the other device: recorded, the poll stops.
+  status = 'denied';
+  await settle();
+  assert.equal(machine.approval?.status, 'denied');
+  assert.ok(moves.includes('approval:denied'));
+  const askedAfter = moves.length;
+  await settle();
+  assert.equal(moves.length, askedAfter, 'nothing polls after a verdict');
+
+  // Try again → pending; an explicit cancel clears it.
+  status = 'pending';
+  await machine.beginApproval();
+  assert.equal(machine.approval?.status, 'pending');
+  machine.cancelApproval();
+  assert.equal(machine.approval, null);
+  assert.ok(moves.includes('approval:none'));
+
+  // Approved: the handover runs, then the record clears (the unlock itself is adoptMDEK's, covered by transfer.e2e).
+  await machine.beginApproval();
+  (machine as unknown as { completeApproval: () => Promise<boolean> }).completeApproval = async () => true;
+  status = 'approved';
+  await settle();
+  assert.equal(machine.approval, null, 'an approval leaves no record behind');
+});
+
+test('Today — signed in but not approved is its own screen: the way forward, the code while waiting, the retry after a verdict, never "locked"', async () => {
+  const { TodayView } = await import('../src/views/TodayView');
+  const calls: string[] = [];
+  const mk = (detail: string | null, approval: unknown, unlockExtra: Record<string, unknown> = {}) => {
+    const view = Object.create(TodayView.prototype) as InstanceType<typeof TodayView> & Record<string, unknown>;
+    view['plugin'] = {
+      lastStateDetail: detail,
+      unlock: {
+        current: 'blocked',
+        genesisPending: false,
+        approval,
+        beginApproval: async () => { calls.push('begin'); return { requestId: 'r', verificationCode: '1234' }; },
+        cancelApproval: () => { calls.push('cancel'); },
+        disconnect: async () => { calls.push('disconnect'); },
+        ...unlockExtra,
+      },
+      openGenesisCeremony: () => { calls.push('genesis'); },
+      termsStanding: () => 'ok',
+    };
+    view['app'] = {};
+    view['refresh'] = async () => { calls.push('refresh'); };
+    view['contentEl'] = new FakeEl('div');
+    return view;
+  };
+  const blocked = (view: ReturnType<typeof mk>) => { const root = new FakeEl('div'); (view as unknown as { renderBlocked(r: FakeEl): void }).renderBlocked(root); return root; };
+
+  // Signed in, nothing started yet.
+  let root = blocked(mk('existing_account', null));
+  let texts = root.visibleTexts();
+  assert.ok(texts.some((t) => t.startsWith('You are signed in, but this device is not approved yet')), texts.join(' | '));
+  assert.ok(texts.includes('Get this device approved…') && texts.includes('Use my recovery phrase') && texts.includes('Sign out'), 'three doors: approve, phrase, leave');
+  assert.ok(!texts.some((t) => /Locked|Try now/.test(t)), 'never the locked copy');
+  assert.ok(await root.click('Get this device approved…'));
+  await new Promise((r) => setTimeout(r, 5));
+  assert.deepEqual(calls.splice(0), ['begin', 'refresh'], 'the pane starts the approval itself and re-reads');
+
+  // Waiting: the code, in the pane, with cancel and the phrase route.
+  root = blocked(mk('existing_account', { status: 'pending', requestId: 'r', code: '1234', startedAt: 0 }));
+  texts = root.visibleTexts();
+  assert.ok(texts.includes('1234') && texts.includes('Cancel') && texts.includes('Use my recovery phrase instead'), texts.join(' | '));
+  assert.ok(!texts.includes('Get this device approved…'), 'no second start while one is in flight');
+  assert.ok(await root.click('Cancel'));
+  assert.deepEqual(calls.splice(0), ['cancel', 'refresh']);
+
+  // A verdict: said, with Try again.
+  root = blocked(mk('existing_account', { status: 'denied' }));
+  texts = root.visibleTexts();
+  assert.ok(texts.includes('That request was declined on the other device.') && texts.includes('Try again'), texts.join(' | '));
+  root = blocked(mk('existing_account', { status: 'expired' }));
+  assert.ok(root.visibleTexts().includes('The request timed out.'));
+
+  // The other reasons a device is blocked keep their own words and doors.
+  assert.ok(blocked(mk('device_revoked', null)).visibleTexts().some((t) => t.startsWith('This device was removed from your account')));
+  assert.ok(blocked(mk('token_revoked', null)).visibleTexts().includes('Sign in'));
+  root = blocked(mk('genesis_pending', null, { genesisPending: true }));
+  assert.ok(root.visibleTexts().includes('Finish setup…'));
+  await root.click('Finish setup…');
+  assert.deepEqual(calls.splice(0), ['genesis']);
+
+  // And refresh() routes a blocked machine here, not to "Locked".
+  const view = mk('existing_account', null);
+  view['refresh'] = TodayView.prototype.refresh;
+  view['loading'] = false;
+  await (view as unknown as { refresh(): Promise<void> }).refresh();
+  texts = (view['contentEl'] as FakeEl).visibleTexts();
+  assert.ok(texts.includes('Get this device approved…') && !texts.some((t) => /Locked/.test(t)), `refresh paints the blocked screen: ${texts.join(' | ')}`);
 });

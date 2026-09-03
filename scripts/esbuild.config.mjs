@@ -32,8 +32,11 @@ monorepo; the public mirror (AskMyu/askmyu-obsidian-plugin) carries the same sou
 // writes `major.minor.<build>` into manifest.json (and versions.json, which
 // maps each version to its minAppVersion). Major and minor are edited by hand
 // in manifest.json — 0.1 while in beta, 0.2 for the public beta, 1.x after —
-// and the counter may be reset when they change, since a higher minor outranks
-// any build. Within one major.minor the counter only ever climbs, which is the
+// and the counter RESETS TO 0 when they change (operator, 2026-09-02: "Z is the
+// build number that gets reset whenever we bump X or Y"), since a higher minor
+// outranks any build — the first build of a new line is `.0`. versions.json
+// remembers the last version written, so the reset needs no hand edit of
+// .buildnum. Within one major.minor the counter only ever climbs, which is the
 // one rule that keeps BRAT and Obsidian's updater offering the right release.
 //
 // Dev/watch builds do not bump or write anything: they reuse the current
@@ -42,17 +45,22 @@ monorepo; the public mirror (AskMyu/askmyu-obsidian-plugin) carries the same sou
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 const manifest = JSON.parse(readFileSync('manifest.json', 'utf8'));
 const numFile = '.buildnum';
-let buildNum = existsSync(numFile) ? parseInt(readFileSync(numFile, 'utf8').trim(), 10) || 0 : 0;
+const counter = existsSync(numFile) ? parseInt(readFileSync(numFile, 'utf8').trim(), 10) || 0 : 0;
 const [major, minor] = String(manifest.version).split('.');
+const versionsFile = 'versions.json';
+const versions = existsSync(versionsFile) ? JSON.parse(readFileSync(versionsFile, 'utf8')) : {};
+// The line the last release was on — versions.json keeps insertion order, so the last key is the newest.
+const lastLine = Object.keys(versions).pop()?.split('.').slice(0, 2).join('.');
+const sameLine = lastLine === `${major}.${minor}`;
+// Dev builds show the counter as it stands (0 on a fresh line); a release build advances it.
+let buildNum = sameLine ? counter : 0;
 let version = `${major}.${minor}.${buildNum}`;
 if (production) {
-  buildNum += 1;
+  buildNum = sameLine ? counter + 1 : 0;
   version = `${major}.${minor}.${buildNum}`;
   writeFileSync(numFile, `${buildNum}\n`);
   manifest.version = version;
   writeFileSync('manifest.json', `${JSON.stringify(manifest, null, 2)}\n`);
-  const versionsFile = 'versions.json';
-  const versions = existsSync(versionsFile) ? JSON.parse(readFileSync(versionsFile, 'utf8')) : {};
   versions[version] = manifest.minAppVersion;
   writeFileSync(versionsFile, `${JSON.stringify(versions, null, 2)}\n`);
 }

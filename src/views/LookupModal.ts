@@ -1,5 +1,5 @@
 /**
- * "AskMyu: look up…" — the command-palette entry into cards.
+ * "askMyu: look up…" — the command-palette entry into cards.
  *
  * A fuzzy suggester over the account's ranked entity list — the same
  * `/feed/entities` the People and Companies tabs use on every other surface, so

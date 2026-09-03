@@ -70,7 +70,7 @@ export class MaterializeConsentModal extends Modal {
       text:
         'Worth knowing: these files are plain text on your disk, and they sync ' +
         'wherever your vault syncs. Right now this content lives only on ' +
-        'AskMyu’s servers, encrypted. If you’d rather keep it that way, say no ' +
+        'askMyu’s servers, encrypted. If you’d rather keep it that way, say no ' +
         '— nothing changes.',
     });
 
@@ -86,7 +86,7 @@ export class MaterializeConsentModal extends Modal {
       cls: 'myu-prose myu-quiet',
       text:
         'Every file is marked `myu-generated: true`. You can turn writing off ' +
-        'in settings, and “Remove everything Myu wrote” (Settings → AskMyu → ' +
+        'in settings, and “Remove everything Myu wrote” (Settings → askMyu → ' +
         'Your data) moves it all to the trash.',
     });
 

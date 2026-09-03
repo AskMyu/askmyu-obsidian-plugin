@@ -1,5 +1,5 @@
 /**
- * AskMyu — Obsidian plugin. The spine: lifecycle, wiring, and nothing clever.
+ * askMyu — Obsidian plugin. The spine: lifecycle, wiring, and nothing clever.
  *
  * What lives here and why it is small: every hard decision is in a module with a
  * header explaining it (transport = the encryption chokepoint, UnlockMachine =
@@ -287,6 +287,10 @@ export default class AskMyuPlugin extends Plugin {
         this.transport.setAuthToken(token);
       },
       onState: (state, detail) => void this.onUnlockState(state, detail ?? null),
+      onApproval: () => {
+        void this.refreshToday();
+        this.settingTab?.refreshIfVisible();
+      },
       deviceName: `Obsidian — ${this.app.vault.getName()}`,
       mockMode: () => this.settings.use_mock_backend,
     });
@@ -601,7 +605,7 @@ export default class AskMyuPlugin extends Plugin {
       if (!s.first_run_shown && !s.token && !s.wrapped_mdek && !s.account_id && !s.consent_completed) {
         s.first_run_shown = true;
         void this.saveSettings();
-        notifyStatus('AskMyu is installed \u2014 the Myu pane is where you set it up.');
+        notifyStatus('askMyu is installed \u2014 the Myu pane is where you set it up.');
         void this.openToday();
       }
     });
@@ -659,6 +663,8 @@ export default class AskMyuPlugin extends Plugin {
   private async onUnlockState(state: UnlockState, detail: string | null): Promise<void> {
     this.lastStateDetail = detail;
     this.setStatusBar(state, detail);
+    // A pane showing the resting state (signed out, blocked, locked) must move the moment the machine does.
+    if (state !== 'unlocked') void this.refreshToday();
     if (state === 'unlocked') {
       void this.refreshOnboardingState();
       void this.unlock.ensurePluginToken();
@@ -716,7 +722,7 @@ export default class AskMyuPlugin extends Plugin {
     }
 
     if (state === 'disconnected' && detail === 'token_revoked') {
-      notifyError('AskMyu access was revoked. Reconnect in Settings → AskMyu to resume.');
+      notifyError('askMyu access was revoked. Reconnect in Settings → askMyu to resume.');
     }
 
     await this.refreshToday();
@@ -862,7 +868,7 @@ export default class AskMyuPlugin extends Plugin {
     this.addCommand({ id: 'help-myu', name: 'Help Myu (people it cannot place)', checkCallback: (checking) => { if (this.unlock.current !== 'unlocked') return false; if (!checking) void this.openHelpMyu(); return true; } });
     this.addCommand({ id: 'search-myu', name: 'Search Myu (people, companies, memories)', checkCallback: (checking) => { if (this.unlock.current !== 'unlocked') return false; if (!checking) new FeedSearchModal(this.app, this).open(); return true; } });
     this.addCommand({ id: 'import-from-drive', name: 'Import meeting notes from Google Drive\u2026', checkCallback: (checking) => { if (this.unlock.current !== 'unlocked') return false; if (!checking) new DriveImportModal(this.app, this).open(); return true; } });
-    this.addCommand({ id: 'send-feedback', name: 'Send feedback to AskMyu', checkCallback: (checking) => { if (this.unlock.current !== 'unlocked') return false; if (!checking) new FeedbackModal(this.app, this).open(); return true; } });
+    this.addCommand({ id: 'send-feedback', name: 'Send feedback', checkCallback: (checking) => { if (this.unlock.current !== 'unlocked') return false; if (!checking) new FeedbackModal(this.app, this).open(); return true; } });
     this.addCommand({ id: 'past-canvases', name: 'Open a past canvas', checkCallback: (checking) => { if (this.unlock.current !== 'unlocked') return false; if (!checking) new CanvasHistoryModal(this.app, this).open(); return true; } });
     this.addCommand({ id: 'export-everything', name: 'Export everything Myu knows into the vault', checkCallback: (checking) => { if (this.unlock.current !== 'unlocked') return false; if (!checking) void this.exportEverything(); return true; } });
     this.addCommand({ id: 'request-data-archive', name: 'Request my data archive (encrypted zip by email)', checkCallback: (checking) => { if (this.unlock.current !== 'unlocked') return false; if (!checking) this.openDataExport(); return true; } });
@@ -1372,7 +1378,10 @@ export default class AskMyuPlugin extends Plugin {
     if (outcome === 'ceremony') {
       this.openGenesisCeremony();
     } else if (outcome === 'existing_account') {
-      notifyStatus('Welcome back — approve this device from another one, or use your recovery phrase (Settings → AskMyu).');
+      // The pane carries the way forward — the approval lives there now, so a
+      // person who came back from the browser is not left with a toast.
+      notifyStatus('Welcome back — this device needs approving. Myu shows how.');
+      void this.openToday();
     } else if (outcome === 'invalid') {
       notifyError('That sign-in link has expired or was already used. Request a fresh one.');
     } else {
@@ -1475,7 +1484,7 @@ export default class AskMyuPlugin extends Plugin {
     await this.unlock.connect(token, this.settings.device_id);
 
     if (this.unlock.current === 'disconnected') {
-      notifyError("That token didn't work. Create a new one in AskMyu → Settings → Integrations.");
+      notifyError("That token didn't work. Create a new one in askMyu → Settings → Integrations.");
     }
   }
 
@@ -1752,7 +1761,7 @@ export default class AskMyuPlugin extends Plugin {
 
   /** Sync now — Today's header button and the command. */
   async syncNow(): Promise<void> {
-    if (this.unlock.current !== 'unlocked' || !this.settings.materialize_consented) { notifyError('Sign in and allow Myu to write first (Settings \u2192 AskMyu).'); return; }
+    if (this.unlock.current !== 'unlocked' || !this.settings.materialize_consented) { notifyError('Sign in and allow Myu to write first (Settings \u2192 askMyu).'); return; }
     await this.materializer.materializeAll();
     this.lastSyncAt = Date.now();
     void this.refreshToday();
@@ -1760,7 +1769,7 @@ export default class AskMyuPlugin extends Plugin {
 
   /** Everything Myu knows, as files — plus the receipt. */
   async exportEverything(): Promise<void> {
-    if (this.unlock.current !== 'unlocked' || !this.settings.materialize_consented) { notifyError('Sign in and allow Myu to write first (Settings \u2192 AskMyu).'); return; }
+    if (this.unlock.current !== 'unlocked' || !this.settings.materialize_consented) { notifyError('Sign in and allow Myu to write first (Settings \u2192 askMyu).'); return; }
     const summary = await this.exporter.exportEverything((line) => { this.materializeProgress = line || null; void this.refreshToday(); });
     this.lastSyncAt = Date.now();
     notifyStatus(`Exported \u2014 ${summary.conversations.saved} conversations, ${summary.canvases.kept} canvases, ${summary.people} people. Receipt: Myu/Export.md`);

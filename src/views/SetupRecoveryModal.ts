@@ -176,12 +176,12 @@ export class SetupRecoveryModal extends Modal {
       }
 
       const lines = [
-        'AskMyu recovery phrase',
+        'askMyu recovery phrase',
         `Saved ${new Date().toISOString().slice(0, 10)}`,
         '',
         this.phrase,
         '',
-        'These twelve words unlock your AskMyu notes if every signed-in device is lost.',
+        'These twelve words unlock your askMyu notes if every signed-in device is lost.',
         'Anyone holding them can read your notes. Best homes: your password manager,',
         'a printed page, an offline drive. Avoid cloud-synced folders.',
         '',

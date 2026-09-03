@@ -62,7 +62,7 @@ export class DriveImportModal extends Modal {
     this.problem = null;
     const res = await this.plugin.backend.importFromDrive(fileIds).catch(() => null);
     if (!res?.ok || res.data?.success === false) {
-      this.problem = res?.data?.error === 'drive_not_connected' ? 'Google Drive is not connected \u2014 connect Google under Settings \u2192 AskMyu \u2192 Connection.' : res?.data?.message || res?.error || 'Import failed.';
+      this.problem = res?.data?.error === 'drive_not_connected' ? 'Google Drive is not connected \u2014 connect Google under Settings \u2192 askMyu \u2192 Connection.' : res?.data?.message || res?.error || 'Import failed.';
       this.render();
       return;
     }

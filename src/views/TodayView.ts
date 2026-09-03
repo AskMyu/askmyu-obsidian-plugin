@@ -27,6 +27,8 @@ import { SignupModal } from './SignupModal';
 import { ConsentModal } from './ConsentModal';
 import { surveyLine } from '../capture/linkSurvey';
 import { ApproveDeviceModal } from './ApproveDeviceModal';
+import { ApprovalModal } from './ApprovalModal';
+import { notifyError } from '../notify';
 
 /**
  * "About 4 minutes left" — from the SERVER's `expires_at`. The window is
@@ -93,7 +95,7 @@ export class TodayView extends ItemView {
   /** The last refresh could not reach Myu — say so, and try again soon rather than in five minutes. */
   private staleSince: number | null = null;
   private retryTimer: number | null = null;
-  private errorState: 'locked' | 'offline' | 'disconnected' | null = null;
+  private errorState: 'locked' | 'blocked' | 'offline' | 'disconnected' | null = null;
 
   constructor(
     leaf: WorkspaceLeaf,
@@ -129,6 +131,13 @@ export class TodayView extends ItemView {
     const state = this.plugin.unlock.current;
     if (state === 'disconnected') {
       this.errorState = 'disconnected';
+      this.loading = false;
+      this.render();
+      return;
+    }
+    if (state === 'blocked') {
+      // Signed in, not yet trusted with the key — its own screen, never "locked".
+      this.errorState = 'blocked';
       this.loading = false;
       this.render();
       return;
@@ -510,6 +519,10 @@ export class TodayView extends ItemView {
    * report about the wrong thing.
    */
   private renderResting(root: HTMLElement): void {
+    if (this.errorState === 'blocked') {
+      this.renderBlocked(root);
+      return;
+    }
     const messages: Record<string, string> = {
       disconnected: 'Not connected yet. Create an account, or sign in to the one you already have.',
       locked: 'Locked. Myu reopens your notes when this device reaches the server.',
@@ -539,6 +552,92 @@ export class TodayView extends ItemView {
         await this.refresh();
       };
     }
+  }
+
+  /**
+   * Signed in, not yet trusted with the key. This used to fall into the
+   * "Locked — try now" copy, which is for a device that HAS custody and is
+   * merely offline; a person who clicked the emailed link in a browser came
+   * back to a pane with no way forward (operator, 2026-09-03: "someone can
+   * flip between interfaces and end up losing the flow"). The approval lives
+   * on the machine now, so this pane shows it and drives it — the code, the
+   * wait, the retry, the phrase — with no dialog to lose.
+   */
+  private renderBlocked(root: HTMLElement): void {
+    const unlock = this.plugin.unlock;
+    const detail = this.plugin.lastStateDetail;
+    const again = () => void this.refresh();
+
+    if (unlock.genesisPending || detail === 'genesis_pending' || detail === 'genesis_failed') {
+      root.createEl('p', {
+        cls: 'myu-prose',
+        text: detail === 'genesis_failed' ? 'Key setup did not finish. Two minutes to try again: the twelve words, then everything works.' : 'One step left: your twelve words. Two minutes, then everything works.',
+      });
+      const finish = root.createEl('button', { cls: 'myu-door-primary', text: 'Finish setup…' });
+      finish.onclick = () => this.plugin.openGenesisCeremony();
+      return;
+    }
+
+    if (detail === 'token_revoked') {
+      root.createEl('p', { cls: 'myu-prose', text: 'This device was signed out on the server. Sign in again to continue.' });
+      const signin = root.createEl('button', { cls: 'myu-door-primary', text: 'Sign in' });
+      signin.onclick = () => new SignupModal(this.app, this.plugin, again, 'signin').open();
+      return;
+    }
+
+    const approval = unlock.approval;
+    const phraseDoor = (host: HTMLElement, label: string) => {
+      const b = host.createEl('button', { cls: 'myu-affordance', text: label });
+      b.onclick = () => new ApprovalModal(this.app, unlock, again, 'phrase').open();
+    };
+
+    if (approval?.status === 'pending') {
+      root.createEl('p', { cls: 'myu-prose', text: 'Waiting for your approval. In Myu on your phone or the web app, approve this device and enter:' });
+      root.createDiv({ cls: 'myu-code', text: approval.code });
+      root.createEl('p', { cls: 'myu-prose myu-quiet', text: 'It finishes on its own: go approve it and come back. The code is good for a few minutes.' });
+      const actions = root.createDiv({ cls: 'myu-door-stack' });
+      phraseDoor(actions, 'Use my recovery phrase instead');
+      const cancel = actions.createEl('button', { cls: 'myu-affordance', text: 'Cancel' });
+      cancel.onclick = () => {
+        unlock.cancelApproval();
+        again();
+      };
+      return;
+    }
+
+    root.createEl('p', {
+      cls: 'myu-prose',
+      text:
+        detail === 'device_revoked'
+          ? 'This device was removed from your account. Approve it again to continue.'
+          : detail === 'key_mismatch'
+            ? 'This device’s key no longer matches your account. Approve it again to continue.'
+            : 'You are signed in, but this device is not approved yet. Your notes are encrypted with a key only your approved devices hold.',
+    });
+    if (approval) {
+      root.createEl('p', {
+        cls: 'myu-prose myu-warn',
+        text: approval.status === 'denied' ? 'That request was declined on the other device.' : approval.status === 'expired' ? 'The request timed out.' : 'The approval did not finish.',
+      });
+    }
+    const doors = root.createDiv({ cls: 'myu-door-stack' });
+    const go = doors.createEl('button', { cls: 'myu-door-primary', text: approval ? 'Try again' : 'Get this device approved…' });
+    go.onclick = async () => {
+      go.disabled = true;
+      const pending = await unlock.beginApproval();
+      if (!pending) notifyError('Could not start the approval. Check the connection and try again.');
+      again();
+    };
+    const alt = doors.createDiv({ cls: 'myu-door-alt' });
+    alt.createSpan({ cls: 'myu-quiet', text: 'No other device handy?' });
+    phraseDoor(alt, 'Use my recovery phrase');
+    const out = root.createDiv({ cls: 'myu-door-alt' });
+    out.createSpan({ cls: 'myu-quiet', text: 'Not you?' });
+    const signout = out.createEl('button', { cls: 'myu-affordance', text: 'Sign out' });
+    signout.onclick = async () => {
+      await unlock.disconnect();
+      again();
+    };
   }
 
   /**

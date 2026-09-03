@@ -57,7 +57,7 @@ export class MeetingConsentModal extends Modal {
       cls: 'myu-prose',
       text:
         'This is a different kind of sharing than your journal. Meeting notes carry ' +
-        "other people's words, and their content is processed on AskMyu's servers " +
+        "other people's words, and their content is processed on askMyu's servers " +
         'like every meeting source — it is not end-to-end encrypted the way journal ' +
         'capture is. Say no and nothing changes.',
     });

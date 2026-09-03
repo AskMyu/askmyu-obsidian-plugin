@@ -146,7 +146,7 @@ export class WeeklyReviewWriter {
       '',
       body,
       '',
-      `*Written by the AskMyu plugin because you turned on the weekly review. Everything between these markers is replaced each time it runs; the rest of this note is yours.*`,
+      `*Written by the askMyu plugin because you turned on the weekly review. Everything between these markers is replaced each time it runs; the rest of this note is yours.*`,
       END,
     ].join('\n');
   }

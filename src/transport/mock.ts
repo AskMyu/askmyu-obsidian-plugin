@@ -941,7 +941,7 @@ export class MockApi implements AskMyuApi {
   async getSelfCard(): Promise<ApiResponse<{ card?: import('./api').CardSpecLite }>> {
     // self_card_legible on: what Myu knows so far, each with its source.
     return ok({ card: { known_facts: [
-      { key: 'title', value: 'Founder, AskMyu', source: 'linkedin', kind: 'fact' },
+      { key: 'title', value: 'Founder, askMyu', source: 'linkedin', kind: 'fact' },
       { key: 'career', value: 'Twelve years in product, now building the second company.', source: 'read', kind: 'read' },
       { key: 'people', value: 'Marcus Webb, Priya Natarajan', source: 'you', kind: 'fact' },
       { key: 'week', value: '4 meetings in the next 7 days', source: 'calendar', kind: 'fact' },

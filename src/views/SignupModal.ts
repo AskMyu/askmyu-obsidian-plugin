@@ -236,7 +236,7 @@ export class SignupModal extends Modal {
       new Setting(contentEl)
         .setName('Password')
         .setDesc(
-          'For signing in to AskMyu on the web or your phone later. It is not an ' +
+          'For signing in to askMyu on the web or your phone later. It is not an ' +
           'encryption passphrase — your notes’ key is created separately on this ' +
           'device and never comes from this password.',
         )
@@ -403,7 +403,7 @@ export class SignupModal extends Modal {
       this.close();
       new ApprovalModal(this.app, this.plugin.unlock, () => this.onFinished()).open();
     } else if (outcome === 'email_not_allowed') {
-      notifyError('AskMyu is in closed beta — this email isn’t on the list yet. Ask for an invite.');
+      notifyError('askMyu is in closed beta — this email isn’t on the list yet. Ask for an invite.');
       button.disabled = false;
       button.textContent = 'Create my account';
     } else {

@@ -96,6 +96,10 @@ export interface UnlockDeps {
   onSession: (token: string | null) => void;
   /** State changed — settings + views re-render, capture starts/stops. */
   onState: (state: UnlockState, detail?: string) => void;
+  /** The device approval moved (started, resolved, cancelled) — the pane that shows it re-renders. */
+  onApproval?: () => void;
+  /** How often the approval poll asks; tests shorten it. */
+  pollIntervalMs?: number;
   /** Device label shown in the account's device list. */
   deviceName: string;
   /** Mock backends skip the ECDH half — see MockApi.pollDeviceTransfer. */
@@ -108,6 +112,18 @@ export interface PendingApproval {
   verificationCode: string;
 }
 
+/**
+ * Where a device approval stands — owned by the MACHINE, so no dialog can lose
+ * it. A person who starts the approval here, clicks the emailed link or
+ * approves on the web, and comes back, finds the same code and the same wait
+ * (operator, 2026-09-03: "someone can flip between interfaces and end up
+ * losing the flow"). Until then the dialog owned the poll and cancelled it on
+ * close, so an approval given on the other device landed on nobody.
+ */
+export type ApprovalProgress =
+  | { status: 'pending'; requestId: string; code: string; startedAt: number }
+  | { status: 'denied' | 'expired' | 'failed' };
+
 export class UnlockMachine {
   private state: UnlockState = 'disconnected';
   /** The one re-mint / re-escrow in flight — every 401 / 403-enc of a burst joins it. */
@@ -115,11 +131,32 @@ export class UnlockMachine {
   private reescrow: Promise<boolean> | null = null;
   private transferKeys: ECDHKeyPair | null = null;
   private pollTimer: number | null = null;
+  private approvalState: ApprovalProgress | null = null;
+  private approvalObservers = new Set<() => void>();
 
   constructor(private deps: UnlockDeps) {}
 
   get current(): UnlockState {
     return this.state;
+  }
+
+  /** The device approval in flight, or how the last one ended; null when none. */
+  get approval(): ApprovalProgress | null {
+    return this.approvalState;
+  }
+
+  /** Watch the approval move; returns the unsubscribe. A dialog is a window onto it, not its owner. */
+  observeApproval(fn: () => void): () => void {
+    this.approvalObservers.add(fn);
+    return () => {
+      this.approvalObservers.delete(fn);
+    };
+  }
+
+  private setApproval(next: ApprovalProgress | null): void {
+    this.approvalState = next;
+    this.deps.onApproval?.();
+    for (const fn of this.approvalObservers) fn();
   }
 
   private setState(next: UnlockState, detail?: string): void {
@@ -367,6 +404,8 @@ export class UnlockMachine {
 
   private async forget(reason: string): Promise<void> {
     this.stopPolling();
+    this.transferKeys = null;
+    this.approvalState = null;
     this.pendingGenesisDeviceId = null;
     this.deps.keys.clear();
     this.deps.onSession(null);
@@ -425,41 +464,59 @@ export class UnlockMachine {
   // ── device approval (BLOCKED → UNLOCKED) ──────────────────────────────────
 
   /**
-   * Start an ECDH device transfer. Returns the 4-digit code for the user to
-   * type on a device that is already approved.
+   * Start an ECDH device transfer and WATCH it until it resolves. Returns the
+   * 4-digit code for the user to type on a device that is already approved;
+   * the same code stays readable on `approval` for every pane that asks.
    */
   async beginApproval(): Promise<PendingApproval | null> {
     const auth = this.deps.load();
     if (!auth.device_id) return null;
 
+    this.stopPolling();
     this.transferKeys = await generateECDHKeyPair();
     const res = await this.deps.api.requestDeviceTransfer(auth.device_id, this.transferKeys.publicKey, this.deps.deviceName);
-    if (!res.ok || !res.data) return null;
+    if (!res.ok || !res.data) {
+      this.transferKeys = null;
+      this.setApproval({ status: 'failed' });
+      return null;
+    }
 
-    return { requestId: res.data.request_id, verificationCode: res.data.verification_code };
+    const pending: PendingApproval = { requestId: res.data.request_id, verificationCode: res.data.verification_code };
+    this.setApproval({ status: 'pending', requestId: pending.requestId, code: pending.verificationCode, startedAt: Date.now() });
+    this.pollApproval(pending.requestId);
+    return pending;
   }
 
   /**
    * Poll until the other device approves. Stops on approval, denial, expiry, or
    * `cancelApproval()`. Deliberately not an infinite retry: a request that has
-   * expired should surface, not spin.
+   * expired should surface, not spin. Outcomes land on `approval`; an approval
+   * lands the machine UNLOCKED through adoptMDEK before the record clears.
    */
-  startPolling(requestId: string, onResolved: (outcome: 'approved' | 'denied' | 'expired' | 'error') => void): void {
+  private pollApproval(requestId: string): void {
     this.stopPolling();
     const started = Date.now();
 
+    const settle = (outcome: 'denied' | 'expired' | 'failed') => {
+      this.stopPolling();
+      this.transferKeys = null;
+      this.setApproval({ status: outcome });
+    };
+
     const tick = async () => {
-      if (Date.now() - started > 10 * 60 * 1000) {
+      if (this.approvalState?.status !== 'pending' || this.approvalState.requestId !== requestId) {
         this.stopPolling();
-        onResolved('expired');
+        return;
+      }
+      if (Date.now() - started > 10 * 60 * 1000) {
+        settle('expired');
         return;
       }
 
       const res = await this.deps.api.pollDeviceTransfer(requestId);
       if (!res.ok || !res.data) {
         if (res.error === 'offline' || res.error === 'network_error') return; // keep waiting
-        this.stopPolling();
-        onResolved('error');
+        settle('failed');
         return;
       }
 
@@ -467,15 +524,16 @@ export class UnlockMachine {
       this.stopPolling();
 
       if (res.data.status !== 'approved' || !res.data.encrypted_mdek) {
-        onResolved(res.data.status === 'denied' ? 'denied' : 'expired');
+        settle(res.data.status === 'denied' ? 'denied' : 'expired');
         return;
       }
 
       const completed = await this.completeApproval(res.data.encrypted_mdek);
-      onResolved(completed ? 'approved' : 'error');
+      if (completed) this.setApproval(null);
+      else settle('failed');
     };
 
-    this.pollTimer = window.setInterval(() => void tick(), 2000);
+    this.pollTimer = window.setInterval(() => void tick(), this.deps.pollIntervalMs ?? 2000);
     void tick();
   }
 
@@ -486,9 +544,11 @@ export class UnlockMachine {
     }
   }
 
+  /** The person gave up on this request (an explicit choice — never a dialog closing). */
   cancelApproval(): void {
     this.stopPolling();
     this.transferKeys = null;
+    this.setApproval(null);
   }
 
   /**

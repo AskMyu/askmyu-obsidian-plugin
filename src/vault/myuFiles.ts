@@ -542,13 +542,13 @@ export function buildExportManifest(s: ExportSummary): string {
     `- **Conversations** \u2014 ${s.conversations.saved} saved${s.conversations.alreadyThere ? `, ${s.conversations.alreadyThere} already here` : ''}${s.conversations.failed ? `, ${s.conversations.failed} could not be read` : ''} \u2192 \`Myu/Conversations/\``,
     `- **Canvases** \u2014 ${s.canvases.kept} kept${s.canvases.expired ? `, ${s.canvases.expired} expired on the server and cannot be fetched` : ''}${s.canvases.failed ? `, ${s.canvases.failed} failed` : ''} \u2192 \`Myu/Canvas/\``,
     '', '## What is not here', '',
-    '- Your **account** itself \u2014 email addresses, devices, keys, consents. Those are not vault material. For a complete archive of what the server holds, use **Request my data archive** (Settings \u2192 AskMyu \u2192 Advanced): an encrypted zip, link by email, passphrase shown once.',
+    '- Your **account** itself \u2014 email addresses, devices, keys, consents. Those are not vault material. For a complete archive of what the server holds, use **Request my data archive** (Settings \u2192 askMyu \u2192 Advanced): an encrypted zip, link by email, passphrase shown once.',
     '- Your **own notes** \u2014 they were never Myu\u2019s to export. They are already yours.',
     '', '## If you uninstall', '',
     '- Everything under `Myu/` stays exactly as it is. Nothing here needs the plugin to open: markdown, `.canvas` (an open standard), `.base` (an Obsidian core feature).',
     '- Notes stop refreshing; nothing breaks. Links, properties and tables keep working.',
     '- The plugin\u2019s own `data.json` (your plugin token and wrapped key) goes with it \u2014 no custody is left on this device.',
-    '- Your account is untouched. Delete it from Settings \u2192 AskMyu, or on the web.', '',
+    '- Your account is untouched. Delete it from Settings \u2192 askMyu, or on the web.', '',
   ].join('\n');
 }
 
@@ -882,7 +882,7 @@ export function componentMarkdown(
       // Cold-start onboarding (web: OfferBlockRenderer): Myu names the gap it
       // hit and asks for a calendar source once. The web's buttons run its own
       // OAuth / iCal / ICS flows; in the vault the options are named and the
-      // doors are the plugin's (Settings → AskMyu → Connection). Copy is the
+      // doors are the plugin's (Settings → askMyu → Connection). Copy is the
       // backend's, verbatim.
       const lead = textOf(data.lead);
       const gap = textOf(data.gap_line);
@@ -897,7 +897,7 @@ export function componentMarkdown(
         : [
           ...(gap ? [gap, ''] : []),
           ...(who ? [`re ${personLink(who, resolvePersonName)}${textOf(person?.when_text) ? ` \u2014 ${textOf(person?.when_text)}` : ''}`, ''] : []),
-          ...(options.length ? [...options.map((o) => `- ${o}`), '', '*Connect a calendar under Settings \u2192 AskMyu \u2192 Connection.*'] : []),
+          ...(options.length ? [...options.map((o) => `- ${o}`), '', '*Connect a calendar under Settings \u2192 askMyu \u2192 Connection.*'] : []),
           ...(trust ? ['', `*${trust}*`] : []),
         ];
       return lead || lines.length ? joinBlock(heading, lead, lines, false) : '';
@@ -1291,7 +1291,7 @@ export function buildSelfMarkdown(card: CardSpecLite | null): string {
   const facts = (card?.known_facts ?? []).filter((f) => f && typeof f.value === 'string' && f.value.trim());
   if (facts.length > 0) {
     rendered++;
-    parts.push('', '## What Myu knows so far', '', '*Correct any of it under Settings \u2192 AskMyu \u2192 Account.*', '');
+    parts.push('', '## What Myu knows so far', '', '*Correct any of it under Settings \u2192 askMyu \u2192 Account.*', '');
     for (const f of facts) {
       const key = (f.key ?? '').replace(/_/g, ' ');
       const src = f.source ? ` \u00b7 ${f.source}` : '';

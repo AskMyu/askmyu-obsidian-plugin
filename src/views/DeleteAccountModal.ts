@@ -36,11 +36,11 @@ export class DeleteAccountModal extends Modal {
     const { contentEl } = this;
     contentEl.addClass('myu-power-down');
 
-    contentEl.createEl('h2', { text: 'Delete your AskMyu account?' });
+    contentEl.createEl('h2', { text: 'Delete your askMyu account?' });
     contentEl.createEl('p', {
       cls: 'myu-prose',
       text:
-        'Everything AskMyu holds about you is deleted: your entries, the people ' +
+        'Everything askMyu holds about you is deleted: your entries, the people ' +
         'and companies it built, its reads, and the key that opens them. This ' +
         'cannot be undone and there is no grace period.',
     });

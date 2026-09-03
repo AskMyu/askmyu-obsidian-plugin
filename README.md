@@ -1,6 +1,6 @@
-# AskMyu — Obsidian plugin
+# askMyu — Obsidian plugin
 
-Capture your journal notes to AskMyu, encrypted before they leave, and read your
+Capture your journal notes to askMyu, encrypted before they leave, and read your
 day beside your vault.
 
 Working home: `packages/obsidian` in the `askmyu-frontend` monorepo. The public
@@ -17,12 +17,12 @@ artifacts — `main.js`, `manifest.json`, `styles.css`.
 - **Live Today.** The brief, the meeting rail, the week, the monthly mirror —
   refreshed ambiently, updated live over SSE, cues as pane rows (never popups).
 - **Capture (B1).** Notes in the folders *you choose* are encrypted on this
-  device and sent to AskMyu when they go quiet. One note stays one entry, however
+  device and sent to askMyu when they go quiet. One note stays one entry, however
   many times you edit it. Notes keep their own dates, so backfilled history
   arrives as history.
 - **Meeting notes (opt-in, separate consent).** Notes in folders you choose (or
   tagged `myu-meeting: true`) become meetings Myu understands — decisions,
-  owners, follow-ups. **This content is processed on AskMyu's servers like every
+  owners, follow-ups. **This content is processed on askMyu's servers like every
   meeting source (it is not end-to-end encrypted like journal capture)** — the
   consent screen says exactly that before anything is shared.
 - **Save to vault (opt-in, per item).** A composition as an Obsidian `.canvas`;
@@ -81,19 +81,19 @@ Everything. That is the point of writing files.
 - **Every file under `Myu/` stays** exactly as it is — people, companies, journal, meetings, calendar, commitments, canvases, conversations. None of it needs the plugin to open: markdown, `.canvas` (an open standard), `.base` (an Obsidian core feature). They stop refreshing; nothing breaks.
 - **Your own notes were never touched.** Myu links to them; it does not write into them.
 - **The plugin's `data.json` goes with the plugin** — your plugin token and wrapped key. No custody is left on this device.
-- **Your account is untouched.** Delete it from Settings → AskMyu → Delete account, or on the web.
+- **Your account is untouched.** Delete it from Settings → askMyu → Delete account, or on the web.
 
 ## Export everything
 
 Two doors, for two different things:
 
-- **Export everything into the vault** (Settings → AskMyu → Advanced, or the command) — every surface regardless of your toggles, every conversation as a note, every canvas that still exists on the server, and a receipt at `Myu/Export.md` saying what landed, what could not, and what was never vault material.
+- **Export everything into the vault** (Settings → askMyu → Advanced, or the command) — every surface regardless of your toggles, every conversation as a note, every canvas that still exists on the server, and a receipt at `Myu/Export.md` saying what landed, what could not, and what was never vault material.
 - **Request my data archive** — what no vault file can carry: your account, devices, keys, consents, and everything the server holds, as one encrypted zip. The link is emailed when it is ready; the passphrase is shown once and never stored.
 
 ## Encryption, plainly
 
 Your notes are encrypted on this device before they leave, with the same key your
-other AskMyu devices use.
+other askMyu devices use.
 
 At rest, that key is split: **this device holds it wrapped** under a key it does
 not have, and **the server holds the wrapping key** with nothing to wrap. Neither
@@ -107,7 +107,7 @@ Consequences worth knowing before you install:
   badge until you reconnect. This is the price of not keeping a usable key on
   disk, and we would rather pay it than pretend.
 - **Every unlock leaves a receipt** and can be revoked. Removing this device in
-  AskMyu deletes the wrapping key, which makes the local blob permanently inert —
+  askMyu deletes the wrapping key, which makes the local blob permanently inert —
   a working remote wipe, not a promise.
 - **Obsidian has no plugin sandbox.** Any plugin you install can read any other
   plugin's files, including this one's `data.json` (which holds your token and
@@ -117,22 +117,22 @@ Consequences worth knowing before you install:
 
 ## Capabilities (what the plugin accesses)
 
-- **Network** — only the AskMyu backend you configure; every endpoint is listed below.
+- **Network** — only the askMyu backend you configure; every endpoint is listed below.
 - **File system** — the vault, through Obsidian's Vault API only: reads the notes and folders you allow in Settings → What Myu can read; writes only under the `Myu/` folder (and `Myu/Canvas/`, `Myu/Conversations/`) after your explicit consent, plus one CSS snippet in your vault's config folder (`.obsidian/snippets/myu-look.css`) when you press *Install the look* — removable from the same row. Never outside the vault.
 - **Clipboard** — user-initiated copies only: your recovery phrase (the key ceremony) and a recipe from the Weave Myu in pane (the copy button on its code block). Nothing is read from the clipboard except to clear the phrase you just copied.
-- **Account** — required. AskMyu is a service; the plugin is a client for it.
+- **Account** — required. askMyu is a service; the plugin is a client for it.
 - **Pricing** — free during the beta. Creating an account means agreeing to the [Beta Participation Terms](https://www.askmyu.com/beta-program-participation-terms) and the [Privacy Policy](https://www.askmyu.com/privacy-policy): a checkbox at the door, and the backend records which version you agreed to. An account that has not agreed yet sees one screen asking, and nothing else, until it does.
 
 ## Network use (full disclosure)
 
 Obsidian's developer policies require network use to be disclosed; here is all
-of it. The plugin talks ONLY to the AskMyu backend you configure (default
+of it. The plugin talks ONLY to the askMyu backend you configure (default
 `myu.askmyu.com`) — no third-party services, no analytics endpoints, no CDN.
 
 **There is no client-side telemetry in this plugin.** It does not measure,
 count, or report your use of it, and there is no toggle to turn on — the
 capability is absent, and a build check (`pnpm verify`) fails if any module
-outside the transport layer opens a network connection at all. AskMyu's servers
+outside the transport layer opens a network connection at all. askMyu's servers
 record their own API usage the way any service does; that is described in the
 [privacy policy](https://www.askmyu.com/privacy-policy).
 
@@ -211,9 +211,9 @@ record their own API usage the way any service does; that is described in the
 | `POST /composition/career-trajectory` | after you confirm your LinkedIn read | requests only (asks for the career canvas) |
 
 The plugin also registers six `obsidian://` URL verbs — `myu`, `myu-prep`,
-`myu-card`, `myu-chat`, `myu-signin`, `myu-connected` — so AskMyu's emails and
+`myu-card`, `myu-chat`, `myu-signin`, `myu-connected` — so askMyu's emails and
 its web sign-in page can open the right pane. Mail clients strip custom-scheme
-links, so emails link an HTTPS page on the AskMyu backend that fires the verb;
+links, so emails link an HTTPS page on the askMyu backend that fires the verb;
 no data rides those links beyond the meeting id or name in the URL itself, and
 the sign-in verb carries a single-use token that expires in five minutes.
 
@@ -234,7 +234,7 @@ this plugin listable: all network egress goes through `src/transport/` (so
 client-side telemetry cannot be added by accident — Obsidian's developer
 policies forbid it), and no module assigns HTML as a string.
 
-Turn on **Settings → AskMyu → Use mock backend** to run the whole unlock path
+Turn on **Settings → askMyu → Use mock backend** to run the whole unlock path
 against an in-memory stand-in, including its failure modes.
 
 To test in a real vault, symlink the package into it:
@@ -243,7 +243,7 @@ To test in a real vault, symlink the package into it:
 ln -s "$PWD" "$VAULT/.obsidian/plugins/askmyu"
 ```
 
-then enable AskMyu in Community plugins (Restricted Mode off).
+then enable askMyu in Community plugins (Restricted Mode off).
 
 ## Styling Myu
 
@@ -254,7 +254,7 @@ CSS snippet, the same way you style any plugin. The plugin itself never
 overrides your theme.
 
 One look ships with the plugin: [`snippets/myu-look.css`](snippets/myu-look.css)
-— Myu's own identity, the web app's accents, a serif voice. **Settings → AskMyu
+— Myu's own identity, the web app's accents, a serif voice. **Settings → askMyu
 → Advanced → Myu look → Install the look** writes it into your vault's config
 folder (`.obsidian/snippets/myu-look.css`) and turns it on; the same row turns
 it off, updates it after a plugin update, or removes it. Nothing is fetched:

@@ -1,10 +1,10 @@
 {
   "id": "askmyu",
-  "name": "AskMyu",
-  "version": "0.0.246",
+  "name": "askMyu",
+  "version": "0.0.247",
   "minAppVersion": "1.9.0",
-  "description": "Capture your journal notes to AskMyu — encrypted before they leave — and read your day beside your vault.",
-  "author": "AskMyu",
+  "description": "Capture your journal notes to askMyu, encrypted before they leave, and read your day beside your vault.",
+  "author": "askMyu",
   "authorUrl": "https://www.askmyu.com",
   "isDesktopOnly": false
 }

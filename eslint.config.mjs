@@ -14,7 +14,7 @@ const obsidianRules = Object.fromEntries(
     .filter(([name]) => name.startsWith('obsidianmd/') || name === 'no-restricted-globals'),
 );
 // Product and vendor names the sentence-case rule would otherwise lowercase.
-const BRANDS = ['Myu', 'AskMyu', 'LinkedIn', 'Gmail', 'Google', 'Microsoft', 'Outlook', 'Slack', 'Zulip', 'Fastmail', 'Obsidian', 'Bases', 'Tasks', 'Fireflies', 'Zoom', 'CalDAV', 'Today', 'Google Calendar', 'Microsoft Outlook', 'Google Drive', 'Google Doc'];
+const BRANDS = ['Myu', 'askMyu', 'AskMyu', 'LinkedIn', 'Gmail', 'Google', 'Microsoft', 'Outlook', 'Slack', 'Zulip', 'Fastmail', 'Obsidian', 'Bases', 'Tasks', 'Fireflies', 'Zoom', 'CalDAV', 'Today', 'Google Calendar', 'Microsoft Outlook', 'Google Drive', 'Google Doc'];
 const ACRONYMS = ['IMAP', 'HTTPS', 'HTTP', 'URL', 'SSE', 'API', 'CRM', 'PDF'];
 // URLs and vault paths are not sentences.
 const NOT_SENTENCES = ['^https?://', 'Myu/[A-Za-z]+'];

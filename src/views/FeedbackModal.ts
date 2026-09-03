@@ -25,7 +25,7 @@ export class FeedbackModal extends Modal {
     const { contentEl } = this;
     contentEl.empty();
     contentEl.addClass('myu-power-down');
-    contentEl.createEl('h2', { text: 'Send feedback to AskMyu' });
+    contentEl.createEl('h2', { text: 'Send feedback to askMyu' });
     contentEl.createEl('p', { cls: 'myu-prose myu-quiet', text: 'Goes to the team by email, with the plugin build number. Nothing from your vault is attached.' });
     new Setting(contentEl).setName('About').addDropdown((d) => {
       for (const [id, label] of CATEGORIES) d.addOption(id, label);

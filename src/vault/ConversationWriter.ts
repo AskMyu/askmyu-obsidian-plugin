@@ -26,7 +26,7 @@ export class ConversationWriter {
   hasNoteFor(journalId: string): boolean {
     for (const file of this.app.vault.getMarkdownFiles()) {
       if (!file.path.startsWith('Myu/Conversations/')) continue;
-      const fm = this.app.metadataCache.getFileCache(file)?.frontmatter as Record<string, unknown> | undefined;
+      const fm: Record<string, unknown> | undefined = this.app.metadataCache.getFileCache(file)?.frontmatter;
       if (fm?.['myu-journal-id'] === journalId) return true;
     }
     return false;

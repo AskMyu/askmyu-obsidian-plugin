@@ -24,7 +24,7 @@ export class CanvasHistoryModal extends FuzzySuggestModal<CompositionHistoryRow>
   }
 
   override async onOpen(): Promise<void> {
-    super.onOpen();
+    await super.onOpen();
     const res = await this.plugin.backend.getCompositionHistory(50).catch(() => null);
     this.rows = (res?.data?.compositions ?? []).filter((r) => r.composition_id || r.id);
     this.inputEl.dispatchEvent(new Event('input'));

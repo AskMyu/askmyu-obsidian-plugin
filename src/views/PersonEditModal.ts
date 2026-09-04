@@ -116,7 +116,7 @@ export class PersonEditModal extends Modal {
       .setName('Forget entirely')
       .setDesc('Deletes them and everything Myu derived from them. Cannot be undone.')
       .addButton((b) =>
-        b.setButtonText('Forget').setWarning().onClick(async () => {
+        b.setButtonText('Forget').setDestructive().onClick(async () => {
           const res = await this.plugin.backend.purgeRelationship(this.relationshipId);
           if (res.ok) {
             notifyStatus(`Myu has forgotten ${this.displayName}.`);
@@ -162,7 +162,7 @@ export class PersonEditModal extends Modal {
       }),
     );
     row.addButton((b) =>
-      b.setButtonText('Delete').setWarning().onClick(async () => {
+      b.setButtonText('Delete').setDestructive().onClick(async () => {
         const res = await this.plugin.backend.editRelationshipMemory(memory.memory_id, 'delete');
         if (res.ok) {
           notifyStatus('Deleted.');

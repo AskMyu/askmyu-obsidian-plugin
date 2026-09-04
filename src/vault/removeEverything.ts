@@ -17,7 +17,7 @@ export function findEverythingMyuWrote(app: App, registryPaths: string[]): Writt
   const seen = new Map<string, TFile>();
   let byFrontmatter = 0;
   for (const file of app.vault.getMarkdownFiles()) {
-    const fm = app.metadataCache.getFileCache(file)?.frontmatter as Record<string, unknown> | undefined;
+    const fm: Record<string, unknown> | undefined = app.metadataCache.getFileCache(file)?.frontmatter;
     if (fm?.['myu-generated'] === true) { seen.set(file.path, file); byFrontmatter++; }
   }
   let byRegistry = 0;

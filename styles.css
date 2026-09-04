@@ -331,7 +331,6 @@
 .myu-prep-ref {
   display: block;
   padding: 2px 0;
-  text-decoration-line: none;
 }
 
 .myu-prep-search {
@@ -748,8 +747,10 @@ body.is-mobile .myu-canvas-actions button { min-height: 44px; padding: var(--siz
 .myu-settings-section { display: block; padding: 0; border: 0; }
 .myu-settings-section > .setting-item:first-child { border-top: 0; padding-top: 0; }
 /* Text-only button: the sync whisper that opens the switch */
-.myu-link-button { background: none; border: 0; box-shadow: none; padding: 0; height: auto; color: var(--link-color); cursor: pointer; text-decoration-line: var(--link-decoration); }
-.myu-link-button:hover { color: var(--link-color-hover); text-decoration-line: var(--link-decoration-hover); }
+/* No underline property here on purpose: the directory's CSS lint flags that whole
+   feature as partial in Obsidian's Chromium; a button carries no underline anyway. */
+.myu-link-button { background: none; border: 0; box-shadow: none; padding: 0; height: auto; color: var(--link-color); cursor: pointer; }
+.myu-link-button:hover { color: var(--link-color-hover); }
 
 /* ── past conversations: date · preview, one row each (2026-08-29) ───────── */
 /* A <button> (invariant 18): the date small above, the preview ellipsized
@@ -935,9 +936,6 @@ button.myu-chip { display: inline-flex; align-items: center; background: none; b
 .myu-terms-box {
   margin-top: 0.2em;
   flex: none;
-}
-.myu-terms-sentence a {
-  text-decoration-line: underline;
 }
 /* A door that waits for the tick: still pressable, so pressing it can say why. */
 .myu-inert {

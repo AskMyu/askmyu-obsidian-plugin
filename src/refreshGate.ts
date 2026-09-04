@@ -11,6 +11,10 @@ export class RefreshGate {
   private dirty = false;
   private urgent = false;
   private last = 0;
+  /** Wakes a wait in progress — the person's ask must not sit out a gap that began before it. */
+  private wake: (() => void) | null = null;
+  /** True while the gate is sleeping out a gap (a run has not started yet). */
+  private waiting = false;
   /** How many runs actually happened — the test's fingerprint. */
   runs = 0;
 
@@ -25,23 +29,33 @@ export class RefreshGate {
 
   /** Ask. `now` is the person's own hand — no gap for them. */
   request(opts: { now?: boolean } = {}): Promise<void> {
-    if (opts.now) this.urgent = true;
     if (this.inFlight) {
-      this.dirty = true;
+      if (opts.now && this.waiting) {
+        // A run is about to start anyway: wake it and let it serve this ask.
+        this.wake?.();
+      } else {
+        // A run is in progress: one more run after it, at once if urgent.
+        this.dirty = true;
+        if (opts.now) this.urgent = true;
+      }
       return this.inFlight;
     }
+    if (opts.now) this.urgent = true;
     this.inFlight = (async () => {
       let wait = this.urgent ? 0 : Math.max(0, this.last + this.gapMs - this.timers.now());
       do {
-        if (wait > 0) await this.timers.sleep(wait);
+        if (wait > 0) await this.pause(wait);
         this.dirty = false;
         this.urgent = false;
         this.last = this.timers.now();
         this.runs += 1;
         try {
           await this.run();
-        } catch {
-          // The pane reports its own failures; the gate only paces.
+        } catch (err) {
+          // The pane reports its own failures; the gate only paces — but a
+          // failure here would otherwise vanish, and a pane that stops
+          // repainting is exactly the bug nobody can see.
+          console.error('[askmyu] Today refresh failed', err);
         }
         wait = this.urgent ? 0 : this.gapMs;
       } while (this.dirty);
@@ -49,6 +63,17 @@ export class RefreshGate {
       this.inFlight = null;
     });
     return this.inFlight;
+  }
+
+  /** Sleep the gap — or less, if an urgent ask lands meanwhile. */
+  private async pause(ms: number): Promise<void> {
+    this.waiting = true;
+    await new Promise<void>((resolve) => {
+      this.wake = resolve;
+      void this.timers.sleep(ms).then(resolve);
+    });
+    this.wake = null;
+    this.waiting = false;
   }
 
   get pending(): boolean {

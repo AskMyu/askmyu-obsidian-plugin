@@ -17,7 +17,7 @@ export class MergeIntoModal extends FuzzySuggestModal<EntityHeadline> {
   }
 
   override async onOpen(): Promise<void> {
-    super.onOpen();
+    await super.onOpen();
     const res = await this.plugin.backend.listEntities('person');
     this.entities = mergeCandidates(res.data?.entities ?? [], this.sourceId);
     this.inputEl.dispatchEvent(new Event('input'));

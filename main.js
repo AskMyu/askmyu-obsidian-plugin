@@ -5724,7 +5724,7 @@ var DeleteAccountModal = class extends import_obsidian11.Modal {
     });
     new import_obsidian11.Setting(contentEl).setName(`Type ${CONFIRMATION} to confirm`).addText((t) => t.setPlaceholder(CONFIRMATION).onChange((v) => this.typed = v.trim()));
     new import_obsidian11.Setting(contentEl).addButton((b) => b.setButtonText("Keep my account").setCta().onClick(() => this.close())).addButton(
-      (b) => b.setButtonText("Delete everything").setWarning().onClick(async () => {
+      (b) => b.setButtonText("Delete everything").setDestructive().onClick(async () => {
         if (this.typed !== CONFIRMATION) {
           notifyError(`Type ${CONFIRMATION} exactly to confirm.`);
           return;
@@ -7191,7 +7191,7 @@ function buildPeopleBase(peopleFolder) {
 }
 
 // src/buildStamp.ts
-var BUILD_STAMP = true ? "0.1.1" : "dev";
+var BUILD_STAMP = true ? "0.1.2" : "dev";
 
 // src/transport/api.ts
 var COLD_START_OFF = { split_consent: false, onboarding_payback: false, offer_block: false, week_state: false, per_card_offer: false, self_card_legible: false };
@@ -7834,18 +7834,18 @@ var PersonActionConfirmModal = class extends import_obsidian13.Modal {
     contentEl.addClass("myu-power-down");
     contentEl.createEl("h2", { text: this.copy.title });
     contentEl.createEl("p", { cls: "myu-prose", text: this.copy.body });
-    new import_obsidian13.Setting(contentEl).addButton((b) => b.setButtonText("Not now").onClick(() => this.answer(false))).addButton((b) => b.setButtonText(this.copy.cta).setWarning().onClick(() => this.answer(true)));
+    new import_obsidian13.Setting(contentEl).addButton((b) => b.setButtonText("Not now").onClick(() => this.answer(false))).addButton((b) => b.setButtonText(this.copy.cta).setDestructive().onClick(() => this.answer(true)));
   }
   answer(yes) {
     this.answered = true;
     this.close();
-    this.onAnswer(yes);
+    void this.onAnswer(yes);
   }
   onClose() {
     this.contentEl.empty();
     if (!this.answered) {
       this.answered = true;
-      this.onAnswer(false);
+      void this.onAnswer(false);
     }
   }
 };
@@ -7897,24 +7897,20 @@ var AskMyuSettingTab = class extends import_obsidian14.PluginSettingTab {
     if (this.containerEl.isConnected) this.rerender();
   }
   /**
-   * Re-render through the path Obsidian used to paint us. On 1.13+ that is
-   * `update()`: the definitions are re-read and the active tab repainted in
-   * place — groups, search, one section order. Before 1.13 it is `display()`.
-   * Calling `display()` on 1.13 painted the legacy flat layout, with its own
-   * section order, over a definitions render — so the pane reshuffled after
-   * every click (live, 2026-09-03). Every re-render in this file goes here.
+   * Re-render the way Obsidian paints us: `update()` re-reads the definitions
+   * and repaints the active tab in place — groups, search, one section order.
+   * (The legacy `display()` path is gone with minAppVersion 1.13: calling it
+   * over a definitions render reshuffled the pane after every click, 2026-09-03.)
+   * Every re-render in this file goes here.
    */
   rerender() {
-    const tab = this;
-    if (typeof tab.update === "function" && Array.isArray(tab.settingItems) && tab.settingItems.length > 0) tab.update();
-    else this.display();
+    this.update();
   }
   /**
-   * 1.13+: the declarative settings API. Each section is a searchable group
-   * (name + aliases reach Obsidian's settings search) whose one item renders
-   * the section's existing UI into the group. `display()` below stays for
-   * Obsidian < 1.13, which never calls this. (Migrating each toggle to a
-   * `control` definition — individually searchable — is the follow-up.)
+   * The declarative settings API (1.13, our floor). Each section is a
+   * searchable group (name + aliases reach Obsidian's settings search) whose
+   * one item renders the section's UI into the group. (Migrating each toggle
+   * to a `control` definition — individually searchable — is the follow-up.)
    */
   getSettingDefinitions() {
     const section = (heading, aliases, render, visible) => ({
@@ -7929,33 +7925,18 @@ var AskMyuSettingTab = class extends import_obsidian14.PluginSettingTab {
       // exactly where display() does (live, 2026-09-03: it only ever appeared
       // after a legacy repaint, never on open).
       { name: "askMyu", searchable: false, render: (setting) => mountInRow(setting, (root) => appendBrand(root, "myu-brand myu-brand-settings")) },
-      section("Connection", ["account", "sign in", "devices", "backend", "token"], (r) => this.renderConnection(r, false)),
-      section("What Myu can read", ["consent", "folders", "tags", "journal", "sharing"], (r) => this.renderSharing(r, false)),
-      section("Meeting notes", ["meetings", "transcripts", "capture"], (r) => this.renderMeetingNotes(r, false)),
-      section("Myu's folder", ["materialize", "people", "companies", "calendar", "commitments", "bases", "sync", "sync on open"], (r) => this.renderMaterialization(r, false)),
-      section("Weave Myu in", ["integrations", "recipes", "snippets", "bases embed", "tasks", "dataview", "daily notes", "template"], (r) => this.renderIntegrations(r, false)),
-      section("Weekly review", ["review", "week"], (r) => this.renderWeeklyReview(r, false)),
-      section("Account", ["delete account", "email", "aliases", "sign out", "export", "archive", "uninstall"], (r) => this.renderAccount(r, false), () => this.plugin.unlock.current === "unlocked"),
-      section("Advanced", ["backend url", "debug", "snippet", "styling"], (r) => this.renderAdvanced(r, false))
+      section("Connection", ["account", "sign in", "devices", "backend", "token"], (r) => this.renderConnection(r)),
+      section("What Myu can read", ["consent", "folders", "tags", "journal", "sharing"], (r) => this.renderSharing(r)),
+      section("Meeting notes", ["meetings", "transcripts", "capture"], (r) => this.renderMeetingNotes(r)),
+      section("Myu's folder", ["materialize", "people", "companies", "calendar", "commitments", "bases", "sync", "sync on open"], (r) => this.renderMaterialization(r)),
+      section("Weave Myu in", ["integrations", "recipes", "snippets", "bases embed", "tasks", "dataview", "daily notes", "template"], (r) => this.renderIntegrations(r)),
+      section("Weekly review", ["review", "week"], (r) => this.renderWeeklyReview(r)),
+      section("Account", ["delete account", "email", "aliases", "sign out", "export", "archive", "uninstall"], (r) => this.renderAccount(r), () => this.plugin.unlock.current === "unlocked"),
+      section("Advanced", ["backend url", "debug", "snippet", "styling"], (r) => this.renderAdvanced(r))
     ];
   }
-  display() {
-    const { containerEl } = this;
-    containerEl.empty();
-    containerEl.addClass("myu-settings");
-    appendBrand(containerEl, "myu-brand myu-brand-settings");
-    this.renderConnection(containerEl);
-    this.renderSharing(containerEl);
-    this.renderMeetingNotes(containerEl);
-    this.renderMaterialization(containerEl);
-    this.renderIntegrations(containerEl);
-    this.renderWeeklyReview(containerEl);
-    this.renderAccount(containerEl);
-    this.renderAdvanced(containerEl);
-  }
   // ── P8: the shared surface ──────────────────────────────────────────────────
-  renderMaterialization(root, withHeading = true) {
-    if (withHeading) new import_obsidian14.Setting(root).setName("Myu's folder").setHeading();
+  renderMaterialization(root) {
     const s2 = this.plugin.settings;
     if (!s2.materialize_consented) {
       root.createEl("p", {
@@ -8030,8 +8011,7 @@ var AskMyuSettingTab = class extends import_obsidian14.PluginSettingTab {
     );
   }
   // ── P8.5: weave Myu in — copyable snippets, pasted by THEIR hand ───────────
-  renderIntegrations(root, withHeading = true) {
-    if (withHeading) new import_obsidian14.Setting(root).setName("Weave Myu in").setHeading();
+  renderIntegrations(root) {
     new import_obsidian14.Setting(root).setName("Recipes").setDesc(
       'Your day inside every daily note, the brief, the week, a Tasks query for your commitments, the people table, a Dataview table, a button to Today. Myu never edits your files: you paste them, or put one at the cursor with the command "Insert a Myu snippet\u2026".'
     ).addButton((b) => b.setButtonText("Open the recipes").onClick(() => void this.plugin.openWeave()));
@@ -8047,9 +8027,8 @@ var AskMyuSettingTab = class extends import_obsidian14.PluginSettingTab {
    * Everything here calls the same endpoint the webapp calls, with the same
    * method and body.
    */
-  renderAccount(containerEl, withHeading = true) {
+  renderAccount(containerEl) {
     if (this.plugin.unlock.current !== "unlocked") return;
-    if (withHeading) new import_obsidian14.Setting(containerEl).setName("Account").setHeading();
     const devicesHost = containerEl.createDiv();
     const emailsHost = containerEl.createDiv();
     const nameHost = containerEl.createDiv();
@@ -8060,7 +8039,7 @@ var AskMyuSettingTab = class extends import_obsidian14.PluginSettingTab {
     void this.renderProfile(nameHost, careerHost);
     void this.renderPreferences(addressHost);
     new import_obsidian14.Setting(containerEl).setName("Delete my account").setDesc("Irreversible. Everything Myu holds about you is deleted, immediately. Your vault is untouched.").addButton(
-      (b) => b.setButtonText("Delete\u2026").setWarning().onClick(() => {
+      (b) => b.setButtonText("Delete\u2026").setDestructive().onClick(() => {
         new DeleteAccountModal(this.app, this.plugin, () => this.rerender()).open();
       })
     );
@@ -8145,7 +8124,7 @@ var AskMyuSettingTab = class extends import_obsidian14.PluginSettingTab {
         continue;
       }
       row.addButton(
-        (b) => b.setButtonText("Remove").setWarning().onClick(async () => {
+        (b) => b.setButtonText("Remove").setDestructive().onClick(async () => {
           const done = await this.plugin.backend.removeDevice(id);
           if (done.ok) {
             notifyStatus(`${name} removed \u2014 its stored copy can no longer be opened.`);
@@ -8205,7 +8184,7 @@ var AskMyuSettingTab = class extends import_obsidian14.PluginSettingTab {
       }
       if (!isPrimary) {
         row.addButton(
-          (b) => b.setButtonText("Remove").setWarning().onClick(async () => {
+          (b) => b.setButtonText("Remove").setDestructive().onClick(async () => {
             await this.plugin.backend.removeAccountEmail(address);
             notifyStatus(`${address} removed.`);
             this.rerender();
@@ -8351,7 +8330,7 @@ var AskMyuSettingTab = class extends import_obsidian14.PluginSettingTab {
           b.setButtonText("Disconnect").onClick(async () => {
             if (!armed) {
               armed = true;
-              b.setButtonText("Disconnect \u2014 sure?").setWarning();
+              b.setButtonText("Disconnect \u2014 sure?").setDestructive();
               return;
             }
             const r = await this.plugin.backend.slackDisconnect(id);
@@ -8384,7 +8363,7 @@ var AskMyuSettingTab = class extends import_obsidian14.PluginSettingTab {
           b.setButtonText("Disconnect").onClick(async () => {
             if (!armed) {
               armed = true;
-              b.setButtonText("Disconnect \u2014 sure?").setWarning();
+              b.setButtonText("Disconnect \u2014 sure?").setDestructive();
               return;
             }
             const r = await this.plugin.backend.zulipDisconnect(id);
@@ -8444,7 +8423,7 @@ var AskMyuSettingTab = class extends import_obsidian14.PluginSettingTab {
           b.setButtonText("Disconnect").onClick(async () => {
             if (!armed) {
               armed = true;
-              b.setButtonText("Disconnect \u2014 sure?").setWarning();
+              b.setButtonText("Disconnect \u2014 sure?").setDestructive();
               return;
             }
             const r = provider === "google" ? await this.plugin.backend.googleOAuthDisconnect(id) : await this.plugin.backend.microsoftOAuthDisconnect(id);
@@ -8490,7 +8469,7 @@ var AskMyuSettingTab = class extends import_obsidian14.PluginSettingTab {
         });
       }
       if (state === "connected") r.addExtraButton((b) => b.setIcon("check").setTooltip("Connected").setDisabled(true));
-      else if (state === "needs_reconnect") r.addButton((b) => b.setButtonText("Reconnect").setWarning().onClick(() => void this.startOAuth(provider, { scopeSet: "all" })));
+      else if (state === "needs_reconnect") r.addButton((b) => b.setButtonText("Reconnect").setDestructive().onClick(() => void this.startOAuth(provider, { scopeSet: "all" })));
       else {
         anyNot = true;
         if (split2) r.addButton((b) => b.setButtonText(key === "calendar" ? "Connect calendar" : key === "mail" ? "Connect mail" : "Connect notes").onClick(() => void this.startOAuth(provider, { scopeSet: scope })));
@@ -8584,7 +8563,7 @@ var AskMyuSettingTab = class extends import_obsidian14.PluginSettingTab {
         again();
       }));
       row.addButton(
-        (b) => b.setButtonText("Remove").setWarning().onClick(async () => {
+        (b) => b.setButtonText("Remove").setDestructive().onClick(async () => {
           await installer.remove().catch(() => void 0);
           notifyStatus("The Myu look is gone. Install it again any time.");
           again();
@@ -8605,7 +8584,7 @@ var AskMyuSettingTab = class extends import_obsidian14.PluginSettingTab {
       )
     );
     row.addButton(
-      (b) => b.setButtonText("Remove").setWarning().onClick(
+      (b) => b.setButtonText("Remove").setDestructive().onClick(
         () => new PersonActionConfirmModal(
           this.app,
           { title: "Remove the look?", body: `${path} is deleted. It may carry edits of yours.`, cta: "Remove it" },
@@ -8620,8 +8599,7 @@ var AskMyuSettingTab = class extends import_obsidian14.PluginSettingTab {
     );
   }
   // ── connection ────────────────────────────────────────────────────────────
-  renderConnection(root, withHeading = true) {
-    if (withHeading) new import_obsidian14.Setting(root).setName("Connection").setHeading();
+  renderConnection(root) {
     const state = this.plugin.unlock.current;
     const status = root.createDiv({ cls: "myu-status" });
     status.createSpan({ cls: "myu-status-label", text: "status" });
@@ -8732,7 +8710,7 @@ var AskMyuSettingTab = class extends import_obsidian14.PluginSettingTab {
       );
     }
     new import_obsidian14.Setting(root).setName("Disconnect").setDesc("Clears this vault's token and its encrypted key material. Your notes are untouched.").addButton(
-      (b) => b.setWarning().setButtonText("Disconnect").onClick(async () => {
+      (b) => b.setDestructive().setButtonText("Disconnect").onClick(async () => {
         await this.plugin.unlock.disconnect();
         notifyStatus("askMyu disconnected. Nothing further leaves this vault.");
         this.rerender();
@@ -8740,8 +8718,7 @@ var AskMyuSettingTab = class extends import_obsidian14.PluginSettingTab {
     );
   }
   // ── sharing (the allowlist — consent lives here) ──────────────────────────
-  renderSharing(root, withHeading = true) {
-    if (withHeading) new import_obsidian14.Setting(root).setName("What Myu can read").setHeading();
+  renderSharing(root) {
     const { allowlist_folders, allowlist_tags } = this.plugin.settings;
     const nothingShared = allowlist_folders.length === 0 && allowlist_tags.length === 0;
     if (nothingShared) {
@@ -8769,8 +8746,7 @@ var AskMyuSettingTab = class extends import_obsidian14.PluginSettingTab {
     );
   }
   // ── meeting notes (second allowlist — its own consent) ────────────────────
-  renderMeetingNotes(root, withHeading = true) {
-    if (withHeading) new import_obsidian14.Setting(root).setName("Meeting notes").setHeading();
+  renderMeetingNotes(root) {
     const folders = this.plugin.settings.meeting_folders;
     root.createEl("p", {
       cls: "myu-prose myu-quiet",
@@ -8783,8 +8759,7 @@ var AskMyuSettingTab = class extends import_obsidian14.PluginSettingTab {
     );
   }
   // ── the one vault write ───────────────────────────────────────────────────
-  renderWeeklyReview(root, withHeading = true) {
-    if (withHeading) new import_obsidian14.Setting(root).setName("Weekly review").setHeading();
+  renderWeeklyReview(root) {
     const enabled = this.plugin.settings.weekly_review_enabled;
     root.createEl("p", {
       cls: "myu-prose myu-quiet",
@@ -8808,12 +8783,11 @@ var AskMyuSettingTab = class extends import_obsidian14.PluginSettingTab {
     }
   }
   // ── advanced ──────────────────────────────────────────────────────────────
-  renderAdvanced(root, withHeading = true) {
-    if (withHeading) new import_obsidian14.Setting(root).setName("Advanced").setHeading();
+  renderAdvanced(root) {
     new import_obsidian14.Setting(root).setName("Your data").setHeading();
     new import_obsidian14.Setting(root).setName("Export everything into the vault").setDesc("Every surface, every conversation, every canvas that still exists \u2014 as files under Myu/, with a receipt (Myu/Export.md) that says what landed and what did not.").addButton((b) => b.setButtonText("Export now").onClick(() => void this.plugin.exportEverything()));
     new import_obsidian14.Setting(root).setName("Request my data archive").setDesc("Everything the server holds, as one encrypted zip: link by email, passphrase shown once. The part no vault file can carry \u2014 account, devices, keys.").addButton((b) => b.setButtonText("Request\u2026").onClick(() => this.plugin.openDataExport()));
-    new import_obsidian14.Setting(root).setName("Remove everything Myu wrote").setDesc("Every page, note, table and canvas Myu wrote goes to the trash (recoverable). Your own notes are untouched. Turn writing off above first if you want it to stay gone.").addButton((b) => b.setButtonText("Remove\u2026").setWarning().onClick(() => this.plugin.removeEverythingMyuWrote()));
+    new import_obsidian14.Setting(root).setName("Remove everything Myu wrote").setDesc("Every page, note, table and canvas Myu wrote goes to the trash (recoverable). Your own notes are untouched. Turn writing off above first if you want it to stay gone.").addButton((b) => b.setButtonText("Remove\u2026").setDestructive().onClick(() => this.plugin.removeEverythingMyuWrote()));
     new import_obsidian14.Setting(root).setName("If you uninstall").setDesc("Everything under Myu/ stays exactly as it is and needs no plugin to open. Notes stop refreshing; nothing breaks. The plugin\u2019s own data.json (your token and wrapped key) goes with it, so no custody is left on this device. Your account is untouched \u2014 delete it above, or on the web.");
     const lookHost = root.createDiv();
     void this.renderLook(lookHost);
@@ -10450,7 +10424,7 @@ var PersonEditModal = class extends import_obsidian19.Modal {
       })
     );
     new import_obsidian19.Setting(contentEl).setName("Forget entirely").setDesc("Deletes them and everything Myu derived from them. Cannot be undone.").addButton(
-      (b) => b.setButtonText("Forget").setWarning().onClick(async () => {
+      (b) => b.setButtonText("Forget").setDestructive().onClick(async () => {
         const res = await this.plugin.backend.purgeRelationship(this.relationshipId);
         if (res.ok) {
           notifyStatus(`Myu has forgotten ${this.displayName}.`);
@@ -10488,7 +10462,7 @@ var PersonEditModal = class extends import_obsidian19.Modal {
       })
     );
     row.addButton(
-      (b) => b.setButtonText("Delete").setWarning().onClick(async () => {
+      (b) => b.setButtonText("Delete").setDestructive().onClick(async () => {
         const res = await this.plugin.backend.editRelationshipMemory(memory.memory_id, "delete");
         if (res.ok) {
           notifyStatus("Deleted.");
@@ -11232,7 +11206,7 @@ var LookupModal = class extends import_obsidian22.FuzzySuggestModal {
     this.setPlaceholder(tab === "company" ? "Look up a company\u2026" : "Look up someone Myu knows\u2026");
   }
   async onOpen() {
-    super.onOpen();
+    await super.onOpen();
     const res = await this.plugin.backend.listEntities(this.tab);
     this.entities = res.data?.entities ?? [];
     this.inputEl.dispatchEvent(new Event("input"));
@@ -11278,12 +11252,12 @@ var WeeklyReviewModal = class extends import_obsidian23.Modal {
     });
     new import_obsidian23.Setting(contentEl).addButton(
       (b) => b.setButtonText("No, keep it out of my vault").onClick(() => {
-        this.onDecision(false);
+        void this.onDecision(false);
         this.close();
       })
     ).addButton(
       (b) => b.setButtonText("Yes, write it").setCta().onClick(() => {
-        this.onDecision(true);
+        void this.onDecision(true);
         this.close();
       })
     );
@@ -14572,7 +14546,7 @@ var MergeIntoModal = class extends import_obsidian30.FuzzySuggestModal {
     this.setPlaceholder(`Merge ${sourceName} into\u2026`);
   }
   async onOpen() {
-    super.onOpen();
+    await super.onOpen();
     const res = await this.plugin.backend.listEntities("person");
     this.entities = mergeCandidates(res.data?.entities ?? [], this.sourceId);
     this.inputEl.dispatchEvent(new Event("input"));
@@ -15968,7 +15942,7 @@ var CanvasHistoryModal = class extends import_obsidian38.FuzzySuggestModal {
     this.setPlaceholder("Open a past canvas\u2026");
   }
   async onOpen() {
-    super.onOpen();
+    await super.onOpen();
     const res = await this.plugin.backend.getCompositionHistory(50).catch(() => null);
     this.rows = (res?.data?.compositions ?? []).filter((r) => r.composition_id || r.id);
     this.inputEl.dispatchEvent(new Event("input"));
@@ -18373,27 +18347,37 @@ var RefreshGate = class {
     this.dirty = false;
     this.urgent = false;
     this.last = 0;
+    /** Wakes a wait in progress — the person's ask must not sit out a gap that began before it. */
+    this.wake = null;
+    /** True while the gate is sleeping out a gap (a run has not started yet). */
+    this.waiting = false;
     /** How many runs actually happened — the test's fingerprint. */
     this.runs = 0;
   }
   /** Ask. `now` is the person's own hand — no gap for them. */
   request(opts = {}) {
-    if (opts.now) this.urgent = true;
     if (this.inFlight) {
-      this.dirty = true;
+      if (opts.now && this.waiting) {
+        this.wake?.();
+      } else {
+        this.dirty = true;
+        if (opts.now) this.urgent = true;
+      }
       return this.inFlight;
     }
+    if (opts.now) this.urgent = true;
     this.inFlight = (async () => {
       let wait = this.urgent ? 0 : Math.max(0, this.last + this.gapMs - this.timers.now());
       do {
-        if (wait > 0) await this.timers.sleep(wait);
+        if (wait > 0) await this.pause(wait);
         this.dirty = false;
         this.urgent = false;
         this.last = this.timers.now();
         this.runs += 1;
         try {
           await this.run();
-        } catch {
+        } catch (err) {
+          console.error("[askmyu] Today refresh failed", err);
         }
         wait = this.urgent ? 0 : this.gapMs;
       } while (this.dirty);
@@ -18401,6 +18385,16 @@ var RefreshGate = class {
       this.inFlight = null;
     });
     return this.inFlight;
+  }
+  /** Sleep the gap — or less, if an urgent ask lands meanwhile. */
+  async pause(ms) {
+    this.waiting = true;
+    await new Promise((resolve) => {
+      this.wake = resolve;
+      void this.timers.sleep(ms).then(resolve);
+    });
+    this.wake = null;
+    this.waiting = false;
   }
   get pending() {
     return this.inFlight !== null;
@@ -18557,7 +18551,7 @@ var AskMyuPlugin = class extends import_obsidian54.Plugin {
   }
   dismissTermsUpdate() {
     this.termsUpdateDismissed = true;
-    void this.refreshToday();
+    void this.refreshToday({ now: true });
   }
   termsLinkTargets() {
     return termsLinks(this.terms?.urls ?? TERMS_FALLBACK_URLS);
@@ -18573,7 +18567,7 @@ var AskMyuPlugin = class extends import_obsidian54.Plugin {
     }
     this.termsUpdateDismissed = false;
     await this.loadFeatures();
-    await this.refreshToday();
+    await this.refreshToday({ now: true });
     this.startLiveStream();
     void this.loadIntegrationStatus(true);
     void this.syncOnOpen();
@@ -18596,7 +18590,7 @@ var AskMyuPlugin = class extends import_obsidian54.Plugin {
     if (!state) return;
     this.terms = state.currentVersion || !this.terms ? state : { ...this.terms, satisfied: false, gateEnabled: true };
     this.sse.stop();
-    void this.refreshToday();
+    void this.refreshToday({ now: true });
   }
   /** The live layer, once the account may have content — never while gated. */
   startLiveStream() {
@@ -18644,7 +18638,7 @@ var AskMyuPlugin = class extends import_obsidian54.Plugin {
       },
       onState: (state, detail) => void this.onUnlockState(state, detail ?? null),
       onApproval: () => {
-        void this.refreshToday();
+        void this.refreshToday({ now: true });
         this.settingTab?.refreshIfVisible();
       },
       deviceName: `Obsidian \u2014 ${this.app.vault.getName()}`,
@@ -18789,7 +18783,7 @@ ${selection}
     this.registerObsidianProtocolHandler("myu-connected", () => {
       stamp("myu-connected");
       notifyStatus("Welcome back \u2014 Myu is syncing your calendar and email now.");
-      void this.loadIntegrationStatus(true).then(() => this.refreshToday());
+      void this.loadIntegrationStatus(true).then(() => this.refreshToday({ now: true }));
       void this.openToday();
     });
     this.registerObsidianProtocolHandler("myu-card", (params) => {
@@ -18934,12 +18928,12 @@ ${selection}
   async onUnlockState(state, detail) {
     this.lastStateDetail = detail;
     this.setStatusBar(state, detail);
-    if (state !== "unlocked") void this.refreshToday();
+    if (state !== "unlocked") void this.refreshToday({ now: true });
     if (state === "unlocked") {
       void this.refreshOnboardingState();
       void this.unlock.ensurePluginToken();
       void this.loadFeatures().then(() => {
-        void this.refreshToday();
+        void this.refreshToday({ now: true });
         this.startLiveStream();
       });
       void this.loadIntegrationStatus(true);
@@ -18965,7 +18959,7 @@ ${selection}
     if (state === "disconnected" && detail === "token_revoked") {
       notifyError("askMyu access was revoked. Reconnect in Settings \u2192 askMyu to resume.");
     }
-    await this.refreshToday();
+    await this.refreshToday({ now: true });
   }
   /**
    * (Re)register the vault watcher. Called after consent and after unlock.
@@ -19015,7 +19009,7 @@ ${selection}
     this.addCommand({
       id: "choose-shared-folders",
       name: "Choose what Myu can read",
-      callback: () => new ConsentModal(this.app, this, () => void this.refreshToday()).open()
+      callback: () => new ConsentModal(this.app, this, () => void this.refreshToday({ now: true })).open()
     });
     this.addCommand({
       id: "capture-current-note",
@@ -19147,7 +19141,7 @@ ${selection.trim()}
     this.addCommand({
       id: "choose-meeting-folders",
       name: "Choose my meeting-notes folders",
-      callback: () => new MeetingConsentModal(this.app, this, () => void this.refreshToday()).open()
+      callback: () => new MeetingConsentModal(this.app, this, () => void this.refreshToday({ now: true })).open()
     });
     this.addCommand({
       id: "show-myu-card",
@@ -19274,6 +19268,7 @@ ${selection.trim()}
     const existing = this.app.workspace.getLeavesOfType(TODAY_VIEW_TYPE);
     if (existing.length > 0) {
       await this.app.workspace.revealLeaf(existing[0]);
+      void this.refreshToday({ now: true });
       return;
     }
     const leaf = this.app.workspace.getRightLeaf(false);
@@ -19440,7 +19435,7 @@ What do you notice?`,
         await this.materializer.retirePersonNote(source.id);
         notifyStatus(`Merged ${source.name} into ${target.name}.`);
         this.helpQueue = this.helpQueue.filter((i) => !(i.item_type === "merge_candidate" && i.source.relationship_id === source.id));
-        void this.refreshToday();
+        void this.refreshToday({ now: true });
         for (const leaf of this.app.workspace.getLeavesOfType(HELP_VIEW_TYPE)) if (leaf.view instanceof HelpMyuView) leaf.view.render();
         void this.materializer.materializeAll();
       })();
@@ -19478,11 +19473,11 @@ What do you notice?`,
   async openOffer(compositionId) {
     this.pendingOffers = this.pendingOffers.filter((o) => o.compositionId !== compositionId);
     await this.openCanvas(compositionId);
-    void this.refreshToday();
+    void this.refreshToday({ now: true });
   }
   dismissOffer(compositionId) {
     this.pendingOffers = this.pendingOffers.filter((o) => o.compositionId !== compositionId);
-    void this.refreshToday();
+    void this.refreshToday({ now: true });
   }
   /** `POST /feedback/submit` with what an Obsidian plugin can honestly say about itself. */
   sendFeedback(opts) {
@@ -19691,7 +19686,7 @@ What do you notice?`,
     notifyStatus(`Brought in ${total} ${total === 1 ? "note" : "notes"}.`);
     this.settings.backfill_done = true;
     void this.saveSettings();
-    void this.refreshToday();
+    void this.refreshToday({ now: true });
   }
   expectCareerCanvas() {
     if (this.careerCanvasTimer !== null) window.clearTimeout(this.careerCanvasTimer);
@@ -19740,7 +19735,7 @@ What do you notice?`,
     const changed = next.length !== this.pendingTransfers.length || next.some((r, i) => r.request_id !== this.pendingTransfers[i]?.request_id);
     this.pendingTransfers = next;
     if (changed) {
-      void this.refreshToday();
+      void this.refreshToday({ now: true });
       this.settingTab?.refreshIfVisible();
     }
   }
@@ -19797,7 +19792,7 @@ What do you notice?`,
         this.settings.myu_file_hashes = {};
         await this.saveSettings();
         notifyStatus(`Removed ${trashed} ${trashed === 1 ? "file" : "files"} \u2014 they are in the trash.`);
-        void this.refreshToday();
+        void this.refreshToday({ now: true });
       })();
     }).open();
   }
@@ -19826,7 +19821,7 @@ What do you notice?`,
     this.setStatusBar(this.unlock.current, this.lastStateDetail);
     if (result.stopped) {
       notifyStatus("Stopped. What was sent stays sent; press Start again to continue \u2014 notes already in are skipped.");
-      void this.refreshToday();
+      void this.refreshToday({ now: true });
       return;
     }
     this.reportBackfillFinished(files.length);
@@ -19926,7 +19921,7 @@ What do you notice?`,
     }
     await this.materializer.materializeAll();
     this.lastSyncAt = Date.now();
-    void this.refreshToday();
+    void this.refreshToday({ now: true });
   }
   /** Everything Myu knows, as files — plus the receipt. */
   async exportEverything() {

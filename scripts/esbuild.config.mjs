@@ -57,7 +57,12 @@ const sameLine = lastLine === `${major}.${minor}`;
 // Dev builds show the counter as it stands (0 on a fresh line); a release build advances it.
 let buildNum = sameLine ? counter : 0;
 let version = `${major}.${minor}.${buildNum}`;
-if (production) {
+// The bump is a separate act (`npm run release`, MYU_BUMP=1): a plain production
+// build bundles the manifest AS IT IS, so anyone rebuilding the tagged source —
+// the directory's build verification, our own release workflow — gets the same
+// bytes. Until 0.1.1 every rebuild stamped the next number and never matched.
+const bump = production && process.env.MYU_BUMP === '1';
+if (bump) {
   buildNum = sameLine ? counter + 1 : 0;
   version = `${major}.${minor}.${buildNum}`;
   writeFileSync(numFile, `${buildNum}\n`);
@@ -65,6 +70,9 @@ if (production) {
   writeFileSync('manifest.json', `${JSON.stringify(manifest, null, 2)}\n`);
   versions[version] = manifest.minAppVersion;
   writeFileSync(versionsFile, `${JSON.stringify(versions, null, 2)}\n`);
+} else if (production) {
+  // Bundle exactly what manifest.json says.
+  version = String(manifest.version);
 }
 // The stamp settings shows: the version itself, `-dev` for anything not a release build.
 const buildStamp = `${version}${production ? '' : '-dev'}${stampSuffix}`;

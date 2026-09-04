@@ -92,25 +92,21 @@ export class AskMyuSettingTab extends PluginSettingTab {
   }
 
   /**
-   * Re-render through the path Obsidian used to paint us. On 1.13+ that is
-   * `update()`: the definitions are re-read and the active tab repainted in
-   * place — groups, search, one section order. Before 1.13 it is `display()`.
-   * Calling `display()` on 1.13 painted the legacy flat layout, with its own
-   * section order, over a definitions render — so the pane reshuffled after
-   * every click (live, 2026-09-03). Every re-render in this file goes here.
+   * Re-render the way Obsidian paints us: `update()` re-reads the definitions
+   * and repaints the active tab in place — groups, search, one section order.
+   * (The legacy `display()` path is gone with minAppVersion 1.13: calling it
+   * over a definitions render reshuffled the pane after every click, 2026-09-03.)
+   * Every re-render in this file goes here.
    */
   rerender(): void {
-    const tab = this as unknown as { update?: () => void; settingItems?: unknown[] };
-    if (typeof tab.update === 'function' && Array.isArray(tab.settingItems) && tab.settingItems.length > 0) tab.update();
-    else this.display();
+    this.update();
   }
 
   /**
-   * 1.13+: the declarative settings API. Each section is a searchable group
-   * (name + aliases reach Obsidian's settings search) whose one item renders
-   * the section's existing UI into the group. `display()` below stays for
-   * Obsidian < 1.13, which never calls this. (Migrating each toggle to a
-   * `control` definition — individually searchable — is the follow-up.)
+   * The declarative settings API (1.13, our floor). Each section is a
+   * searchable group (name + aliases reach Obsidian's settings search) whose
+   * one item renders the section's UI into the group. (Migrating each toggle
+   * to a `control` definition — individually searchable — is the follow-up.)
    */
   override getSettingDefinitions(): SettingDefinitionItem[] {
     const section = (heading: string, aliases: string[], render: (root: HTMLElement) => void, visible?: () => boolean): SettingDefinitionItem => ({
@@ -125,37 +121,20 @@ export class AskMyuSettingTab extends PluginSettingTab {
       // exactly where display() does (live, 2026-09-03: it only ever appeared
       // after a legacy repaint, never on open).
       { name: 'askMyu', searchable: false, render: (setting: Setting) => mountInRow(setting, (root) => appendBrand(root, 'myu-brand myu-brand-settings')) },
-      section('Connection', ['account', 'sign in', 'devices', 'backend', 'token'], (r) => this.renderConnection(r, false)),
-      section('What Myu can read', ['consent', 'folders', 'tags', 'journal', 'sharing'], (r) => this.renderSharing(r, false)),
-      section('Meeting notes', ['meetings', 'transcripts', 'capture'], (r) => this.renderMeetingNotes(r, false)),
-      section("Myu's folder", ['materialize', 'people', 'companies', 'calendar', 'commitments', 'bases', 'sync', 'sync on open'], (r) => this.renderMaterialization(r, false)),
-      section('Weave Myu in', ['integrations', 'recipes', 'snippets', 'bases embed', 'tasks', 'dataview', 'daily notes', 'template'], (r) => this.renderIntegrations(r, false)),
-      section('Weekly review', ['review', 'week'], (r) => this.renderWeeklyReview(r, false)),
-      section('Account', ['delete account', 'email', 'aliases', 'sign out', 'export', 'archive', 'uninstall'], (r) => this.renderAccount(r, false), () => this.plugin.unlock.current === 'unlocked'),
-      section('Advanced', ['backend url', 'debug', 'snippet', 'styling'], (r) => this.renderAdvanced(r, false)),
+      section('Connection', ['account', 'sign in', 'devices', 'backend', 'token'], (r) => this.renderConnection(r)),
+      section('What Myu can read', ['consent', 'folders', 'tags', 'journal', 'sharing'], (r) => this.renderSharing(r)),
+      section('Meeting notes', ['meetings', 'transcripts', 'capture'], (r) => this.renderMeetingNotes(r)),
+      section("Myu's folder", ['materialize', 'people', 'companies', 'calendar', 'commitments', 'bases', 'sync', 'sync on open'], (r) => this.renderMaterialization(r)),
+      section('Weave Myu in', ['integrations', 'recipes', 'snippets', 'bases embed', 'tasks', 'dataview', 'daily notes', 'template'], (r) => this.renderIntegrations(r)),
+      section('Weekly review', ['review', 'week'], (r) => this.renderWeeklyReview(r)),
+      section('Account', ['delete account', 'email', 'aliases', 'sign out', 'export', 'archive', 'uninstall'], (r) => this.renderAccount(r), () => this.plugin.unlock.current === 'unlocked'),
+      section('Advanced', ['backend url', 'debug', 'snippet', 'styling'], (r) => this.renderAdvanced(r)),
     ];
-  }
-
-  override display(): void {
-    const { containerEl } = this;
-    containerEl.empty();
-    containerEl.addClass('myu-settings');
-
-    appendBrand(containerEl, 'myu-brand myu-brand-settings');
-    this.renderConnection(containerEl);
-    this.renderSharing(containerEl);
-    this.renderMeetingNotes(containerEl);
-    this.renderMaterialization(containerEl);
-    this.renderIntegrations(containerEl);
-    this.renderWeeklyReview(containerEl);
-    this.renderAccount(containerEl);
-    this.renderAdvanced(containerEl);
   }
 
   // ── P8: the shared surface ──────────────────────────────────────────────────
 
-  private renderMaterialization(root: HTMLElement, withHeading = true): void {
-    if (withHeading) new Setting(root).setName("Myu's folder").setHeading();
+  private renderMaterialization(root: HTMLElement): void {
     const s = this.plugin.settings;
 
     if (!s.materialize_consented) {
@@ -257,8 +236,7 @@ export class AskMyuSettingTab extends PluginSettingTab {
 
   // ── P8.5: weave Myu in — copyable snippets, pasted by THEIR hand ───────────
 
-  private renderIntegrations(root: HTMLElement, withHeading = true): void {
-    if (withHeading) new Setting(root).setName('Weave Myu in').setHeading();
+  private renderIntegrations(root: HTMLElement): void {
     // One row, one door. The recipes live in a pane where each snippet is a
     // code block with a copy button — the text in view before it is copied.
     // (Seven rows with a blind Copy each until 2026-09-03.)
@@ -283,10 +261,8 @@ export class AskMyuSettingTab extends PluginSettingTab {
    * Everything here calls the same endpoint the webapp calls, with the same
    * method and body.
    */
-  private renderAccount(containerEl: HTMLElement, withHeading = true): void {
+  private renderAccount(containerEl: HTMLElement): void {
     if (this.plugin.unlock.current !== 'unlocked') return;
-
-    if (withHeading) new Setting(containerEl).setName('Account').setHeading();
 
     // Every fetching row gets its place NOW, in reading order, and fills in
     // when its answer lands — so the order never depends on which answer came
@@ -311,7 +287,7 @@ export class AskMyuSettingTab extends PluginSettingTab {
       .setName('Delete my account')
       .setDesc('Irreversible. Everything Myu holds about you is deleted, immediately. Your vault is untouched.')
       .addButton((b) =>
-        b.setButtonText('Delete…').setWarning().onClick(() => {
+        b.setButtonText('Delete…').setDestructive().onClick(() => {
           new DeleteAccountModal(this.app, this.plugin, () => this.rerender()).open();
         }),
       );
@@ -417,7 +393,7 @@ export class AskMyuSettingTab extends PluginSettingTab {
         continue;
       }
       row.addButton((b) =>
-        b.setButtonText('Remove').setWarning().onClick(async () => {
+        b.setButtonText('Remove').setDestructive().onClick(async () => {
           const done = await this.plugin.backend.removeDevice(id);
           if (done.ok) {
             notifyStatus(`${name} removed — its stored copy can no longer be opened.`);
@@ -487,7 +463,7 @@ export class AskMyuSettingTab extends PluginSettingTab {
       }
       if (!isPrimary) {
         row.addButton((b) =>
-          b.setButtonText('Remove').setWarning().onClick(async () => {
+          b.setButtonText('Remove').setDestructive().onClick(async () => {
             await this.plugin.backend.removeAccountEmail(address);
             notifyStatus(`${address} removed.`);
             this.rerender();
@@ -664,7 +640,7 @@ export class AskMyuSettingTab extends PluginSettingTab {
           .setName(String(c.workspace_name ?? 'Workspace'))
           .setDesc([c.user_email, c.user_name].filter(Boolean).join(' · '))
           .addButton((b) => { let armed = false; b.setButtonText('Disconnect').onClick(async () => {
-            if (!armed) { armed = true; b.setButtonText('Disconnect — sure?').setWarning(); return; }
+            if (!armed) { armed = true; b.setButtonText('Disconnect — sure?').setDestructive(); return; }
             const r = await this.plugin.backend.slackDisconnect(id);
             if (r.ok) { notifyStatus('Slack workspace disconnected.'); this.rerender(); } else notifyError("Couldn’t disconnect.");
           }); });
@@ -692,7 +668,7 @@ export class AskMyuSettingTab extends PluginSettingTab {
           .setName(String(c.workspace_name ?? c.workspace_id ?? 'Organization'))
           .setDesc([c.user_email, c.user_name].filter(Boolean).join(' · '))
           .addButton((b) => { let armed = false; b.setButtonText('Disconnect').onClick(async () => {
-            if (!armed) { armed = true; b.setButtonText('Disconnect — sure?').setWarning(); return; }
+            if (!armed) { armed = true; b.setButtonText('Disconnect — sure?').setDestructive(); return; }
             const r = await this.plugin.backend.zulipDisconnect(id);
             if (r.ok) { notifyStatus('Zulip organization disconnected.'); this.rerender(); } else notifyError("Couldn’t disconnect.");
           }); });
@@ -752,7 +728,7 @@ export class AskMyuSettingTab extends PluginSettingTab {
         line.addButton((b) => {
           let armed = false;
           b.setButtonText('Disconnect').onClick(async () => {
-            if (!armed) { armed = true; b.setButtonText('Disconnect — sure?').setWarning(); return; }
+            if (!armed) { armed = true; b.setButtonText('Disconnect — sure?').setDestructive(); return; }
             const r = provider === 'google' ? await this.plugin.backend.googleOAuthDisconnect(id) : await this.plugin.backend.microsoftOAuthDisconnect(id);
             if (r.ok && r.data?.success !== false) { notifyStatus(r.data?.message || 'Disconnected.'); this.rerender(); } else { notifyError(r.data?.error || "Couldn’t disconnect."); armed = false; b.setButtonText('Disconnect'); }
           });
@@ -794,7 +770,7 @@ export class AskMyuSettingTab extends PluginSettingTab {
         });
       }
       if (state === 'connected') r.addExtraButton((b) => b.setIcon('check').setTooltip('Connected').setDisabled(true));
-      else if (state === 'needs_reconnect') r.addButton((b) => b.setButtonText('Reconnect').setWarning().onClick(() => void this.startOAuth(provider, { scopeSet: 'all' })));
+      else if (state === 'needs_reconnect') r.addButton((b) => b.setButtonText('Reconnect').setDestructive().onClick(() => void this.startOAuth(provider, { scopeSet: 'all' })));
       else { anyNot = true; if (split) r.addButton((b) => b.setButtonText(key === 'calendar' ? 'Connect calendar' : key === 'mail' ? 'Connect mail' : 'Connect notes').onClick(() => void this.startOAuth(provider, { scopeSet: scope }))); }
     }
     if (anyNot && split) new Setting(host).setName('Connect everything').setDesc('One consent for calendar, mail and meeting notes.').addButton((b) => b.setButtonText('Connect everything\u2026').onClick(() => void this.startOAuth(provider, { scopeSet: 'all' })));
@@ -891,7 +867,7 @@ export class AskMyuSettingTab extends PluginSettingTab {
       );
       if (on !== null) row.addButton((b) => b.setButtonText(on ? 'Turn off' : 'Turn on').onClick(async () => { await installer.setOn(!on).catch(() => undefined); again(); }));
       row.addButton((b) =>
-        b.setButtonText('Remove').setWarning().onClick(async () => {
+        b.setButtonText('Remove').setDestructive().onClick(async () => {
           await installer.remove().catch(() => undefined);
           notifyStatus('The Myu look is gone. Install it again any time.');
           again();
@@ -912,7 +888,7 @@ export class AskMyuSettingTab extends PluginSettingTab {
       ),
     );
     row.addButton((b) =>
-      b.setButtonText('Remove').setWarning().onClick(() =>
+      b.setButtonText('Remove').setDestructive().onClick(() =>
         new PersonActionConfirmModal(
           this.app,
           { title: 'Remove the look?', body: `${path} is deleted. It may carry edits of yours.`, cta: 'Remove it' },
@@ -924,8 +900,7 @@ export class AskMyuSettingTab extends PluginSettingTab {
 
   // ── connection ────────────────────────────────────────────────────────────
 
-  private renderConnection(root: HTMLElement, withHeading = true): void {
-    if (withHeading) new Setting(root).setName('Connection').setHeading();
+  private renderConnection(root: HTMLElement): void {
 
     const state = this.plugin.unlock.current;
     const status = root.createDiv({ cls: 'myu-status' });
@@ -1136,7 +1111,7 @@ export class AskMyuSettingTab extends PluginSettingTab {
       .setName('Disconnect')
       .setDesc('Clears this vault\'s token and its encrypted key material. Your notes are untouched.')
       .addButton((b) =>
-        b.setWarning().setButtonText('Disconnect').onClick(async () => {
+        b.setDestructive().setButtonText('Disconnect').onClick(async () => {
           await this.plugin.unlock.disconnect();
           notifyStatus('askMyu disconnected. Nothing further leaves this vault.');
           this.rerender();
@@ -1146,8 +1121,7 @@ export class AskMyuSettingTab extends PluginSettingTab {
 
   // ── sharing (the allowlist — consent lives here) ──────────────────────────
 
-  private renderSharing(root: HTMLElement, withHeading = true): void {
-    if (withHeading) new Setting(root).setName('What Myu can read').setHeading();
+  private renderSharing(root: HTMLElement): void {
 
     const { allowlist_folders, allowlist_tags } = this.plugin.settings;
     const nothingShared = allowlist_folders.length === 0 && allowlist_tags.length === 0;
@@ -1188,8 +1162,7 @@ export class AskMyuSettingTab extends PluginSettingTab {
 
   // ── meeting notes (second allowlist — its own consent) ────────────────────
 
-  private renderMeetingNotes(root: HTMLElement, withHeading = true): void {
-    if (withHeading) new Setting(root).setName('Meeting notes').setHeading();
+  private renderMeetingNotes(root: HTMLElement): void {
 
     const folders = this.plugin.settings.meeting_folders;
     root.createEl('p', {
@@ -1212,8 +1185,7 @@ export class AskMyuSettingTab extends PluginSettingTab {
 
   // ── the one vault write ───────────────────────────────────────────────────
 
-  private renderWeeklyReview(root: HTMLElement, withHeading = true): void {
-    if (withHeading) new Setting(root).setName('Weekly review').setHeading();
+  private renderWeeklyReview(root: HTMLElement): void {
 
     const enabled = this.plugin.settings.weekly_review_enabled;
 
@@ -1252,8 +1224,7 @@ export class AskMyuSettingTab extends PluginSettingTab {
 
   // ── advanced ──────────────────────────────────────────────────────────────
 
-  private renderAdvanced(root: HTMLElement, withHeading = true): void {
-    if (withHeading) new Setting(root).setName('Advanced').setHeading();
+  private renderAdvanced(root: HTMLElement): void {
 
     // The Myu look lives outside the plugin now — snippets/myu-look.css, the
     // way Tasks and Minimal ship optional styling: the plugin exposes stable
@@ -1270,7 +1241,7 @@ export class AskMyuSettingTab extends PluginSettingTab {
     new Setting(root)
       .setName('Remove everything Myu wrote')
       .setDesc('Every page, note, table and canvas Myu wrote goes to the trash (recoverable). Your own notes are untouched. Turn writing off above first if you want it to stay gone.')
-      .addButton((b) => b.setButtonText('Remove\u2026').setWarning().onClick(() => this.plugin.removeEverythingMyuWrote()));
+      .addButton((b) => b.setButtonText('Remove\u2026').setDestructive().onClick(() => this.plugin.removeEverythingMyuWrote()));
     new Setting(root)
       .setName('If you uninstall')
       .setDesc('Everything under Myu/ stays exactly as it is and needs no plugin to open. Notes stop refreshing; nothing breaks. The plugin\u2019s own data.json (your token and wrapped key) goes with it, so no custody is left on this device. Your account is untouched \u2014 delete it above, or on the web.');

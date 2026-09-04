@@ -25,7 +25,7 @@ export class LookupModal extends FuzzySuggestModal<EntityHeadline> {
   }
 
   override async onOpen(): Promise<void> {
-    super.onOpen();
+    await super.onOpen();
     const res = await this.plugin.backend.listEntities(this.tab);
     this.entities = res.data?.entities ?? [];
     // Re-run the query now that there is something to match against.

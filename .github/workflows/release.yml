@@ -22,9 +22,9 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '22'
 
@@ -43,8 +43,13 @@ jobs:
           npm test
           npm run verify
 
+      - name: The committed bundle is what this source builds
+        run: |
+          MYU_OUTFILE=/tmp/fresh.js npm run build
+          cmp /tmp/fresh.js main.js
+
       - name: Attest the release assets
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: |
             main.js

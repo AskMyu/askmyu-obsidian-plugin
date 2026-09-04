@@ -64,7 +64,7 @@ export function linkedInMatchComponent(sug: LinkedInSuggestion, personName: stri
         { label: '\u2717 Not this person', action: 'resolve_linkedin', params: { card_id: sug.card_id, resolve_action: 'reject' } },
       ],
     },
-  } as CompositionComponentLite;
+  };
 }
 
 /** The terminal card — the servlet's words when every candidate was rejected (or there were none). */
@@ -81,7 +81,7 @@ export function linkedInTerminalComponent(relationshipId: string, personName: st
       input_field: { placeholder: 'https://linkedin.com/in/...', action: 'resolve_linkedin', param_name: 'linkedin_url', submit_label: 'Link profile', validate: 'linkedin_url', help_text: 'Paste the full LinkedIn profile URL for the correct person.', params: { resolve_action: 'manual_url', relationship_id: relationshipId } },
       channel_actions: [{ label: 'Not on LinkedIn', action: 'resolve_linkedin', params: { resolve_action: 'no_linkedin', relationship_id: relationshipId } }],
     },
-  } as CompositionComponentLite;
+  };
 }
 
 export interface LinkedInCardsHost {

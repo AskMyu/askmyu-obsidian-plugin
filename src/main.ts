@@ -140,7 +140,7 @@ export default class AskMyuPlugin extends Plugin {
   }
   dismissTermsUpdate(): void {
     this.termsUpdateDismissed = true;
-    void this.refreshToday();
+    void this.refreshToday({ now: true });
   }
   termsLinkTargets(): Array<{ label: string; url: string }> {
     return termsLinks(this.terms?.urls ?? TERMS_FALLBACK_URLS);
@@ -156,7 +156,7 @@ export default class AskMyuPlugin extends Plugin {
     }
     this.termsUpdateDismissed = false;
     await this.loadFeatures();
-    await this.refreshToday();
+    await this.refreshToday({ now: true });
     this.startLiveStream();
     void this.loadIntegrationStatus(true);
     void this.syncOnOpen();
@@ -188,7 +188,7 @@ export default class AskMyuPlugin extends Plugin {
     // Keep what /features already told us if the 428 body named no version.
     this.terms = state.currentVersion || !this.terms ? state : { ...this.terms, satisfied: false, gateEnabled: true };
     this.sse.stop();
-    void this.refreshToday();
+    void this.refreshToday({ now: true });
   }
   /** The live layer, once the account may have content — never while gated. */
   private startLiveStream(): void {
@@ -294,7 +294,7 @@ export default class AskMyuPlugin extends Plugin {
       },
       onState: (state, detail) => void this.onUnlockState(state, detail ?? null),
       onApproval: () => {
-        void this.refreshToday();
+        void this.refreshToday({ now: true });
         this.settingTab?.refreshIfVisible();
       },
       deviceName: `Obsidian — ${this.app.vault.getName()}`,
@@ -483,7 +483,7 @@ export default class AskMyuPlugin extends Plugin {
       // The /connected/obsidian landing fired us back after a Google/Microsoft
       // connect. Refresh; the calendar-fed surfaces light up on their own.
       notifyStatus('Welcome back — Myu is syncing your calendar and email now.');
-      void this.loadIntegrationStatus(true).then(() => this.refreshToday());
+      void this.loadIntegrationStatus(true).then(() => this.refreshToday({ now: true }));
       void this.openToday();
     });
     this.registerObsidianProtocolHandler('myu-card', (params) => {
@@ -681,7 +681,7 @@ export default class AskMyuPlugin extends Plugin {
     this.lastStateDetail = detail;
     this.setStatusBar(state, detail);
     // A pane showing the resting state (signed out, blocked, locked) must move the moment the machine does.
-    if (state !== 'unlocked') void this.refreshToday();
+    if (state !== 'unlocked') void this.refreshToday({ now: true });
     if (state === 'unlocked') {
       void this.refreshOnboardingState();
       void this.unlock.ensurePluginToken();
@@ -689,7 +689,7 @@ export default class AskMyuPlugin extends Plugin {
       // the live stream must not open while gated — so the stream starts on
       // this answer, not on unlock. The custody ceremony has already run.
       void this.loadFeatures().then(() => {
-        void this.refreshToday();
+        void this.refreshToday({ now: true });
         this.startLiveStream();
       });
       void this.loadIntegrationStatus(true);
@@ -742,7 +742,7 @@ export default class AskMyuPlugin extends Plugin {
       notifyError('askMyu access was revoked. Reconnect in Settings → askMyu to resume.');
     }
 
-    await this.refreshToday();
+    await this.refreshToday({ now: true });
   }
 
   /**
@@ -798,7 +798,7 @@ export default class AskMyuPlugin extends Plugin {
     this.addCommand({
       id: 'choose-shared-folders',
       name: 'Choose what Myu can read',
-      callback: () => new ConsentModal(this.app, this, () => void this.refreshToday()).open(),
+      callback: () => new ConsentModal(this.app, this, () => void this.refreshToday({ now: true })).open(),
     });
 
     this.addCommand({
@@ -904,7 +904,7 @@ export default class AskMyuPlugin extends Plugin {
     this.addCommand({
       id: 'choose-meeting-folders',
       name: 'Choose my meeting-notes folders',
-      callback: () => new MeetingConsentModal(this.app, this, () => void this.refreshToday()).open(),
+      callback: () => new MeetingConsentModal(this.app, this, () => void this.refreshToday({ now: true })).open(),
     });
 
     this.addCommand({
@@ -1065,6 +1065,8 @@ export default class AskMyuPlugin extends Plugin {
     const existing = this.app.workspace.getLeavesOfType(TODAY_VIEW_TYPE);
     if (existing.length > 0) {
       await this.app.workspace.revealLeaf(existing[0]);
+      // Opening the pane is the person's own ask: fresh now, not after the gap.
+      void this.refreshToday({ now: true });
       return;
     }
 
@@ -1246,7 +1248,7 @@ export default class AskMyuPlugin extends Plugin {
         await this.materializer.retirePersonNote(source.id);
         notifyStatus(`Merged ${source.name} into ${target.name}.`);
         this.helpQueue = this.helpQueue.filter((i) => !(i.item_type === 'merge_candidate' && i.source.relationship_id === source.id));
-        void this.refreshToday();
+        void this.refreshToday({ now: true });
         for (const leaf of this.app.workspace.getLeavesOfType(HELP_VIEW_TYPE)) if (leaf.view instanceof HelpMyuView) leaf.view.render();
         void this.materializer.materializeAll();
       })();
@@ -1292,12 +1294,12 @@ export default class AskMyuPlugin extends Plugin {
   async openOffer(compositionId: string): Promise<void> {
     this.pendingOffers = this.pendingOffers.filter((o) => o.compositionId !== compositionId);
     await this.openCanvas(compositionId);
-    void this.refreshToday();
+    void this.refreshToday({ now: true });
   }
 
   dismissOffer(compositionId: string): void {
     this.pendingOffers = this.pendingOffers.filter((o) => o.compositionId !== compositionId);
-    void this.refreshToday();
+    void this.refreshToday({ now: true });
   }
 
   /** `POST /feedback/submit` with what an Obsidian plugin can honestly say about itself. */
@@ -1556,7 +1558,7 @@ export default class AskMyuPlugin extends Plugin {
     notifyStatus(`Brought in ${total} ${total === 1 ? 'note' : 'notes'}.`);
     this.settings.backfill_done = true;
     void this.saveSettings();
-    void this.refreshToday();
+    void this.refreshToday({ now: true });
   }
 
   /**
@@ -1618,7 +1620,7 @@ export default class AskMyuPlugin extends Plugin {
     const changed = next.length !== this.pendingTransfers.length
       || next.some((r, i) => r.request_id !== this.pendingTransfers[i]?.request_id);
     this.pendingTransfers = next;
-    if (changed) { void this.refreshToday(); this.settingTab?.refreshIfVisible(); }
+    if (changed) { void this.refreshToday({ now: true }); this.settingTab?.refreshIfVisible(); }
   }
 
   /**
@@ -1671,7 +1673,7 @@ export default class AskMyuPlugin extends Plugin {
         this.settings.myu_file_hashes = {};
         await this.saveSettings();
         notifyStatus(`Removed ${trashed} ${trashed === 1 ? 'file' : 'files'} \u2014 they are in the trash.`);
-        void this.refreshToday();
+        void this.refreshToday({ now: true });
       })();
     }).open();
   }
@@ -1703,7 +1705,7 @@ export default class AskMyuPlugin extends Plugin {
     this.backfillActive = false;
     this.materializeProgress = null;
     this.setStatusBar(this.unlock.current, this.lastStateDetail);
-    if (result.stopped) { notifyStatus('Stopped. What was sent stays sent; press Start again to continue \u2014 notes already in are skipped.'); void this.refreshToday(); return; }
+    if (result.stopped) { notifyStatus('Stopped. What was sent stays sent; press Start again to continue \u2014 notes already in are skipped.'); void this.refreshToday({ now: true }); return; }
     this.reportBackfillFinished(files.length);
   }
 
@@ -1798,7 +1800,7 @@ export default class AskMyuPlugin extends Plugin {
     if (this.unlock.current !== 'unlocked' || !this.settings.materialize_consented) { notifyError('Sign in and allow Myu to write first (Settings \u2192 askMyu).'); return; }
     await this.materializer.materializeAll();
     this.lastSyncAt = Date.now();
-    void this.refreshToday();
+    void this.refreshToday({ now: true });
   }
 
   /** Everything Myu knows, as files — plus the receipt. */

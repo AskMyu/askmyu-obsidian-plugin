@@ -20,17 +20,17 @@ export class PersonActionConfirmModal extends Modal {
     contentEl.createEl('p', { cls: 'myu-prose', text: this.copy.body });
     new Setting(contentEl)
       .addButton((b) => b.setButtonText('Not now').onClick(() => this.answer(false)))
-      .addButton((b) => b.setButtonText(this.copy.cta).setWarning().onClick(() => this.answer(true)));
+      .addButton((b) => b.setButtonText(this.copy.cta).setDestructive().onClick(() => this.answer(true)));
   }
 
   private answer(yes: boolean): void {
     this.answered = true;
     this.close();
-    this.onAnswer(yes);
+    void this.onAnswer(yes);
   }
 
   override onClose(): void {
     this.contentEl.empty();
-    if (!this.answered) { this.answered = true; this.onAnswer(false); }
+    if (!this.answered) { this.answered = true; void this.onAnswer(false); }
   }
 }

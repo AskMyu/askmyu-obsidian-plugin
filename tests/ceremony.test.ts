@@ -2377,27 +2377,16 @@ test('settings — a fetch that FAILED is said in the reader\'s words, never pai
   assert.match(loadFailure({ ok: false, status: 404, error: 'http_404' })!, /answered 404/);
 });
 
-test('settings — rerender goes through update() on 1.13 (definitions, one order) and display() before it', async () => {
+test('settings — rerender is update(): the definitions are re-read and the active tab repainted; no legacy display() remains', async () => {
   const { AskMyuSettingTab } = await import('../src/views/SettingsTab');
   const log: string[] = [];
-  const modern = { update: () => log.push('update'), settingItems: [{}], display: () => log.push('display') };
-  AskMyuSettingTab.prototype.rerender.call(modern as never);
-  const legacy = { display: () => log.push('display') };
-  AskMyuSettingTab.prototype.rerender.call(legacy as never);
-  // 1.13 before registration (update exists, nothing to render from): display() is what paints.
-  const unregistered = { update: () => log.push('update'), settingItems: [], display: () => log.push('display') };
-  AskMyuSettingTab.prototype.rerender.call(unregistered as never);
-  assert.deepEqual(log, ['update', 'display', 'display']);
-
+  AskMyuSettingTab.prototype.rerender.call({ update: () => log.push('update') } as never);
+  assert.deepEqual(log, ['update']);
   const src = await (await import('node:fs/promises')).readFile('src/views/SettingsTab.ts', 'utf8');
-  assert.equal((src.match(/this\.display\(\)/g) ?? []).length, 1, 'display() is called from rerender() and nowhere else');
-  // The legacy display() paints the sections in the definitions' order, so a
-  // pre-1.13 host and a 1.13 host agree on where everything is.
-  const defs = [...src.matchAll(/section\((?:'[^']+'|"[^"]+"), \[[^\]]*\], \(r\) => this\.(render\w+)\(r, false\)/g)].map((m) => m[1]);
-  const body = src.slice(src.indexOf('override display(): void {'), src.indexOf('// ── P8: the shared surface'));
-  const legacyOrder = [...body.matchAll(/this\.(render\w+)\(containerEl\)/g)].map((m) => m[1]);
-  assert.equal(defs.length, 8);
-  assert.deepEqual(legacyOrder, defs, 'display() and getSettingDefinitions() paint the same order');
+  assert.ok(!/override display\(\)/.test(src) && !/this\.display\(\)/.test(src), 'display() is gone with the 1.13 floor');
+  assert.ok(!/withHeading/.test(src), 'sections carry no legacy heading switch');
+  const defs = [...src.matchAll(/section\((?:'[^']+'|"[^"]+"), \[[^\]]*\], \(r\) => this\.(render\w+)\(r\)/g)].map((m) => m[1]);
+  assert.equal(defs.length, 8, 'eight sections, all definitions');
 });
 
 test('transport — a burst of 401s shares ONE re-mint, and each refused request is sent again on the new session', async () => {
@@ -2652,7 +2641,7 @@ test('weave — the pane renders the guide, adds a copy button only where Obsidi
 test('settings — Weave Myu in is one row with one door; the look links to the real file on GitHub', async () => {
   const src = await (await import('node:fs/promises')).readFile('src/views/SettingsTab.ts', 'utf8');
   const weave = src.slice(src.indexOf('private renderIntegrations('), src.indexOf('* The account itself'));
-  assert.equal((weave.match(/new Setting\(/g) ?? []).length, 2, 'the heading row (legacy) and the one recipes row — nothing else');
+  assert.equal((weave.match(/new Setting\(/g) ?? []).length, 1, 'one recipes row — nothing else');
   assert.ok(!/'Copy'/.test(weave), 'no blind Copy buttons remain');
   assert.ok(/openWeave\(\)/.test(weave), 'the row opens the pane');
   assert.ok(src.includes("const MYU_LOOK_URL = 'https://github.com/AskMyu/askmyu-obsidian-plugin/raw/main/snippets/myu-look.css'"), 'the look points at the raw file');
@@ -3033,13 +3022,31 @@ test('refresh gate — fifty asks in a burst are two fetches; the person\'s own 
   resolveRun!();
   await Promise.all(during);
   assert.deepEqual(log, ['sleep:5000', 'run@110000'], 'ten asks in a gap are one fetch after it');
+  // An urgent ask that lands DURING a gap wait cuts it short (a state change
+  // used to sit behind a paced request's five seconds — the sign-in pane
+  // showed the previous screen, 2026-09-03).
+  {
+    let release: (() => void) | null = null;
+    const slow = { now: () => t, sleep: () => new Promise<void>((r) => { release = r; }) };
+    const held = new RefreshGate(async () => { log.push(`held-run@${t}`); }, 5_000, slow);
+    log.length = 0;
+    t = 200_000;
+    await held.request();                         // first: runs at once, sets `last`
+    const paced = held.request();                 // inside the gap: begins a wait that never ends on its own
+    await new Promise((r) => setTimeout(r, 0));
+    assert.equal(held.runs, 1, 'the paced ask is waiting');
+    const urgent = held.request({ now: true });   // the person's ask wakes it
+    await Promise.all([paced, urgent]);
+    assert.equal(held.runs, 2, 'the wait was cut short and the run happened');
+    assert.ok(release !== null, 'the slow sleep was indeed in progress');
+  }
   // The person presses Sync: no gap for them.
   log.length = 0;
   const p = gate.request({ now: true });
   await new Promise((r) => setTimeout(r, 0));
   resolveRun!();
   await p;
-  assert.deepEqual(log, ['run@110000'], 'immediate');
+  assert.deepEqual(log, ['run@200000'], 'immediate');
 });
 
 test('Today — a progress line repaints one row and fetches nothing', async () => {

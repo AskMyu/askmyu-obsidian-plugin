@@ -214,7 +214,7 @@ export class MaterializationService {
     this.deps.onProgress(`Myu is writing your meeting history — ${i} of ${total} · ${title}`);
     await this.paced();
     const detail = await this.deps.api().getMeetingDetail(id).catch(() => null);
-    const d = detail?.data as Record<string, unknown> | null | undefined;
+    const d: Record<string, unknown> | null | undefined = detail?.data;
     const full = d?.meeting;
     let meeting = row;
     if (full && typeof full === 'object') {
@@ -768,7 +768,7 @@ export class MaterializationService {
     const folder = normalizePath(`${this.folder}/People`);
     for (const file of this.deps.app.vault.getMarkdownFiles()) {
       if (!file.path.startsWith(`${folder}/`)) continue;
-      const fm = this.deps.app.metadataCache.getFileCache(file)?.frontmatter as Record<string, unknown> | undefined;
+      const fm: Record<string, unknown> | undefined = this.deps.app.metadataCache.getFileCache(file)?.frontmatter;
       if (fm?.['myu-id'] !== entityId) continue;
       // FileManager.trashFile respects the user's own deletion preference
       // (system trash vs .trash folder); Vault.trash(file, true) overrode it.

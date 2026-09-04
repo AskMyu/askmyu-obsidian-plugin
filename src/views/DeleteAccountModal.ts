@@ -62,7 +62,7 @@ export class DeleteAccountModal extends Modal {
       .addButton((b) =>
         b
           .setButtonText('Delete everything')
-          .setWarning()
+          .setDestructive()
           .onClick(async () => {
             if (this.typed !== CONFIRMATION) {
               notifyError(`Type ${CONFIRMATION} exactly to confirm.`);

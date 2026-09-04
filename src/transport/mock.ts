@@ -302,7 +302,7 @@ export class MockApi implements AskMyuApi {
 
   async getCard(entityType: CardEntityType, entityId: string) {
     const res = await this.getCardBase(entityType, entityId);
-    const card = res.ok ? (res.data?.card as import('./api').CardSpecLite | undefined) : undefined;
+    const card = res.ok ? res.data?.card : undefined;
     if (entityType === 'person' && card) {
       // per_card_offer on, no mail connected: the server composes the offer.
       const name = card.header?.display_name ?? (card.header as { title?: string } | undefined)?.title ?? 'them';
@@ -321,7 +321,7 @@ export class MockApi implements AskMyuApi {
     return res;
   }
 
-  private async getCardBase(entityType: CardEntityType, entityId: string) {
+  private async getCardBase(entityType: CardEntityType, entityId: string): Promise<ApiResponse<{ card?: CardSpecLite }>> {
     const offline = this.guard<{ card?: CardSpecLite }>();
     if (offline) return offline;
 
@@ -676,7 +676,7 @@ export class MockApi implements AskMyuApi {
   async uploadIcs(bytes: ArrayBuffer): Promise<ApiResponse<{ success?: boolean; events_stored?: number; error?: string }>> { return this.guard<{ success?: boolean }>() ?? ok({ success: true, events_stored: Math.max(1, Math.round(bytes.byteLength / 400)) }); }
   async createCareerTrajectory(): Promise<ApiResponse<{ success?: boolean; composition?: CompositionSpecLite; composition_id?: string }>> {
     const offline = this.guard<{ success?: boolean }>(); if (offline) return offline;
-    return ok({ success: true, composition_id: 'mock-career', composition: { id: 'mock-career', summary_text: 'Builder to operator', components: [{ id: 'ct', type: 'career_trajectory', data: { pattern_name: 'Builder to operator', current_phase_name: 'Scaling', current_phase_description: 'Hiring faster than delegating.', phases: [{ id: 'p2', name: 'Scaling', description: 'Hiring.', status: 'current' }] } }] } as CompositionSpecLite });
+    return ok({ success: true, composition_id: 'mock-career', composition: { id: 'mock-career', summary_text: 'Builder to operator', components: [{ id: 'ct', type: 'career_trajectory', data: { pattern_name: 'Builder to operator', current_phase_name: 'Scaling', current_phase_description: 'Hiring faster than delegating.', phases: [{ id: 'p2', name: 'Scaling', description: 'Hiring.', status: 'current' }] } }] } });
   }
   async googleOAuthDisconnect(): Promise<ApiResponse<{ success?: boolean; message?: string }>> { return this.guard<{ success?: boolean }>() ?? ok({ success: true, message: 'Disconnected' }); }
   async googleSetPrimaryCredential(): Promise<ApiResponse<{ success?: boolean; message?: string }>> { return this.guard<{ success?: boolean }>() ?? ok({ success: true, message: 'Primary set' }); }

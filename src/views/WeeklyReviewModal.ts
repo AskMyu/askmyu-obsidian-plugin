@@ -51,7 +51,7 @@ export class WeeklyReviewModal extends Modal {
     new Setting(contentEl)
       .addButton((b) =>
         b.setButtonText('No, keep it out of my vault').onClick(() => {
-          this.onDecision(false);
+          void this.onDecision(false);
           this.close();
         }),
       )
@@ -60,7 +60,7 @@ export class WeeklyReviewModal extends Modal {
           .setButtonText('Yes, write it')
           .setCta()
           .onClick(() => {
-            this.onDecision(true);
+            void this.onDecision(true);
             this.close();
           }),
       );

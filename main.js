@@ -36,9 +36,9 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
 
-// ../../node_modules/event-source-polyfill/src/eventsource.js
+// node_modules/event-source-polyfill/src/eventsource.js
 var require_eventsource = __commonJS({
-  "../../node_modules/event-source-polyfill/src/eventsource.js"(exports, module2) {
+  "node_modules/event-source-polyfill/src/eventsource.js"(exports, module2) {
     (function(global) {
       "use strict";
       var setTimeout = global.setTimeout;
@@ -2093,45 +2093,54 @@ var SignupModal = class extends import_obsidian7.Modal {
 // src/views/SetupRecoveryModal.ts
 var import_obsidian8 = require("obsidian");
 
-// ../../node_modules/@noble/hashes/utils.js
+// node_modules/@noble/hashes/utils.js
 function isBytes(a) {
-  return a instanceof Uint8Array || ArrayBuffer.isView(a) && a.constructor.name === "Uint8Array";
+  return a instanceof Uint8Array || ArrayBuffer.isView(a) && a.constructor.name === "Uint8Array" && "BYTES_PER_ELEMENT" in a && a.BYTES_PER_ELEMENT === 1;
 }
+var atitle = (title) => title ? `"${title}" ` : "";
 function anumber(n, title = "") {
-  if (!Number.isSafeInteger(n) || n < 0) {
-    const prefix = title && `"${title}" `;
-    throw new Error(`${prefix}expected integer >= 0, got ${n}`);
-  }
+  if (typeof n !== "number")
+    throw new TypeError(atitle(title) + "expected number, got " + typeof n);
+  if (!Number.isSafeInteger(n) || n < 0)
+    throw new RangeError(atitle(title) + "expected integer >= 0, got " + n);
+  return n;
 }
 function abytes(value, length, title = "") {
+  if (isBytes(value) && (length === void 0 || value.length === length))
+    return value;
+  if (length !== void 0)
+    anumber(length, "length");
   const bytes = isBytes(value);
-  const len = value?.length;
-  const needsLen = length !== void 0;
-  if (!bytes || needsLen && len !== length) {
-    const prefix = title && `"${title}" `;
-    const ofLen = needsLen ? ` of length ${length}` : "";
-    const got = bytes ? `length=${len}` : `type=${typeof value}`;
-    throw new Error(prefix + "expected Uint8Array" + ofLen + ", got " + got);
-  }
-  return value;
+  const ofLen = length !== void 0 ? ` of length ${length}` : "";
+  const got = bytes ? `length=${value.length}` : `type=${typeof value}`;
+  const message = atitle(title) + "expected Uint8Array" + ofLen + ", got " + got;
+  if (!bytes)
+    throw new TypeError(message);
+  throw new RangeError(message);
 }
 function ahash(h) {
   if (typeof h !== "function" || typeof h.create !== "function")
-    throw new Error("Hash must wrapped by utils.createHasher");
+    throw new TypeError("expected hash wrapped by utils.createHasher");
   anumber(h.outputLen);
   anumber(h.blockLen);
+  if (h.outputLen < 1 || h.blockLen < 1)
+    throw new Error("hash blockLen / outputLen must be >= 1");
 }
+var aobject = (value, label) => {
+  if (value === null || typeof value !== "object" || Array.isArray(value))
+    throw new TypeError((label === "object" ? "" : `"${label}" `) + "expected object, got type=" + typeof value);
+};
 function aexists(instance, checkFinished = true) {
   if (instance.destroyed)
-    throw new Error("Hash instance has been destroyed");
+    throw new Error("hash was destroyed");
   if (checkFinished && instance.finished)
-    throw new Error("Hash#digest() has already been called");
+    throw new Error("digest() was already called");
 }
 function aoutput(out, instance) {
-  abytes(out, void 0, "digestInto() output");
+  abytes(out, void 0, "output");
   const min = instance.outputLen;
-  if (out.length < min) {
-    throw new Error('"digestInto() output" expected to be of length >=' + min);
+  if (!(out.length >= min)) {
+    throw new RangeError('"output" expected length >= ' + min);
   }
 }
 function clean(...arrays) {
@@ -2148,6 +2157,10 @@ function rotr(word, shift) {
 var nextTick = async () => {
 };
 async function asyncLoop(iters, tick, cb) {
+  anumber(iters, "iters");
+  anumber(tick, "tick");
+  if (typeof cb !== "function")
+    throw new TypeError("callback must be a function");
   let ts = Date.now();
   for (let i = 0; i < iters; i++) {
     cb(i);
@@ -2160,7 +2173,7 @@ async function asyncLoop(iters, tick, cb) {
 }
 function utf8ToBytes(str5) {
   if (typeof str5 !== "string")
-    throw new Error("string expected");
+    throw new TypeError("string expected");
   return new Uint8Array(new TextEncoder().encode(str5));
 }
 function kdfInputToBytes(data, errorTitle = "") {
@@ -2168,45 +2181,56 @@ function kdfInputToBytes(data, errorTitle = "") {
     return utf8ToBytes(data);
   return abytes(data, void 0, errorTitle);
 }
-function checkOpts(defaults, opts) {
-  if (opts !== void 0 && {}.toString.call(opts) !== "[object Object]")
-    throw new Error("options must be object or undefined");
+function checkOpts(defaults, opts, title = "opts") {
+  aobject(defaults, "defaults");
+  if (opts !== void 0)
+    aobject(opts, title);
   const merged = Object.assign(defaults, opts);
   return merged;
 }
 function createHasher(hashCons, info = {}) {
+  if (typeof hashCons !== "function")
+    throw new TypeError('"hashCons" expected function, got type=' + typeof hashCons);
+  info = checkOpts({}, info, "info");
   const hashC = (msg, opts) => hashCons(opts).update(msg).digest();
   const tmp = hashCons(void 0);
   hashC.outputLen = tmp.outputLen;
   hashC.blockLen = tmp.blockLen;
+  hashC.canXOF = tmp.canXOF;
   hashC.create = (opts) => hashCons(opts);
   Object.assign(hashC, info);
   return Object.freeze(hashC);
 }
 function randomBytes(bytesLength = 32) {
+  anumber(bytesLength, "bytesLength");
   const cr = typeof globalThis === "object" ? globalThis.crypto : null;
   if (typeof cr?.getRandomValues !== "function")
     throw new Error("crypto.getRandomValues must be defined");
+  if (bytesLength > 65536)
+    throw new RangeError(`"bytesLength" expected <= 65536, got ${bytesLength}`);
   return cr.getRandomValues(new Uint8Array(bytesLength));
 }
 var oidNist = (suffix) => ({
+  // Current NIST hashAlgs suffixes used here fit in one DER subidentifier octet.
+  // Larger suffix values would need base-128 OID encoding and a different length byte.
   oid: Uint8Array.from([6, 9, 96, 134, 72, 1, 101, 3, 4, 2, suffix])
 });
 
-// ../../node_modules/@noble/hashes/hmac.js
+// node_modules/@noble/hashes/hmac.js
 var _HMAC = class {
   constructor(hash, key) {
     __publicField(this, "oHash");
     __publicField(this, "iHash");
     __publicField(this, "blockLen");
     __publicField(this, "outputLen");
+    __publicField(this, "canXOF", false);
     __publicField(this, "finished", false);
     __publicField(this, "destroyed", false);
     ahash(hash);
     abytes(key, void 0, "key");
     this.iHash = hash.create();
     if (typeof this.iHash.update !== "function")
-      throw new Error("Expected instance of class which extends utils.Hash");
+      throw new Error("expected Hash instance");
     this.blockLen = this.iHash.blockLen;
     this.outputLen = this.iHash.outputLen;
     const blockLen = this.blockLen;
@@ -2228,11 +2252,12 @@ var _HMAC = class {
   }
   digestInto(out) {
     aexists(this);
-    abytes(out, this.outputLen, "output");
+    aoutput(out, this);
     this.finished = true;
-    this.iHash.digestInto(out);
-    this.oHash.update(out);
-    this.oHash.digestInto(out);
+    const buf = out.subarray(0, this.outputLen);
+    this.iHash.digestInto(buf);
+    this.oHash.update(buf);
+    this.oHash.digestInto(buf);
     this.destroy();
   }
   digest() {
@@ -2242,12 +2267,13 @@ var _HMAC = class {
   }
   _cloneInto(to) {
     to || (to = Object.create(Object.getPrototypeOf(this), {}));
-    const { oHash, iHash, finished, destroyed, blockLen, outputLen } = this;
+    const { oHash, iHash, finished, destroyed, blockLen, outputLen, canXOF } = this;
     to = to;
     to.finished = finished;
     to.destroyed = destroyed;
     to.blockLen = blockLen;
     to.outputLen = outputLen;
+    to.canXOF = canXOF;
     to.oHash = oHash._cloneInto(to.oHash);
     to.iHash = iHash._cloneInto(to.iHash);
     return to;
@@ -2261,10 +2287,13 @@ var _HMAC = class {
     this.iHash.destroy();
   }
 };
-var hmac = (hash, key, message) => new _HMAC(hash, key).update(message).digest();
-hmac.create = (hash, key) => new _HMAC(hash, key);
+var hmac = /* @__PURE__ */ (() => {
+  const hmac_ = ((hash, key, message) => new _HMAC(hash, key).update(message).digest());
+  hmac_.create = (hash, key) => new _HMAC(hash, key);
+  return hmac_;
+})();
 
-// ../../node_modules/@noble/hashes/pbkdf2.js
+// node_modules/@noble/hashes/pbkdf2.js
 function pbkdf2Init(hash, _password, _salt, _opts) {
   ahash(hash);
   const opts = checkOpts({ dkLen: 32, asyncTick: 10 }, _opts);
@@ -2273,43 +2302,108 @@ function pbkdf2Init(hash, _password, _salt, _opts) {
   anumber(dkLen, "dkLen");
   anumber(asyncTick, "asyncTick");
   if (c < 1)
-    throw new Error("iterations (c) must be >= 1");
-  const password = kdfInputToBytes(_password, "password");
-  const salt = kdfInputToBytes(_salt, "salt");
+    throw new Error('"c" (iterations) must be >= 1');
+  if (dkLen < 1)
+    throw new Error('"dkLen" must be >= 1');
+  if (dkLen > (2 ** 32 - 1) * hash.outputLen)
+    throw new Error("derived key too long");
+  const p = kdfInputToBytes(_password, "password");
+  const s2 = kdfInputToBytes(_salt, "salt");
   const DK = new Uint8Array(dkLen);
-  const PRF = hmac.create(hash, password);
-  const PRFSalt = PRF._cloneInto().update(salt);
-  return { c, dkLen, asyncTick, DK, PRF, PRFSalt };
+  const { iHash, oHash, outputLen } = hmac.create(hash, p);
+  const u = new Uint8Array(outputLen);
+  const eng = pbkdf2Engine(iHash, oHash, s2, u);
+  return { c, dkLen, asyncTick, DK, outputLen, eng };
 }
-function pbkdf2Output(PRF, PRFSalt, DK, prfW, u) {
-  PRF.destroy();
-  PRFSalt.destroy();
-  if (prfW)
-    prfW.destroy();
-  clean(u);
-  return DK;
+function pbkdf2Engine(iHash, oHash, salt, u) {
+  const counter = new Uint8Array(4);
+  const view = createView(counter);
+  const salted = iHash._cloneInto().update(salt);
+  const work = oHash._cloneInto();
+  const iClone = iHash._cloneInto;
+  const oClone = oHash._cloneInto;
+  return {
+    u1: (ti, Ti) => {
+      view.setInt32(0, ti, false);
+      salted._cloneInto(work).update(counter).digestInto(u);
+      oHash._cloneInto(work).update(u).digestInto(u);
+      Ti.set(u.subarray(0, Ti.length));
+    },
+    // Whole `F` inner loop for the sync variant: one optimized function owns the hot loop.
+    rounds: (c, Ti) => {
+      for (let ui = 1; ui < c; ui++) {
+        iClone.call(iHash, work).update(u).digestInto(u);
+        oClone.call(oHash, work).update(u).digestInto(u);
+        for (let i = 0; i < Ti.length; i++)
+          Ti[i] ^= u[i];
+      }
+    },
+    output: (DK) => {
+      iHash.destroy();
+      oHash.destroy();
+      salted.destroy();
+      work.destroy();
+      clean(u);
+      return DK;
+    }
+  };
 }
 async function pbkdf2Async(hash, password, salt, opts) {
-  const { c, dkLen, asyncTick, DK, PRF, PRFSalt } = pbkdf2Init(hash, password, salt, opts);
-  let prfW;
-  const arr2 = new Uint8Array(4);
-  const view = createView(arr2);
-  const u = new Uint8Array(PRF.outputLen);
-  for (let ti = 1, pos = 0; pos < dkLen; ti++, pos += PRF.outputLen) {
-    const Ti = DK.subarray(pos, pos + PRF.outputLen);
-    view.setInt32(0, ti, false);
-    (prfW = PRFSalt._cloneInto(prfW)).update(arr2).digestInto(u);
-    Ti.set(u.subarray(0, Ti.length));
+  const { c, dkLen, asyncTick, DK, outputLen, eng } = pbkdf2Init(hash, password, salt, opts);
+  for (let ti = 1, pos = 0; pos < dkLen; ti++, pos += outputLen) {
+    const Ti = DK.subarray(pos, pos + outputLen);
+    eng.u1(ti, Ti);
     await asyncLoop(c - 1, asyncTick, () => {
-      PRF._cloneInto(prfW).update(u).digestInto(u);
-      for (let i = 0; i < Ti.length; i++)
-        Ti[i] ^= u[i];
+      eng.rounds(2, Ti);
     });
   }
-  return pbkdf2Output(PRF, PRFSalt, DK, prfW, u);
+  return eng.output(DK);
 }
 
-// ../../node_modules/@noble/hashes/_md.js
+// node_modules/@noble/hashes/_u64.js
+var U32_MASK64 = /* @__PURE__ */ (() => BigInt(2 ** 32 - 1))();
+var _32n = /* @__PURE__ */ BigInt(32);
+function fromBig(n, le = false) {
+  if (le)
+    return { h: Number(n & U32_MASK64), l: Number(n >> _32n & U32_MASK64) };
+  return { h: Number(n >> _32n & U32_MASK64) | 0, l: Number(n & U32_MASK64) | 0 };
+}
+function split(lst, le = false) {
+  const len = lst.length;
+  let Ah = new Uint32Array(len);
+  let Al = new Uint32Array(len);
+  for (let i = 0; i < len; i++) {
+    const { h, l } = fromBig(lst[i], le);
+    [Ah[i], Al[i]] = [h, l];
+  }
+  return [Ah, Al];
+}
+var fromNumH = (n) => n / 2 ** 32 | 0;
+var fromNumL = (n) => n >>> 0;
+function setU64FromNum(view, byteOffset, n, isLE) {
+  const h = fromNumH(n);
+  const l = fromNumL(n);
+  view.setUint32(byteOffset, isLE ? l : h, isLE);
+  view.setUint32(byteOffset + 4, isLE ? h : l, isLE);
+}
+var shrSH = (h, _l, s2) => h >>> s2;
+var shrSL = (h, l, s2) => h << 32 - s2 | l >>> s2;
+var rotrSH = (h, l, s2) => h >>> s2 | l << 32 - s2;
+var rotrSL = (h, l, s2) => h << 32 - s2 | l >>> s2;
+var rotrBH = (h, l, s2) => h << 64 - s2 | l >>> s2 - 32;
+var rotrBL = (h, l, s2) => h >>> s2 - 32 | l << 64 - s2;
+function add(Ah, Al, Bh, Bl) {
+  const l = (Al >>> 0) + (Bl >>> 0);
+  return { h: Ah + Bh + (l / 2 ** 32 | 0) | 0, l: l | 0 };
+}
+var add3L = (Al, Bl, Cl) => (Al >>> 0) + (Bl >>> 0) + (Cl >>> 0);
+var add3H = (low, Ah, Bh, Ch) => Ah + Bh + Ch + (low / 2 ** 32 | 0) | 0;
+var add4L = (Al, Bl, Cl, Dl) => (Al >>> 0) + (Bl >>> 0) + (Cl >>> 0) + (Dl >>> 0);
+var add4H = (low, Ah, Bh, Ch, Dh) => Ah + Bh + Ch + Dh + (low / 2 ** 32 | 0) | 0;
+var add5L = (Al, Bl, Cl, Dl, El) => (Al >>> 0) + (Bl >>> 0) + (Cl >>> 0) + (Dl >>> 0) + (El >>> 0);
+var add5H = (low, Ah, Bh, Ch, Dh, Eh) => Ah + Bh + Ch + Dh + Eh + (low / 2 ** 32 | 0) | 0;
+
+// node_modules/@noble/hashes/_md.js
 function Chi(a, b, c) {
   return a & b ^ ~a & c;
 }
@@ -2320,6 +2414,7 @@ var HashMD = class {
   constructor(blockLen, outputLen, padOffset, isLE) {
     __publicField(this, "blockLen");
     __publicField(this, "outputLen");
+    __publicField(this, "canXOF", false);
     __publicField(this, "padOffset");
     __publicField(this, "isLE");
     // For partial updates less than block size
@@ -2341,24 +2436,28 @@ var HashMD = class {
     abytes(data);
     const { view, buffer, blockLen } = this;
     const len = data.length;
+    let processed = false;
     for (let pos = 0; pos < len; ) {
       const take = Math.min(blockLen - this.pos, len - pos);
       if (take === blockLen) {
         const dataView = createView(data);
         for (; blockLen <= len - pos; pos += blockLen)
           this.process(dataView, pos);
+        processed = true;
         continue;
       }
-      buffer.set(data.subarray(pos, pos + take), this.pos);
+      buffer.set(pos === 0 && take === len ? data : data.subarray(pos, pos + take), this.pos);
       this.pos += take;
       pos += take;
       if (this.pos === blockLen) {
         this.process(view, 0);
         this.pos = 0;
+        processed = true;
       }
     }
     this.length += data.length;
-    this.roundClean();
+    if (processed)
+      this.roundClean();
     return this;
   }
   digestInto(out) {
@@ -2368,23 +2467,20 @@ var HashMD = class {
     const { buffer, view, blockLen, isLE } = this;
     let { pos } = this;
     buffer[pos++] = 128;
-    clean(this.buffer.subarray(pos));
+    buffer.fill(0, pos);
     if (this.padOffset > blockLen - pos) {
       this.process(view, 0);
-      pos = 0;
+      buffer.fill(0);
     }
-    for (let i = pos; i < blockLen; i++)
-      buffer[i] = 0;
-    view.setBigUint64(blockLen - 8, BigInt(this.length * 8), isLE);
+    setU64FromNum(view, blockLen - 8, this.length * 8, isLE);
     this.process(view, 0);
-    const oview = createView(out);
+    this.roundClean();
+    const oview = out === buffer ? view : createView(out);
     const len = this.outputLen;
-    if (len % 4)
-      throw new Error("_sha2: outputLen must be aligned to 32bit");
     const outLen = len / 4;
     const state = this.get();
-    if (outLen > state.length)
-      throw new Error("_sha2: outputLen bigger than state");
+    if (len % 4 || outLen > state.length)
+      throw new Error("invalid outputLen");
     for (let i = 0; i < outLen; i++)
       oview.setUint32(4 * i, state[i], isLE);
   }
@@ -2395,15 +2491,13 @@ var HashMD = class {
     this.destroy();
     return res;
   }
-  _cloneInto(to) {
-    to || (to = new this.constructor());
-    to.set(...this.get());
-    const { blockLen, buffer, length, finished, destroyed, pos } = this;
+  _cloneIntoMeta(to) {
+    const { buffer, length, finished, destroyed, pos } = this;
     to.destroyed = destroyed;
     to.finished = finished;
     to.length = length;
     to.pos = pos;
-    if (length % blockLen)
+    if (pos)
       to.buffer.set(buffer);
     return to;
   }
@@ -2440,42 +2534,7 @@ var SHA512_IV = /* @__PURE__ */ Uint32Array.from([
   327033209
 ]);
 
-// ../../node_modules/@noble/hashes/_u64.js
-var U32_MASK64 = /* @__PURE__ */ BigInt(2 ** 32 - 1);
-var _32n = /* @__PURE__ */ BigInt(32);
-function fromBig(n, le = false) {
-  if (le)
-    return { h: Number(n & U32_MASK64), l: Number(n >> _32n & U32_MASK64) };
-  return { h: Number(n >> _32n & U32_MASK64) | 0, l: Number(n & U32_MASK64) | 0 };
-}
-function split(lst, le = false) {
-  const len = lst.length;
-  let Ah = new Uint32Array(len);
-  let Al = new Uint32Array(len);
-  for (let i = 0; i < len; i++) {
-    const { h, l } = fromBig(lst[i], le);
-    [Ah[i], Al[i]] = [h, l];
-  }
-  return [Ah, Al];
-}
-var shrSH = (h, _l, s2) => h >>> s2;
-var shrSL = (h, l, s2) => h << 32 - s2 | l >>> s2;
-var rotrSH = (h, l, s2) => h >>> s2 | l << 32 - s2;
-var rotrSL = (h, l, s2) => h << 32 - s2 | l >>> s2;
-var rotrBH = (h, l, s2) => h << 64 - s2 | l >>> s2 - 32;
-var rotrBL = (h, l, s2) => h >>> s2 - 32 | l << 64 - s2;
-function add(Ah, Al, Bh, Bl) {
-  const l = (Al >>> 0) + (Bl >>> 0);
-  return { h: Ah + Bh + (l / 2 ** 32 | 0) | 0, l: l | 0 };
-}
-var add3L = (Al, Bl, Cl) => (Al >>> 0) + (Bl >>> 0) + (Cl >>> 0);
-var add3H = (low, Ah, Bh, Ch) => Ah + Bh + Ch + (low / 2 ** 32 | 0) | 0;
-var add4L = (Al, Bl, Cl, Dl) => (Al >>> 0) + (Bl >>> 0) + (Cl >>> 0) + (Dl >>> 0);
-var add4H = (low, Ah, Bh, Ch, Dh) => Ah + Bh + Ch + Dh + (low / 2 ** 32 | 0) | 0;
-var add5L = (Al, Bl, Cl, Dl, El) => (Al >>> 0) + (Bl >>> 0) + (Cl >>> 0) + (Dl >>> 0) + (El >>> 0);
-var add5H = (low, Ah, Bh, Ch, Dh, Eh) => Ah + Bh + Ch + Dh + Eh + (low / 2 ** 32 | 0) | 0;
-
-// ../../node_modules/@noble/hashes/sha2.js
+// node_modules/@noble/hashes/sha2.js
 var SHA256_K = /* @__PURE__ */ Uint32Array.from([
   1116352408,
   1899447441,
@@ -2544,8 +2603,28 @@ var SHA256_K = /* @__PURE__ */ Uint32Array.from([
 ]);
 var SHA256_W = /* @__PURE__ */ new Uint32Array(64);
 var SHA2_32B = class extends HashMD {
-  constructor(outputLen) {
+  constructor(outputLen, IV) {
     super(64, outputLen, 8, false);
+    // We cannot use array here since array allows indexing by variable
+    // which means optimizer/compiler cannot use registers.
+    // Numeric initializers matter: starting the fields as `undefined` changes
+    // V8's field representation and makes sha256 3x slower (measured).
+    __publicField(this, "A", 0);
+    __publicField(this, "B", 0);
+    __publicField(this, "C", 0);
+    __publicField(this, "D", 0);
+    __publicField(this, "E", 0);
+    __publicField(this, "F", 0);
+    __publicField(this, "G", 0);
+    __publicField(this, "H", 0);
+    this.A = IV[0] | 0;
+    this.B = IV[1] | 0;
+    this.C = IV[2] | 0;
+    this.D = IV[3] | 0;
+    this.E = IV[4] | 0;
+    this.F = IV[5] | 0;
+    this.G = IV[6] | 0;
+    this.H = IV[7] | 0;
   }
   get() {
     const { A, B, C, D, E, F, G, H } = this;
@@ -2561,6 +2640,10 @@ var SHA2_32B = class extends HashMD {
     this.F = F | 0;
     this.G = G | 0;
     this.H = H | 0;
+  }
+  _cloneInto(to) {
+    (to || (to = new this.constructor())).set(...this.get());
+    return this._cloneIntoMeta(to);
   }
   process(view, offset) {
     for (let i = 0; i < 16; i++, offset += 4)
@@ -2601,23 +2684,14 @@ var SHA2_32B = class extends HashMD {
     clean(SHA256_W);
   }
   destroy() {
+    this.destroyed = true;
     this.set(0, 0, 0, 0, 0, 0, 0, 0);
     clean(this.buffer);
   }
 };
 var _SHA256 = class extends SHA2_32B {
   constructor() {
-    super(32);
-    // We cannot use array here since array allows indexing by variable
-    // which means optimizer/compiler cannot use registers.
-    __publicField(this, "A", SHA256_IV[0] | 0);
-    __publicField(this, "B", SHA256_IV[1] | 0);
-    __publicField(this, "C", SHA256_IV[2] | 0);
-    __publicField(this, "D", SHA256_IV[3] | 0);
-    __publicField(this, "E", SHA256_IV[4] | 0);
-    __publicField(this, "F", SHA256_IV[5] | 0);
-    __publicField(this, "G", SHA256_IV[6] | 0);
-    __publicField(this, "H", SHA256_IV[7] | 0);
+    super(32, SHA256_IV);
   }
 };
 var K512 = /* @__PURE__ */ (() => split([
@@ -2707,8 +2781,45 @@ var SHA512_Kl = /* @__PURE__ */ (() => K512[1])();
 var SHA512_W_H = /* @__PURE__ */ new Uint32Array(80);
 var SHA512_W_L = /* @__PURE__ */ new Uint32Array(80);
 var SHA2_64B = class extends HashMD {
-  constructor(outputLen) {
+  constructor(outputLen, IV) {
     super(128, outputLen, 16, false);
+    // We cannot use array here since array allows indexing by variable
+    // which means optimizer/compiler cannot use registers.
+    // h -- high 32 bits, l -- low 32 bits
+    // Numeric initializers matter: starting the fields as `undefined` changes
+    // V8's field representation and slows hashing down (measured on sha256).
+    __publicField(this, "Ah", 0);
+    __publicField(this, "Al", 0);
+    __publicField(this, "Bh", 0);
+    __publicField(this, "Bl", 0);
+    __publicField(this, "Ch", 0);
+    __publicField(this, "Cl", 0);
+    __publicField(this, "Dh", 0);
+    __publicField(this, "Dl", 0);
+    __publicField(this, "Eh", 0);
+    __publicField(this, "El", 0);
+    __publicField(this, "Fh", 0);
+    __publicField(this, "Fl", 0);
+    __publicField(this, "Gh", 0);
+    __publicField(this, "Gl", 0);
+    __publicField(this, "Hh", 0);
+    __publicField(this, "Hl", 0);
+    this.Ah = IV[0] | 0;
+    this.Al = IV[1] | 0;
+    this.Bh = IV[2] | 0;
+    this.Bl = IV[3] | 0;
+    this.Ch = IV[4] | 0;
+    this.Cl = IV[5] | 0;
+    this.Dh = IV[6] | 0;
+    this.Dl = IV[7] | 0;
+    this.Eh = IV[8] | 0;
+    this.El = IV[9] | 0;
+    this.Fh = IV[10] | 0;
+    this.Fl = IV[11] | 0;
+    this.Gh = IV[12] | 0;
+    this.Gl = IV[13] | 0;
+    this.Hh = IV[14] | 0;
+    this.Hl = IV[15] | 0;
   }
   // prettier-ignore
   get() {
@@ -2733,6 +2844,10 @@ var SHA2_64B = class extends HashMD {
     this.Gl = Gl | 0;
     this.Hh = Hh | 0;
     this.Hl = Hl | 0;
+  }
+  _cloneInto(to) {
+    (to || (to = new this.constructor())).set(...this.get());
+    return this._cloneIntoMeta(to);
   }
   process(view, offset) {
     for (let i = 0; i < 16; i++, offset += 4) {
@@ -2797,29 +2912,14 @@ var SHA2_64B = class extends HashMD {
     clean(SHA512_W_H, SHA512_W_L);
   }
   destroy() {
+    this.destroyed = true;
     clean(this.buffer);
     this.set(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
   }
 };
 var _SHA512 = class extends SHA2_64B {
   constructor() {
-    super(64);
-    __publicField(this, "Ah", SHA512_IV[0] | 0);
-    __publicField(this, "Al", SHA512_IV[1] | 0);
-    __publicField(this, "Bh", SHA512_IV[2] | 0);
-    __publicField(this, "Bl", SHA512_IV[3] | 0);
-    __publicField(this, "Ch", SHA512_IV[4] | 0);
-    __publicField(this, "Cl", SHA512_IV[5] | 0);
-    __publicField(this, "Dh", SHA512_IV[6] | 0);
-    __publicField(this, "Dl", SHA512_IV[7] | 0);
-    __publicField(this, "Eh", SHA512_IV[8] | 0);
-    __publicField(this, "El", SHA512_IV[9] | 0);
-    __publicField(this, "Fh", SHA512_IV[10] | 0);
-    __publicField(this, "Fl", SHA512_IV[11] | 0);
-    __publicField(this, "Gh", SHA512_IV[12] | 0);
-    __publicField(this, "Gl", SHA512_IV[13] | 0);
-    __publicField(this, "Hh", SHA512_IV[14] | 0);
-    __publicField(this, "Hl", SHA512_IV[15] | 0);
+    super(64, SHA512_IV);
   }
 };
 var sha256 = /* @__PURE__ */ createHasher(
@@ -2831,290 +2931,7 @@ var sha512 = /* @__PURE__ */ createHasher(
   /* @__PURE__ */ oidNist(3)
 );
 
-// ../../node_modules/@scure/base/index.js
-function isBytes2(a) {
-  return a instanceof Uint8Array || ArrayBuffer.isView(a) && a.constructor.name === "Uint8Array";
-}
-function isArrayOf(isString, arr2) {
-  if (!Array.isArray(arr2))
-    return false;
-  if (arr2.length === 0)
-    return true;
-  if (isString) {
-    return arr2.every((item) => typeof item === "string");
-  } else {
-    return arr2.every((item) => Number.isSafeInteger(item));
-  }
-}
-function afn(input) {
-  if (typeof input !== "function")
-    throw new Error("function expected");
-  return true;
-}
-function astr(label, input) {
-  if (typeof input !== "string")
-    throw new Error(`${label}: string expected`);
-  return true;
-}
-function anumber2(n) {
-  if (!Number.isSafeInteger(n))
-    throw new Error(`invalid integer: ${n}`);
-}
-function aArr(input) {
-  if (!Array.isArray(input))
-    throw new Error("array expected");
-}
-function astrArr(label, input) {
-  if (!isArrayOf(true, input))
-    throw new Error(`${label}: array of strings expected`);
-}
-function anumArr(label, input) {
-  if (!isArrayOf(false, input))
-    throw new Error(`${label}: array of numbers expected`);
-}
-// @__NO_SIDE_EFFECTS__
-function chain(...args) {
-  const id = (a) => a;
-  const wrap = (a, b) => (c) => a(b(c));
-  const encode = args.map((x) => x.encode).reduceRight(wrap, id);
-  const decode = args.map((x) => x.decode).reduce(wrap, id);
-  return { encode, decode };
-}
-// @__NO_SIDE_EFFECTS__
-function alphabet(letters) {
-  const lettersA = typeof letters === "string" ? letters.split("") : letters;
-  const len = lettersA.length;
-  astrArr("alphabet", lettersA);
-  const indexes = new Map(lettersA.map((l, i) => [l, i]));
-  return {
-    encode: (digits) => {
-      aArr(digits);
-      return digits.map((i) => {
-        if (!Number.isSafeInteger(i) || i < 0 || i >= len)
-          throw new Error(`alphabet.encode: digit index outside alphabet "${i}". Allowed: ${letters}`);
-        return lettersA[i];
-      });
-    },
-    decode: (input) => {
-      aArr(input);
-      return input.map((letter) => {
-        astr("alphabet.decode", letter);
-        const i = indexes.get(letter);
-        if (i === void 0)
-          throw new Error(`Unknown letter: "${letter}". Allowed: ${letters}`);
-        return i;
-      });
-    }
-  };
-}
-// @__NO_SIDE_EFFECTS__
-function join(separator = "") {
-  astr("join", separator);
-  return {
-    encode: (from) => {
-      astrArr("join.decode", from);
-      return from.join(separator);
-    },
-    decode: (to) => {
-      astr("join.decode", to);
-      return to.split(separator);
-    }
-  };
-}
-// @__NO_SIDE_EFFECTS__
-function padding(bits, chr = "=") {
-  anumber2(bits);
-  astr("padding", chr);
-  return {
-    encode(data) {
-      astrArr("padding.encode", data);
-      while (data.length * bits % 8)
-        data.push(chr);
-      return data;
-    },
-    decode(input) {
-      astrArr("padding.decode", input);
-      let end = input.length;
-      if (end * bits % 8)
-        throw new Error("padding: invalid, string should have whole number of bytes");
-      for (; end > 0 && input[end - 1] === chr; end--) {
-        const last = end - 1;
-        const byte = last * bits;
-        if (byte % 8 === 0)
-          throw new Error("padding: invalid, string has too much padding");
-      }
-      return input.slice(0, end);
-    }
-  };
-}
-function convertRadix(data, from, to) {
-  if (from < 2)
-    throw new Error(`convertRadix: invalid from=${from}, base cannot be less than 2`);
-  if (to < 2)
-    throw new Error(`convertRadix: invalid to=${to}, base cannot be less than 2`);
-  aArr(data);
-  if (!data.length)
-    return [];
-  let pos = 0;
-  const res = [];
-  const digits = Array.from(data, (d) => {
-    anumber2(d);
-    if (d < 0 || d >= from)
-      throw new Error(`invalid integer: ${d}`);
-    return d;
-  });
-  const dlen = digits.length;
-  while (true) {
-    let carry = 0;
-    let done = true;
-    for (let i = pos; i < dlen; i++) {
-      const digit = digits[i];
-      const fromCarry = from * carry;
-      const digitBase = fromCarry + digit;
-      if (!Number.isSafeInteger(digitBase) || fromCarry / from !== carry || digitBase - digit !== fromCarry) {
-        throw new Error("convertRadix: carry overflow");
-      }
-      const div = digitBase / to;
-      carry = digitBase % to;
-      const rounded = Math.floor(div);
-      digits[i] = rounded;
-      if (!Number.isSafeInteger(rounded) || rounded * to + carry !== digitBase)
-        throw new Error("convertRadix: carry overflow");
-      if (!done)
-        continue;
-      else if (!rounded)
-        pos = i;
-      else
-        done = false;
-    }
-    res.push(carry);
-    if (done)
-      break;
-  }
-  for (let i = 0; i < data.length - 1 && data[i] === 0; i++)
-    res.push(0);
-  return res.reverse();
-}
-var gcd = (a, b) => b === 0 ? a : gcd(b, a % b);
-var radix2carry = /* @__NO_SIDE_EFFECTS__ */ (from, to) => from + (to - gcd(from, to));
-var powers = /* @__PURE__ */ (() => {
-  let res = [];
-  for (let i = 0; i < 40; i++)
-    res.push(2 ** i);
-  return res;
-})();
-function convertRadix2(data, from, to, padding2) {
-  aArr(data);
-  if (from <= 0 || from > 32)
-    throw new Error(`convertRadix2: wrong from=${from}`);
-  if (to <= 0 || to > 32)
-    throw new Error(`convertRadix2: wrong to=${to}`);
-  if (/* @__PURE__ */ radix2carry(from, to) > 32) {
-    throw new Error(`convertRadix2: carry overflow from=${from} to=${to} carryBits=${/* @__PURE__ */ radix2carry(from, to)}`);
-  }
-  let carry = 0;
-  let pos = 0;
-  const max = powers[from];
-  const mask = powers[to] - 1;
-  const res = [];
-  for (const n of data) {
-    anumber2(n);
-    if (n >= max)
-      throw new Error(`convertRadix2: invalid data word=${n} from=${from}`);
-    carry = carry << from | n;
-    if (pos + from > 32)
-      throw new Error(`convertRadix2: carry overflow pos=${pos} from=${from}`);
-    pos += from;
-    for (; pos >= to; pos -= to)
-      res.push((carry >> pos - to & mask) >>> 0);
-    const pow = powers[pos];
-    if (pow === void 0)
-      throw new Error("invalid carry");
-    carry &= pow - 1;
-  }
-  carry = carry << to - pos & mask;
-  if (!padding2 && pos >= from)
-    throw new Error("Excess padding");
-  if (!padding2 && carry > 0)
-    throw new Error(`Non-zero padding: ${carry}`);
-  if (padding2 && pos > 0)
-    res.push(carry >>> 0);
-  return res;
-}
-// @__NO_SIDE_EFFECTS__
-function radix(num) {
-  anumber2(num);
-  const _256 = 2 ** 8;
-  return {
-    encode: (bytes) => {
-      if (!isBytes2(bytes))
-        throw new Error("radix.encode input should be Uint8Array");
-      return convertRadix(Array.from(bytes), _256, num);
-    },
-    decode: (digits) => {
-      anumArr("radix.decode", digits);
-      return Uint8Array.from(convertRadix(digits, num, _256));
-    }
-  };
-}
-// @__NO_SIDE_EFFECTS__
-function radix2(bits, revPadding = false) {
-  anumber2(bits);
-  if (bits <= 0 || bits > 32)
-    throw new Error("radix2: bits should be in (0..32]");
-  if (/* @__PURE__ */ radix2carry(8, bits) > 32 || /* @__PURE__ */ radix2carry(bits, 8) > 32)
-    throw new Error("radix2: carry overflow");
-  return {
-    encode: (bytes) => {
-      if (!isBytes2(bytes))
-        throw new Error("radix2.encode input should be Uint8Array");
-      return convertRadix2(Array.from(bytes), 8, bits, !revPadding);
-    },
-    decode: (digits) => {
-      anumArr("radix2.decode", digits);
-      return Uint8Array.from(convertRadix2(digits, bits, 8, revPadding));
-    }
-  };
-}
-function checksum(len, fn) {
-  anumber2(len);
-  afn(fn);
-  return {
-    encode(data) {
-      if (!isBytes2(data))
-        throw new Error("checksum.encode: input should be Uint8Array");
-      const sum = fn(data).slice(0, len);
-      const res = new Uint8Array(data.length + len);
-      res.set(data);
-      res.set(sum, data.length);
-      return res;
-    },
-    decode(data) {
-      if (!isBytes2(data))
-        throw new Error("checksum.decode: input should be Uint8Array");
-      const payload = data.slice(0, -len);
-      const oldChecksum = data.slice(-len);
-      const newChecksum = fn(payload).slice(0, len);
-      for (let i = 0; i < len; i++)
-        if (newChecksum[i] !== oldChecksum[i])
-          throw new Error("Invalid checksum");
-      return payload;
-    }
-  };
-}
-var utils = {
-  alphabet,
-  chain,
-  checksum,
-  convertRadix,
-  convertRadix2,
-  radix,
-  radix2,
-  join,
-  padding
-};
-
-// ../../node_modules/@scure/bip39/index.js
+// node_modules/@scure/bip39/index.js
 var isJapanese = (wordlist2) => wordlist2[0] === "\u3042\u3044\u3053\u304F\u3057\u3093";
 function nfkd(str5) {
   if (typeof str5 !== "string")
@@ -3131,36 +2948,80 @@ function normalize(str5) {
 function aentropy(ent) {
   abytes(ent);
   if (![16, 20, 24, 28, 32].includes(ent.length))
-    throw new Error("invalid entropy length");
+    throw new RangeError("invalid entropy length");
 }
 function generateMnemonic(wordlist2, strength = 128) {
   anumber(strength);
   if (strength % 32 !== 0 || strength > 256)
-    throw new TypeError("Invalid entropy");
+    throw new RangeError("Invalid entropy");
   return entropyToMnemonic(randomBytes(strength / 8), wordlist2);
 }
 var calcChecksum = (entropy) => {
   const bitsLeft = 8 - entropy.length / 4;
-  return new Uint8Array([sha256(entropy)[0] >> bitsLeft << bitsLeft]);
+  return sha256(entropy)[0] >> bitsLeft << bitsLeft;
 };
-function getCoder(wordlist2) {
+function awordlist(wordlist2) {
   if (!Array.isArray(wordlist2) || wordlist2.length !== 2048 || typeof wordlist2[0] !== "string")
-    throw new Error("Wordlist: expected array of 2048 strings");
+    throw new TypeError("Wordlist: expected array of 2048 strings");
   wordlist2.forEach((i) => {
     if (typeof i !== "string")
-      throw new Error("wordlist: non-string element: " + i);
+      throw new TypeError("wordlist: non-string element: " + i);
   });
-  return utils.chain(utils.checksum(1, calcChecksum), utils.radix2(11, true), utils.alphabet(wordlist2));
+}
+function encodeWords(entropy, wordlist2) {
+  awordlist(wordlist2);
+  const bytes = new Uint8Array(entropy.length + 1);
+  bytes.set(entropy);
+  bytes[entropy.length] = calcChecksum(entropy);
+  const words = [];
+  let carry = 0;
+  let bits = 0;
+  for (const byte of bytes) {
+    carry = carry << 8 | byte;
+    bits += 8;
+    if (bits >= 11) {
+      bits -= 11;
+      words.push(wordlist2[carry >>> bits & 2047]);
+      carry &= (1 << bits) - 1;
+    }
+  }
+  return words;
+}
+function decodeWords(words, wordlist2) {
+  awordlist(wordlist2);
+  const entLen = words.length / 3 * 4;
+  const bytes = new Uint8Array(entLen + 1);
+  let carry = 0;
+  let bits = 0;
+  let pos = 0;
+  for (const word of words) {
+    const index = wordlist2.indexOf(word);
+    if (index === -1)
+      throw new Error("Unknown word: " + word);
+    carry = carry << 11 | index;
+    bits += 11;
+    while (bits >= 8) {
+      bits -= 8;
+      bytes[pos++] = carry >>> bits & 255;
+    }
+    carry &= (1 << bits) - 1;
+  }
+  if (bits > 0)
+    bytes[pos] = carry << 8 - bits;
+  const entropy = bytes.subarray(0, entLen);
+  if (bytes[entLen] !== calcChecksum(entropy))
+    throw new Error("Invalid checksum");
+  return Uint8Array.from(entropy);
 }
 function mnemonicToEntropy(mnemonic, wordlist2) {
   const { words } = normalize(mnemonic);
-  const entropy = getCoder(wordlist2).decode(words);
+  const entropy = decodeWords(words, wordlist2);
   aentropy(entropy);
   return entropy;
 }
 function entropyToMnemonic(entropy, wordlist2) {
   aentropy(entropy);
-  const words = getCoder(wordlist2).encode(entropy);
+  const words = encodeWords(entropy, wordlist2);
   return words.join(isJapanese(wordlist2) ? "\u3000" : " ");
 }
 function validateMnemonic(mnemonic, wordlist2) {
@@ -3171,13 +3032,20 @@ function validateMnemonic(mnemonic, wordlist2) {
   }
   return true;
 }
-var psalt = (passphrase) => nfkd("mnemonic" + passphrase);
+var psalt = (passphrase) => {
+  if (typeof passphrase !== "string")
+    throw new TypeError("invalid passphrase type: " + typeof passphrase);
+  return nfkd("mnemonic" + passphrase);
+};
 function mnemonicToSeed(mnemonic, passphrase = "") {
-  return pbkdf2Async(sha512, normalize(mnemonic).nfkd, psalt(passphrase), { c: 2048, dkLen: 64 });
+  return pbkdf2Async(sha512, normalize(mnemonic).nfkd, psalt(passphrase), {
+    c: 2048,
+    dkLen: 64
+  });
 }
 
-// ../../node_modules/@scure/bip39/wordlists/english.js
-var wordlist = `abandon
+// node_modules/@scure/bip39/wordlists/english.js
+var wordlist = /* @__PURE__ */ Object.freeze(`abandon
 ability
 able
 about
@@ -5224,7 +5092,7 @@ youth
 zebra
 zero
 zone
-zoo`.split("\n");
+zoo`.split("\n"));
 
 // src/crypto/primitives.ts
 var cryptoRef = crypto;
@@ -20053,12 +19921,6 @@ event-source-polyfill/src/eventsource.js:
    * Available under MIT License (MIT)
    * https://github.com/Yaffle/EventSource/
    *)
-
-@noble/hashes/utils.js:
-  (*! noble-hashes - MIT License (c) 2022 Paul Miller (paulmillr.com) *)
-
-@scure/base/index.js:
-  (*! scure-base - MIT License (c) 2022 Paul Miller (paulmillr.com) *)
 
 @scure/bip39/index.js:
   (*! scure-bip39 - MIT License (c) 2022 Patricio Palladino, Paul Miller (paulmillr.com) *)

@@ -1241,7 +1241,7 @@ var DEVICE_PASSWORD_WORDS = {
   terminalWrong: "that password isn't right."
 };
 var webCrypto = () => {
-  const c = globalThis.crypto;
+  const c = typeof window !== "undefined" ? window.crypto : crypto;
   if (!c?.subtle) throw new Error("Web Crypto is not available here.");
   return c;
 };

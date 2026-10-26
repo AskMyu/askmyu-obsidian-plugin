@@ -4,6 +4,9 @@
  * password the person chooses (PBKDF2-SHA256, a random 16-byte salt, 600000 iterations); the server keeps the blob and
  * the parameters and can open nothing. Everything here is pure and runs on Web Crypto (the browser's, node's, the phone's
  * polyfill); the terminal keeps a word-for-word copy (`packages/cli/src/devicePassword.ts`).
+ *
+ * This is the Obsidian plugin's copy of shared `types/devicePassword.ts`: the same file but for `webCrypto` below
+ * (`tests/internal/devicePasswordParity.test.ts` holds everything else byte for byte).
  */
 
 /** The derivation the door takes: `POST /account/password/setup {wrapped_mdek_password, kdf}`. */
@@ -97,7 +100,10 @@ export function canSetPassword(password: string, again: string): boolean {
 
 // ── bytes ──
 const webCrypto = (): Crypto => {
-  const c = (globalThis as { crypto?: Crypto }).crypto;
+  // The plugin's one difference from shared: Obsidian's window, or node's global `crypto` under the tests, never the
+  // global object by its name, which the directory's scanner flags (obsidianmd/no-global-this). The parity test holds
+  // the rest of the file.
+  const c = typeof window !== 'undefined' ? window.crypto : crypto;
   if (!c?.subtle) throw new Error('Web Crypto is not available here.');
   return c;
 };

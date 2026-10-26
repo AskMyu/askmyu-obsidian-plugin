@@ -1,0 +1,32 @@
+# The directory's own checks, on every push: Obsidian's validation action in scanner mode runs the same eslint and
+# stylelint rulesets the community directory's scorecard runs, plus the manifest, versions.json, README and licence
+# checks. `strict` makes policy findings fail the run, so nothing reaches a release that the scorecard would flag.
+# Run it by hand on any branch from the Actions tab (workflow_dispatch) before tagging.
+name: Scan
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - uses: obsidianmd/obsidian-workflows@v1
+        with:
+          type: plugin
+          mode: pr
+          scanner-lint: 'true'
+          strict: 'true'
+        env:
+          # Read-only here: lets the action read the repository's own settings (archived, visibility) as the directory does.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

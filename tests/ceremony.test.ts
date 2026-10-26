@@ -2435,7 +2435,8 @@ test('read consent — names the one server and shows what each folder holds; th
   assert.match(write, /Myu writes one folder in your vault and keeps it up to date: a page for each/, 'the give, first');
   assert.match(write, /Remove everything Myu wrote/, 'and the way out, named');
   const readme = await fs.readFile('README.md', 'utf8');
-  for (const q of ['Can I self-host, or use it offline?', 'What exactly is sent?', 'Can I exclude my journal, or any note?', 'Will it touch my existing notes?', 'Can I change the folder?', 'How do I delete my data?']) assert.ok(readme.includes(q), `README answers: ${q}`);
+  // The six questions, in the README's plain wording (2026-10-26).
+  for (const q of ['Can I run my own server, or use it offline?', 'What exactly is sent?', 'Can I keep my journal, or any note, out of it?', 'Will it change my notes?', 'Can I change the folder?', 'How do I delete my data?']) assert.ok(readme.includes(q), `README answers: ${q}`);
   assert.ok(!/local-first|privacy-first|your notes never leave/i.test(readme + write), 'no banned phrases');
 });
 

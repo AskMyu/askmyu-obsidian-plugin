@@ -1,6 +1,6 @@
-# askMyu — Obsidian plugin
+# askMyu
 
-This plugin connects your Obsidian vault to askMyu. It sends the notes you choose to askMyu,
+The askMyu plugin for Obsidian connects your vault to askMyu. It sends the notes you choose to askMyu,
 encrypted before they leave your computer, and shows your day in a pane beside your notes.
 
 ![Obsidian with a meeting note open, the Myu folder in the file explorer, and the Today pane in the right sidebar listing the week's meetings with Prep and Capture buttons](docs/images/today-beside-notes.png)
@@ -184,6 +184,17 @@ services, no analytics, no ad networks.
 policy on askmyu.com, the askMyu web app, the look file on github.com, and a person's
 LinkedIn profile from their card. The page opens only when you press the button. The plugin
 itself never loads those sites.
+
+**Other web addresses in the code, never contacted.** A few more addresses appear in the
+plugin's code, and the plugin never connects to any of them:
+
+- Examples shown inside empty input fields, to show the expected format:
+  `calendar.google.com` (a calendar link), `docs.google.com` (a Google Doc link),
+  `caldav.fastmail.com` (a calendar server), `yourorg.zulipchat.com` (a Zulip address).
+- Made-up sample data in the built-in demo backend (Settings → askMyu → Use mock backend), which
+  runs entirely inside the plugin: `calendar.google.com`, `docs.google.com`, `slack.com`,
+  `accounts.google.com`, `login.microsoftonline.com`, `linkedin.com`.
+- `www.w3.org`, the standard name that marks an image as SVG when a canvas is saved.
 
 **Why some of it is encoded text.** Encrypted notes and locked keys are binary data. The
 plugin turns them into text (base64) to send them, and back again. That is the only encoding

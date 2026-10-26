@@ -46,7 +46,7 @@ export class BackfillModal extends Modal {
     const { contentEl } = this;
     contentEl.empty();
     contentEl.addClass('myu-power-down');
-    contentEl.createEl('h2', { text: 'Bring in what you have already written?' });
+    contentEl.createEl('h2', { text: 'Share the notes you have already written?' });
 
     const chosen = this.inRange();
     const folders = new Set(this.files.map((f) => f.path.split('/').slice(0, -1).join('/') || '/'));
@@ -56,10 +56,10 @@ export class BackfillModal extends Modal {
 
     new Setting(contentEl)
       .setName('How far back')
-      .setDesc(`${chosen.length} ${chosen.length === 1 ? 'note' : 'notes'} \u00b7 ${backfillEstimate(chosen.length)}. Each note keeps its own date; every note is encrypted on this device before it leaves.`)
+      .setDesc(`${chosen.length} ${chosen.length === 1 ? 'note' : 'notes'} \u00b7 ${backfillEstimate(chosen.length)}. Each note keeps its own date. Every note is encrypted on this device before it is sent.`)
       .addDropdown((d) => d.addOption('90d', 'Last 90 days').addOption('1y', 'Last year').addOption('all', 'Everything').setValue(this.range).onChange((v) => { this.range = v as BackfillRange; this.render(); }));
 
-    contentEl.createEl('p', { cls: 'myu-prose myu-quiet', text: 'Nothing leaves before you start it. It runs in the background \u2014 progress in the status bar, and a command to cancel. You can share only what you write from now on instead.' });
+    contentEl.createEl('p', { cls: 'myu-prose myu-quiet', text: 'Nothing is sent until you start it. It runs in the background; progress shows in the status bar, and there is a command to cancel. Or you can share only what you write from now on.' });
 
     new Setting(contentEl)
       .addButton((b) => b.setButtonText('Only from now on').onClick(() => { this.plugin.settings.backfill_done = true; void this.plugin.saveSettings(); this.close(); void this.plugin.refreshTodayNow(); }))

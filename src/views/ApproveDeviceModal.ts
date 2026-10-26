@@ -27,13 +27,13 @@ export class ApproveDeviceModal extends Modal {
   override onOpen(): void {
     const { contentEl } = this;
     contentEl.addClass('myu-power-down');
-    contentEl.createEl('h2', { text: 'Let this device in?' });
+    contentEl.createEl('h2', { text: 'Approve this new device?' });
     contentEl.createEl('p', {
       cls: 'myu-prose',
       text:
-        'The new device is showing a 4-digit code. Typing it here proves the ' +
-        'same person is holding both screens — then it gets its own key ' +
-        'custody, revocable from your device list any time.',
+        'The new device is showing a 4-digit code. Type it here to prove you have ' +
+        'both devices. The new device then gets its own copy of your key. You can ' +
+        'remove it from your device list at any time.',
     });
 
     new Setting(contentEl).setName('The code on the new device').addText((t) => {
@@ -56,7 +56,7 @@ export class ApproveDeviceModal extends Modal {
 
   private async approve(button: HTMLButtonElement): Promise<void> {
     if (this.working || this.code.length !== 4) {
-      if (this.code.length !== 4) notifyError('Four digits, from the new device’s screen.');
+      if (this.code.length !== 4) notifyError('Enter the 4-digit code shown on the new device.');
       return;
     }
     this.working = true;
@@ -68,7 +68,7 @@ export class ApproveDeviceModal extends Modal {
       this.close();
       this.onFinished();
     } else if (outcome === 'bad_code') {
-      notifyError('That code doesn’t match — read it again from the new device.');
+      notifyError('That code doesn’t match. Check the code on the new device and try again.');
       button.disabled = false;
     } else {
       notifyError('Approval failed — check the connection and try again.');

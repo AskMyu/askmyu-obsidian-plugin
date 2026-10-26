@@ -20,14 +20,23 @@
  *
  * The conversation can be SAVED (P6.3) — per-conversation `save`, exposure
  * modal, never automatic — via the vault-module ConversationWriter.
+ *
+ * Pasted text (2026-10-06): one long paste or drop becomes a chip above the box
+ * (views/pastedChips.ts) and goes beside the typed words as `pasted_blocks`; a
+ * sent turn shows it as folded cards under the typed words. Adding a chip
+ * redraws only the chip row, never the pane, so the box keeps its caret, focus
+ * and IME. A send that fails gives the box back its words and chips.
  */
 
 import { ItemView, WorkspaceLeaf, setIcon } from 'obsidian';
 import type AskMyuPlugin from '../main';
-import type { ChatBlock, ChatContext, SourceReferenceLite } from '../wire';
+import type { ChatBlock, ChatContext, PastedBlockWire, SourceReferenceLite } from '../wire';
 import { CanvasExportModal } from './CanvasExportModal';
 import { renderChatBlock, renderReferences, renderRelatedEntries } from './chatBlocks';
-import { canvasOnResume, canvasesOnResume, type ChatCanvasOptions, type DeliveredOffer } from '../transport/api';
+import { canvasOnResume, canvasesOnResume, type ChatCanvasOptions, type DeliveredOffer, type MyuLineLite } from '../transport/api';
+import { pressLineButton, type LineButton, type LineUi } from '../lineAnswers';
+import { renderLineAsk } from './lineAsk';
+import { lineIdAttr } from '../linesSeenWatch';
 import type { CompositionSpecLite, CompositionComponentLite } from '../wire';
 import { renderComponentActions } from './canvasActions';
 import { canvasAsksLine } from './canvasAsks';
@@ -37,13 +46,23 @@ import { linkedInAskInText, suggestionsOf, renderLinkedInMatchesInline, type Lin
 import { runOfferOption, offerSource } from './offerActions';
 import { canvasAfterTurn } from '../composition/afterTurn';
 import { ReplyRatingModal } from './ReplyRatingModal';
-import { listConversations, loadConversation } from '../conversations';
+import { listConversations, loadConversation, type ConversationHead } from '../conversations';
+import { SpaceConversation, type ConversationSubjectType, type SpaceConversationDeps } from '../spaceConversation';
+import { renderSpaceConversation, renderSpaceRetro, renderSpaceStatus, renderSpaceTabs } from './spaceConversationPane';
+import { SpaceRetroPanel, howThisWorksKey } from '../spaceRetro';
+import { PASTE_WORDS, PASTED_TEXT_TOO_LONG, canPutBack, chipAdded, chipsBack, pastedBlocksProblem, pastedTextLost, putBackText, undoChip, type PasteUndo } from '../pastedText';
+import { announce, attachPasteListeners, isUndoKey, pastedLiveRegion, renderPastedCards, renderPastedRow } from './pastedChips';
+import { PastedTextModal } from './PastedTextModal';
 
 export const CHAT_VIEW_TYPE = 'askmyu-chat';
 
 export interface ChatTurn {
   role: 'user' | 'myu';
   text?: string;
+  /** A user turn's pasted text (2026-10-06), beside its typed words. Never `blocks`, which are Myu's content. */
+  pasted?: PastedBlockWire[];
+  /** When it was said (ISO), when known: the feedback transcript's timestamp. */
+  at?: string;
   blocks?: ChatBlock[];
   /** Cited sources under a reply — the web's Sources footer. */
   references?: SourceReferenceLite[];
@@ -59,17 +78,36 @@ export interface ChatSeed {
   /** Template hint for the FIRST entry only (e.g. 'onboarding_moment') —
       influences backend routing/tone exactly as on the web. */
   templateType?: string;
+  /**
+   * Myu speaking first (F0, `talk ▸` on a row): its line on that row is its
+   * latest turn about the subject, so the conversation opens with it. Shown,
+   * not sent — the person's first message continues it.
+   */
+  opening?: string;
+  /**
+   * The opening's own line, when it is one of Myu's questions (2026-09-25): its choices show as
+   * buttons under it, answered with a tap, as on Today's row.
+   */
+  openingLine?: MyuLineLite;
+  /**
+   * Pasted text in the box as chips (2026-10-06): a note or a selection from the vault. With `send`, it goes at
+   * once beside `text` (a paste-only message when `text` is empty); without, it waits in the box.
+   */
+  pasted?: PastedBlockWire[];
 }
 
 export class ChatView extends ItemView {
   private turns: ChatTurn[] = [];
+  /** The question this conversation opened with, answered here with a tap (2026-09-25). */
+  private openingLine: MyuLineLite | null = null;
+  private openingUi: LineUi = {};
   /** P8.10 — the conversations browser: past entries, resumable in place. */
   private browsing = false;
   /** Panel behavior (2026-08-25): the chat FOLLOWS the active note like the
       extension panel follows the Gmail thread — grounding rides along unless
       the user mutes it. */
   private followActive = true;
-  private pastEntries: Array<{ journalId: string; day: string; preview: string }> | null = null;
+  private pastEntries: ConversationHead[] | null = null;
   /** The browser's search — the web's "Search journals…" box, over decrypted previews. */
   private pastQuery = '';
   /** 👍/👎 given, per Myu turn index — so a rating is shown, not repeatable. */
@@ -79,6 +117,30 @@ export class ChatView extends ItemView {
   private pendingTemplateType: string | null = null;
   private busy = false;
   private draft = '';
+  /** Pasted text in the box, as chips (2026-10-06): sent beside the draft, cleared with it. */
+  private pasted: PastedBlockWire[] = [];
+  /** The last paste that became a chip, while Undo can put it back inline (the hint shows until the next change). */
+  private undo: PasteUndo | null = null;
+  /** Words under the chips until the next change: the lost words after a send. */
+  private pastedNote: string | null = null;
+  /** The sent cards opened, by turn index and block id — kept across renders. */
+  private expanded = new Map<number, Set<string>>();
+  /** The same for a subject's conversation, by turn key. */
+  private spaceExpanded = new Map<string, Set<string>>();
+  /** The box, its chip row and Send, as drawn last: a chip redraws the row in place, never the pane. */
+  private inputEl: HTMLTextAreaElement | null = null;
+  private pastedRowEl: HTMLElement | null = null;
+  private sendEl: HTMLButtonElement | null = null;
+  /** The pane's live region: outside contentEl, which every render empties. */
+  private liveEl: HTMLElement | null = null;
+  /**
+   * Space mode (R14): when set, this pane is a SPACE's own conversation, not a
+   * journal thread. Typed words go into that conversation (`conversation_id`),
+   * where Myu reads them as this team's retro; a journal thread would not.
+   */
+  private space: SpaceConversation | null = null;
+  /** The team's retro for that space, behind one quiet line under the title. */
+  private spaceRetro: SpaceRetroPanel | null = null;
 
   constructor(
     leaf: WorkspaceLeaf,
@@ -103,10 +165,15 @@ export class ChatView extends ItemView {
     // Keyboard-first: the composer takes focus when the pane opens.
     queueMicrotask(() => this.contentEl.querySelector<HTMLTextAreaElement>('textarea.myu-chat-input')?.focus());
     this.contentEl.addClass('myu-today');
+    // One live region for the pane's announcements (a paste that became a chip), outside what render() empties.
+    this.liveEl = pastedLiveRegion(this.containerEl);
+    // "Seen" (2026-10-06): the question a chat opened on, and the one ask of a conversation, in view for a second.
+    this.plugin.linesSeen?.watch(this.contentEl);
     this.render();
   }
 
   override async onClose(): Promise<void> {
+    this.plugin.linesSeen?.unwatch(this.contentEl);
     this.contentEl.empty();
   }
 
@@ -117,22 +184,205 @@ export class ChatView extends ItemView {
    * attribute the old conversation to the new subject.
    */
   seed(seed: ChatSeed): void {
-    this.turns = [];
+    this.space = null;
+    this.spaceRetro = null;
+    this.turns = seed.opening?.trim() ? [{ role: 'myu', text: seed.opening.trim() }] : [];
+    this.openingLine = seed.opening?.trim() && seed.openingLine ? seed.openingLine : null;
+    this.openingUi = {};
     this.journalId = null;
     this.pendingContext = seed.context ?? null;
     this.pendingTemplateType = seed.templateType ?? null;
     this.draft = seed.send ? '' : seed.text;
+    this.pasted = seed.pasted ? [...seed.pasted] : [];
+    this.undo = null;
+    this.pastedNote = null;
+    this.expanded = new Map();
     this.render();
-    if (seed.send && seed.text.trim()) void this.send(seed.text);
+    if (seed.send && (seed.text.trim() || this.pasted.length > 0)) void this.send(seed.text);
+  }
+
+  /**
+   * Open a space's own conversation here (space mode). Returns false when the
+   * backend does not say `mode: "space"` for it (an older stack), so the caller
+   * can fall back. A read that FAILED stays here and says so: a space's words
+   * never fall through to a journal thread.
+   */
+  async openSpace(spaceId: string, label: string, opts: { retro?: boolean; debrief?: boolean } = {}): Promise<boolean> {
+    const space: SpaceConversation = new SpaceConversation(spaceId, label, this.conversationDeps(() => space));
+    const retro = new SpaceRetroPanel(spaceId, {
+      backend: this.plugin.backend,
+      onChange: () => {
+        if (this.spaceRetro === retro) this.render();
+      },
+      // R20: "How this works" opens the first time this account sees a retro page, and is closed after.
+      howSeen: {
+        seen: () => {
+          const account = this.plugin.settings.account_id;
+          return !!account && !!this.plugin.settings.retro_how_seen[howThisWorksKey(account)];
+        },
+        markSeen: () => {
+          const account = this.plugin.settings.account_id;
+          if (!account) return;
+          this.plugin.settings.retro_how_seen[howThisWorksKey(account)] = true;
+          void this.plugin.saveSettings();
+        },
+      },
+    });
+    this.browsing = false;
+    this.space = space;
+    this.spaceExpanded = new Map();
+    // An interview debrief has no retro page beside its conversation (Today says which it is; the read confirms it).
+    this.spaceRetro = opts.debrief ? null : retro;
+    this.openingLine = null;
+    this.openingUi = {};
+    const ok = await space.open();
+    if (!ok && space.opened && !space.isSpace) {
+      if (this.space === space) {
+        this.space = null;
+        this.spaceRetro = null;
+      }
+      return false;
+    }
+    if (space.isDebrief && this.space === space && this.spaceRetro) {
+      this.spaceRetro = null;
+      this.render();
+    }
+    // "see the retro ▸" on Today opens the space with the team's retro already showing.
+    if (opts.retro && this.spaceRetro === retro) void retro.show();
+    return true;
+  }
+
+  /** What a subject's conversation needs from the pane: the backend, the unlock, the journal, a repaint. */
+  private conversationDeps(self: () => SpaceConversation): SpaceConversationDeps {
+    return {
+      backend: this.plugin.backend,
+      // The same re-escrow the transport uses when a call is refused for the key.
+      unlock: () => this.plugin.unlock.onEncryptionBlocked(),
+      // "Take it there": a blank journal conversation with the text in the box, unsent.
+      openJournal: (text) => {
+        this.startNew();
+        this.draft = text;
+        this.render();
+      },
+      onChange: () => {
+        if (this.space === self()) this.render();
+      },
+      apiBase: this.plugin.settings.base_url,
+      openPage: (url) => window.open(url, '_blank'),
+      openConversation: (ref) => void this.plugin.openConversationRef(ref, self().screen().title),
+      // An ask settled here leaves its row on Today: read the list again.
+      onAnswered: () => this.plugin.requestTodayRefresh(),
+    };
+  }
+
+  /**
+   * Open a line's own conversation here (2026-10-03): the account's "About you" question, whose second half takes
+   * several picks and whose "Someone else" takes a typed name — or any other line answered that way about a
+   * person or a company. One ask at a time with its buttons, as a meeting's conversation. The account's own has
+   * no conversation door; its asks come from the lines list, and what Myu says back is said in place.
+   */
+  async openSubject(type: ConversationSubjectType, id: string, label: string): Promise<boolean> {
+    if (type === 'space') return this.openSpace(id, label);
+    if (type === 'meeting') return this.openMeeting(id, label);
+    const subject: SpaceConversation = new SpaceConversation(id, label, this.conversationDeps(() => subject), { type });
+    this.browsing = false;
+    this.space = subject;
+    this.spaceExpanded = new Map();
+    this.spaceRetro = null;
+    this.openingLine = null;
+    this.openingUi = {};
+    return subject.open();
+  }
+
+  /**
+   * Open a meeting's own conversation here (2026-09-30): the question before it, the arc's session
+   * (Myu's first turn: the homework and one question), "Anything you didn't say in there?" and the
+   * Yes/No after it. One ask at a time with its buttons; typed words go into this conversation
+   * (`POST /journal_chats/add` with its id), where Myu reads them as the answer. `occurrenceKey`
+   * is the occurrence's start in ms, when the door knows it (a line, the arc's Now).
+   */
+  async openMeeting(eventId: string, label: string, occurrenceKey?: string): Promise<boolean> {
+    const meeting: SpaceConversation = new SpaceConversation(eventId, label, this.conversationDeps(() => meeting), {
+      type: 'meeting',
+      ...(occurrenceKey ? { occurrenceKey } : {}),
+    });
+    this.browsing = false;
+    this.space = meeting;
+    this.spaceExpanded = new Map();
+    this.spaceRetro = null;
+    this.openingLine = null;
+    this.openingUi = {};
+    return meeting.open();
+  }
+
+  /**
+   * Which of Myu's places this pane is showing, for the menu's marks (2026-10-06): a space's own conversation is
+   * Spaces; anything else here (a conversation, the list of past ones, even when reached from a space, a meeting's or
+   * a line's own) is Conversations.
+   */
+  menuItem(): 'spaces' | 'conversations' {
+    return this.space?.isSpaceSubject && !this.browsing ? 'spaces' : 'conversations';
+  }
+
+  /** What this pane shows changed in place: the plugin tells the server that place was opened, if the pane is in front. */
+  private moved(): void {
+    this.plugin.chatPaneMoved(this);
+  }
+
+  /** A line changed on the server: a space's (or meeting's) conversation reads again. */
+  refreshSpace(spaceId?: string): void {
+    if (this.space && (!spaceId || this.space.spaceId === spaceId)) {
+      void this.space.refresh();
+      void this.spaceRetro?.refresh();
+    }
+  }
+
+  /**
+   * The opening question's button: the answer (`POST /myu/lines/answer`), the pages it opens, what
+   * Myu said back under the question, then Today again (the same question leaves its row there).
+   */
+  private async pressOpening(line: MyuLineLite, button: LineButton): Promise<void> {
+    if (this.openingUi.busy) return;
+    this.openingUi = { busy: true };
+    this.render();
+    const out = await pressLineButton({ answer: (lineId, answer) => this.plugin.backend.answerMyuLine(lineId, answer), apiBase: this.plugin.settings.base_url }, line, button);
+    for (const url of out.open) window.open(url, '_blank');
+    // The meeting arc's Now: the meeting's own conversation takes this pane.
+    if (out.conversation) {
+      void this.plugin.openConversationRef(out.conversation, line.subjects?.[0]?.label ?? '');
+      this.plugin.requestTodayRefresh();
+      return;
+    }
+    if (this.openingLine?.line_id !== line.line_id) return; // the conversation moved on meanwhile
+    // Closed under the press: its buttons go (the question is no longer open) and Today is read again;
+    // nothing is said about it.
+    if (out.closed) {
+      this.openingLine = null;
+      this.openingUi = {};
+      this.render();
+      this.plugin.requestTodayRefresh();
+      return;
+    }
+    this.openingUi = out.ui;
+    this.render();
+    if (out.settled) this.plugin.requestTodayRefresh();
   }
 
   /** A blank thread: this conversation is finished, the next one starts clean. */
   startNew(): void {
+    this.space = null;
+    this.spaceRetro = null;
     this.turns = [];
+    this.openingLine = null;
+    this.openingUi = {};
     this.journalId = null;
     this.pendingContext = null;
     this.pendingTemplateType = null;
     this.draft = '';
+    this.pasted = [];
+    this.undo = null;
+    this.pastedNote = null;
+    this.expanded = new Map();
     this.browsing = false;
     this.canvasSpecs.clear();
     this.canvasFetching.clear();
@@ -144,24 +394,51 @@ export class ChatView extends ItemView {
     this.linkedinAsk = null;
     this.ratings.clear();
     this.render();
+    this.moved();
   }
 
   private async send(text: string): Promise<void> {
+    // Nothing is awaited before the draft and the chips are taken: a second press while this one is out does nothing.
+    if (this.busy) return;
     const content = text.trim();
-    if (!content || this.busy) return;
+    const pasted = [...this.pasted];
+    if (!content && pasted.length === 0) return;
     const accountId = this.plugin.settings.account_id;
     if (!accountId) return;
+    // Over a cap: nothing is sent, and the box keeps the words and the chips; the row says why (no typed check, as before).
+    if (pastedBlocksProblem(pasted)) {
+      if (!this.draft.trim() && content) {
+        // A seeded message that was to go at once: its words stay in the box with the chips.
+        this.draft = text;
+        this.render();
+      } else {
+        this.drawPasted();
+      }
+      return;
+    }
+    this.busy = true;
+    this.draft = '';
+    this.pasted = [];
+    this.undo = null;
+    this.pastedNote = null;
+    // The box on screen goes empty with them: words typed while the context is looked up are the next message's.
+    if (this.inputEl) this.inputEl.value = '';
+    this.drawPasted();
 
     if (!this.pendingContext && this.followActive && !this.journalId) {
       const active = this.app.workspace.getActiveFile();
       if (active && active.extension === 'md') {
-        this.pendingContext = (await this.plugin.chatContextForFile(active)) ?? null;
+        // A lookup that fails sends the message without the note as context; the draft is already taken.
+        try {
+          this.pendingContext = (await this.plugin.chatContextForFile(active)) ?? null;
+        } catch {
+          this.pendingContext = null;
+        }
       }
     }
 
-    this.turns.push({ role: 'user', text: content });
-    this.draft = '';
-    this.busy = true;
+    const mine: ChatTurn = { role: 'user', text: content, ...(pasted.length ? { pasted } : {}), at: new Date().toISOString() };
+    this.turns.push(mine);
     this.render();
 
     // Context is claimed by the FIRST message only — the next turn is the same
@@ -176,18 +453,37 @@ export class ChatView extends ItemView {
     const openId = this.plugin.openCanvasId();
     const canvasOpts: ChatCanvasOptions = { surfaceMode: openId ? 'dual' : 'journal', ...(openId ? { continuesCompositionId: openId } : {}) };
     const res = this.journalId
-      ? await this.plugin.backend.addChatTurn(accountId, this.journalId, content, context, canvasOpts)
-      : await this.plugin.backend.createChatEntry(accountId, content, context, this.pendingTemplateType ?? undefined, canvasOpts);
+      ? await this.plugin.backend.addChatTurn(accountId, this.journalId, content, context, canvasOpts, pasted)
+      : await this.plugin.backend.createChatEntry(accountId, content, context, this.pendingTemplateType ?? undefined, canvasOpts, pasted);
 
     this.busy = false;
 
     if (!res.ok || !res.data) {
+      // Not sent: the words and the chips come back to the box, and the turn goes. When something new is in the box
+      // already, the turn stays in the thread with its words and cards, so nothing is lost.
+      if (!this.draft.trim() && this.pasted.length === 0) {
+        this.turns = this.turns.filter((t) => t !== mine);
+        this.draft = text;
+        this.pasted = pasted;
+      }
       this.turns.push({
         role: 'myu',
-        text: res.error === 'offline' ? "You're offline — this didn't send. Try again when you're back." : "That didn't reach Myu. Try again in a moment.",
+        text:
+          res.error === PASTED_TEXT_TOO_LONG && res.message
+            ? res.message
+            : res.error === 'offline' ? "You're offline. This message was not sent. Try again when you're back online." : "Could not send this to Myu. Try again in a moment.",
       });
       this.render();
       return;
+    }
+
+    // Answered, but the server did not count the pasted text (a server without it keeps only the typed words): the
+    // chips go back in the box, and the turn shows only what reached Myu.
+    if (pastedTextLost(pasted.length, res.data)) {
+      delete mine.pasted;
+      this.pasted = chipsBack(pasted, this.pasted);
+      this.undo = null;
+      this.pastedNote = PASTE_WORDS.lost;
     }
 
     if (res.data.journal_id) this.journalId = res.data.journal_id;
@@ -440,10 +736,10 @@ export class ChatView extends ItemView {
       // canvas — one ask, one place (delta #4, now that canvases live here too).
       if (compositionId && this.canvasSpecs.has(compositionId)) return;
     }
-    const box = calloutBox(parent, 'tip', 'Myu needs a source', 'myu-chat-offer');
+    const box = calloutBox(parent, 'tip', 'A request from Myu', 'myu-chat-offer');
     if (this.offerDone) {
       // Answered: the acknowledgement (or the connect line) IN PLACE of the ask.
-      box.createDiv({ cls: 'myu-voice', text: this.offerDoneText ?? 'Calendar\u2019s in. Your week starts painting in Today.' });
+      box.createDiv({ cls: 'myu-voice', text: this.offerDoneText ?? 'Calendar connected. Your meetings will start showing in Today.' });
       return;
     }
     const data = component.data ?? {};
@@ -485,8 +781,8 @@ export class ChatView extends ItemView {
   private renderRating(parent: HTMLElement, index: number): void {
     const given = this.ratings.get(index);
     const row = parent.createDiv({ cls: 'myu-chat-rating' });
-    if (given) { row.createSpan({ cls: 'myu-whisper', text: given === 1 ? 'thanks \u2014 noted as a good read' : 'thanks \u2014 noted as off the mark' }); return; }
-    for (const [rating, icon, label] of [[1, 'thumbs-up', 'Good read'], [-1, 'thumbs-down', 'Off the mark']] as const) {
+    if (given) { row.createSpan({ cls: 'myu-whisper', text: given === 1 ? 'Thanks. Marked as helpful.' : 'Thanks. Marked as not helpful.' }); return; }
+    for (const [rating, icon, label] of [[1, 'thumbs-up', 'Helpful'], [-1, 'thumbs-down', 'Not helpful']] as const) {
       const b = row.createEl('button', { cls: 'myu-affordance myu-icon-button myu-rating-btn', attr: { 'aria-label': `${label} \u2014 rate this reply` } });
       setIcon(b, icon);
       b.onclick = () => {
@@ -501,17 +797,27 @@ export class ChatView extends ItemView {
 
   private render(): void {
     const root = this.contentEl;
+    // The box about to go, for its caret; the refs are set again only when the journal's composer is drawn.
+    const before = this.inputEl;
+    this.inputEl = null;
+    this.pastedRowEl = null;
+    this.sendEl = null;
     root.empty();
     root.addClass('myu-chat');
+
+    if (this.space && !this.browsing) {
+      this.renderSpace(root, this.space);
+      return;
+    }
 
     const top = root.createDiv({ cls: 'myu-chat-top' });
     const active = this.app.workspace.getActiveFile();
     if (active && active.extension === 'md' && !this.browsing) {
       const listen = top.createSpan({ cls: 'myu-chat-listen' });
-      listen.createSpan({ text: this.followActive ? `listening to ${active.basename}` : 'not listening' });
+      listen.createSpan({ text: this.followActive ? `Using ${active.basename} as context` : 'Not using the open note' });
       const mute = listen.createEl('button', { cls: this.followActive ? 'myu-affordance myu-icon-button' : 'myu-affordance' });
-      if (this.followActive) { setIcon(mute, 'x'); mute.setAttr('aria-label', 'Stop listening to this note'); }
-      else mute.setText('Listen');
+      if (this.followActive) { setIcon(mute, 'x'); mute.setAttr('aria-label', 'Stop using this note as context'); }
+      else mute.setText('Use this note');
       mute.onclick = () => {
         this.followActive = !this.followActive;
         this.render();
@@ -525,12 +831,13 @@ export class ChatView extends ItemView {
     }
     const browse = top.createEl('button', {
       cls: 'myu-affordance',
-      text: this.browsing ? '← back to the conversation' : 'Past conversations',
+      text: this.browsing ? '← Back to the conversation' : 'Past conversations',
     });
     browse.onclick = () => {
       this.browsing = !this.browsing;
       if (this.browsing && !this.pastEntries) void this.loadPastEntries();
       this.render();
+      this.moved();
     };
 
     if (this.browsing) {
@@ -541,17 +848,34 @@ export class ChatView extends ItemView {
     const thread = root.createDiv({ cls: 'myu-chat-thread' });
 
     if (this.turns.length === 0 && !this.busy) {
-      thread.createEl('p', { cls: 'myu-quiet', text: 'Talk to Myu — about a note, a person, or the day.' });
+      thread.createEl('p', { cls: 'myu-quiet', text: 'Write to Myu about a note, a person, or your day.' });
     }
 
     for (const [index, turn] of this.turns.entries()) {
       if (turn.role === 'user') {
-        thread.createDiv({ cls: 'myu-chat-user', text: turn.text ?? '' });
+        // The typed words when there are some, then the pasted text as folded cards.
+        if (!turn.text && !turn.pasted?.length) continue;
+        const you = thread.createDiv({ cls: 'myu-chat-user', text: turn.text ?? '' });
+        if (turn.pasted?.length) {
+          renderPastedCards(you, turn.pasted, this.expanded.get(index) ?? new Set(), (id, open) => {
+            const shown = this.expanded.get(index) ?? new Set<string>();
+            if (open) shown.add(id);
+            else shown.delete(id);
+            this.expanded.set(index, shown);
+          });
+        }
         continue;
       }
       const myu = thread.createDiv({ cls: 'myu-chat-myu' });
       myu.createDiv({ cls: 'myu-whisper', text: 'myu' });
-      if (turn.text) myu.createDiv({ cls: 'myu-voice', text: turn.text });
+      // The line this conversation opened on: its words carry its id, to be reported as seen.
+      const opening = index === 0 ? this.openingLine : null;
+      if (turn.text) myu.createDiv({ cls: 'myu-voice', text: turn.text, ...(opening ? { attr: lineIdAttr(opening.line_id) } : {}) });
+      // The question this conversation opened with: its buttons under it, answered here.
+      if (index === 0 && this.openingLine) {
+        const line = this.openingLine;
+        renderLineAsk(myu, line, this.openingUi, { press: (b) => void this.pressOpening(line, b) }, { showText: false });
+      }
       for (const block of turn.blocks ?? []) this.renderBlock(myu, block);
       renderReferences(myu, turn.references);
       renderRelatedEntries(myu, turn.related, (id) => void this.openPastConversation(id));
@@ -572,24 +896,222 @@ export class ChatView extends ItemView {
     }
 
     const composer = root.createDiv({ cls: 'myu-chat-composer' });
+    // The caret the last box had, when it held the same words; else the end.
+    const caret = before && before.value === this.draft ? (before.selectionStart ?? this.draft.length) : this.draft.length;
+    // Pasted text waiting to go: the chips above the box.
+    this.pastedRowEl = composer.createDiv({ cls: 'myu-pasted-row' });
     const input = composer.createEl('textarea', {
       cls: 'myu-chat-input',
-      attr: { rows: '3', placeholder: 'Say it plainly…' },
+      attr: { rows: '3', placeholder: 'Write to Myu…' },
     });
+    this.inputEl = input;
     input.value = this.draft;
     input.oninput = () => {
       this.draft = input.value;
+      // The hint (and the words after a send) go at the next edit.
+      if (this.undo || this.pastedNote) {
+        this.undo = null;
+        this.pastedNote = null;
+        this.drawPasted();
+      }
     };
     input.onkeydown = (event) => {
       if (event.key === 'Enter' && !event.shiftKey) {
         event.preventDefault();
         void this.send(input.value);
+        return;
+      }
+      if (this.undo && isUndoKey(event)) {
+        event.preventDefault();
+        this.undoPaste();
       }
     };
+    attachPasteListeners(input, { addPasted: (text, source, at) => this.addPasted(text, source, at) });
     const send = composer.createEl('button', { cls: 'myu-affordance', text: 'Send' });
     send.onclick = () => void this.send(input.value);
+    this.sendEl = send;
+    this.drawPasted();
 
-    if (this.draft) window.setTimeout(() => input.focus(), 0);
+    if (this.draft || this.pasted.length > 0) {
+      window.setTimeout(() => {
+        input.focus();
+        input.setSelectionRange(caret, caret);
+      }, 0);
+    }
+  }
+
+  // ── pasted text in the box (2026-10-06) ─────────────────────────────────────
+
+  /** The chip row and Send's hold, redrawn in place: the box itself is never touched. */
+  private drawPasted(): void {
+    if (this.pastedRowEl) {
+      renderPastedRow(this.pastedRowEl, this.pasted, {
+        open: (id) => this.openPasted(id),
+        remove: (id) => this.removePasted(id),
+        undo: this.undo ? () => this.undoPaste() : null,
+        note: this.pastedNote,
+      });
+    }
+    // Send waits while a chip is over the limit, or there are too many; the row says why.
+    if (this.sendEl) this.sendEl.disabled = !!pastedBlocksProblem(this.pasted);
+  }
+
+  /** A paste or a drop became a chip (the listener already took the selected text out of the box). */
+  private addPasted(text: string, source: 'paste' | 'drop', at: number): void {
+    const out = chipAdded(this.pasted, text, source, at);
+    this.pasted = out.chips;
+    this.undo = out.undo;
+    this.pastedNote = null;
+    if (this.inputEl) this.draft = this.inputEl.value;
+    announce(this.liveEl, PASTE_WORDS.announce(out.chip.chars));
+    this.drawPasted();
+  }
+
+  /** Undo (Mod+Z or the hint's button): the last conversion goes back inline where it was pasted. */
+  private undoPaste(): void {
+    const input = this.inputEl;
+    const undo = this.undo;
+    this.undo = null;
+    const out = input && undo ? undoChip(input.value, this.pasted, undo) : null;
+    if (input && out) {
+      this.pasted = out.chips;
+      input.value = out.value;
+      this.draft = out.value;
+    }
+    this.drawPasted();
+    if (input && out) {
+      input.focus();
+      input.setSelectionRange(out.caret, out.caret);
+    }
+  }
+
+  private removePasted(id: string): void {
+    this.pasted = this.pasted.filter((c) => c.id !== id);
+    this.undo = null;
+    this.pastedNote = null;
+    this.drawPasted();
+    this.inputEl?.focus();
+  }
+
+  /** A chip, opened: its text, Put back in message, Remove. */
+  private openPasted(id: string): void {
+    const at = this.pasted.findIndex((c) => c.id === id);
+    const chip = this.pasted[at];
+    if (!chip) return;
+    const n = this.pasted.length > 1 ? at + 1 : undefined;
+    new PastedTextModal(this.app, chip, n, this.draft, { putBack: () => this.putBackPasted(id), remove: () => this.removePasted(id) }).open();
+  }
+
+  /** Put back: the chip's text at the end of the typed words, the caret after it. */
+  private putBackPasted(id: string): void {
+    const chip = this.pasted.find((c) => c.id === id);
+    if (!chip || !canPutBack(this.draft, chip).ok) return;
+    this.draft = putBackText(this.draft, chip);
+    this.pasted = this.pasted.filter((c) => c !== chip);
+    this.undo = null;
+    this.pastedNote = null;
+    const input = this.inputEl;
+    if (input) input.value = this.draft;
+    this.drawPasted();
+    if (input) {
+      input.focus();
+      input.setSelectionRange(this.draft.length, this.draft.length);
+    }
+  }
+
+  /**
+   * A space's conversation. The open note is NOT context here (nothing of the
+   * vault rides along with words typed in a space), so the "Using … as context"
+   * strip is absent; the top names the space and keeps the two doors out.
+   */
+  private renderSpace(root: HTMLElement, space: SpaceConversation): void {
+    const screen = space.screen();
+    // The space's name is the pane's title. The chat pane's two own controls stay, as quiet
+    // text beside it: they leave the space, so they must not look like the main thing here.
+    const top = root.createDiv({ cls: 'myu-chat-top myu-space-top' });
+    top.createDiv({ cls: 'myu-space-title', text: screen.title });
+    const tools = top.createDiv({ cls: 'myu-space-top-tools' });
+    const fresh = tools.createEl('button', { cls: 'myu-space-top-tool', text: 'New conversation' });
+    fresh.onclick = () => this.startNew();
+    const browse = tools.createEl('button', { cls: 'myu-space-top-tool', text: 'Past conversations' });
+    browse.onclick = () => {
+      this.browsing = true;
+      if (!this.pastEntries) void this.loadPastEntries();
+      this.render();
+      this.moved();
+    };
+
+    const retro = this.spaceRetro;
+    const unlockBoth = async () => {
+      await space.unlockSpace();
+      await retro?.refresh();
+    };
+    // Two tabs, one showing at a time: the person's own conversation with Myu, or the team's
+    // retro as a page. Each says where things stand in its own words, so never both at once.
+    const retroShowing = !!retro && retro.screen().open;
+    if (retro) renderSpaceTabs(root, retroShowing, { conversation: () => retro.hide(), retro: () => void retro.show() });
+    if (retro && retroShowing) {
+      const pageHost = root.createDiv({ cls: 'myu-chat-thread' });
+      renderSpaceRetro(pageHost, retro.screen(), { conversation: () => retro.hide(), unlock: () => void unlockBoth(), how: () => retro.toggleHow() });
+      return;
+    }
+    renderSpaceStatus(root, screen.status);
+    const thread = root.createDiv({ cls: 'myu-chat-thread' });
+    const composer = root.createDiv({ cls: 'myu-chat-composer' });
+    const input = renderSpaceConversation(thread, composer, screen, {
+      send: (text) => void space.send(text),
+      choose: (id) => void space.choose(id),
+      pick: (id) => space.pick(id),
+      dropTyped: () => space.dropTyped(),
+      earlier: () => void space.loadEarlier(),
+      unlock: () => void unlockBoth(),
+      draft: (text) => {
+        space.draft = text;
+      },
+      pasted: {
+        chips: () => space.pasted,
+        canUndo: () => !!space.undo,
+        note: () => space.pastedNote,
+        typing: () => space.typing,
+        add: (text, source, at, value) => {
+          const chip = space.addPasted(text, source, at, value);
+          announce(this.liveEl, PASTE_WORDS.announce(chip.chars));
+        },
+        undo: (value) => space.undoPasted(value),
+        remove: (id) => space.removePasted(id),
+        open: (id, after) => {
+          const at = space.pasted.findIndex((c) => c.id === id);
+          const chip = space.pasted[at];
+          if (!chip) return;
+          const n = space.pasted.length > 1 ? at + 1 : undefined;
+          new PastedTextModal(this.app, chip, n, space.draft, {
+            putBack: () => after(space.putBackPasted(id)),
+            remove: () => {
+              space.removePasted(id);
+              after(null);
+            },
+          }).open();
+        },
+        typedInBox: () => space.typedInBox(),
+        expanded: (key) => this.spaceExpanded.get(key) ?? new Set(),
+        toggle: (key, id, open) => {
+          const shown = this.spaceExpanded.get(key) ?? new Set<string>();
+          if (open) shown.add(id);
+          else shown.delete(id);
+          this.spaceExpanded.set(key, shown);
+        },
+      },
+    });
+    // The last thing said is what the person reads first.
+    window.setTimeout(() => {
+      // A later paint replaced this one (an answer that came back at once): its own timer scrolls and focuses.
+      if (!thread.isConnected) return;
+      thread.scrollTop = thread.scrollHeight;
+      if (input && space.wantsFocus) {
+        space.wantsFocus = false;
+        input.focus();
+      }
+    }, 0);
   }
 
   /** The list: recent entries, decrypted previews, newest first. */
@@ -600,7 +1122,7 @@ export class ChatView extends ItemView {
       return;
     }
     if (this.pastEntries.length === 0) {
-      host.createEl('p', { cls: 'myu-quiet', text: 'No past conversations yet — the first one starts below.' });
+      host.createEl('p', { cls: 'myu-quiet', text: 'No past conversations yet.' });
       return;
     }
     const search = host.createEl('input', { cls: 'myu-chat-search', attr: { type: 'search', placeholder: 'Search conversations\u2026', 'aria-label': 'Search past conversations' } });
@@ -719,16 +1241,24 @@ export class ChatView extends ItemView {
       PUBLIC: the Journal notes' "continue this conversation ▸" deep links
       land here (obsidian://myu-chat?journal=…). */
   async openPastConversation(journalId: string, day = ''): Promise<void> {
+    // The chosen conversation, not the space it was browsed from (2026-10-06: picked from a space's "Past
+    // conversations", the space's own conversation came back on screen, as `this.space` was kept).
+    this.space = null;
+    this.spaceRetro = null;
     this.browsing = false;
     this.journalId = journalId;
+    this.openingLine = null;
+    this.openingUi = {};
     this.pendingContext = null;
+    this.moved();
     const entry = this.pastEntries?.find((e) => e.journalId === journalId);
     this.turns = await loadConversation(
       { backend: this.plugin.backend, key: this.plugin.keys.get(), accountId: this.plugin.settings.account_id },
       journalId,
-      entry ? { day, preview: entry.preview } : undefined,
+      entry ? { day, preview: entry.preview, ...(entry.pasted ? { pasted: entry.pasted } : {}) } : undefined,
       (offer) => this.adoptDeliveredOffer(offer),
     );
+    this.expanded = new Map();
     void this.checkLinkedInAsk();
     this.render();
 

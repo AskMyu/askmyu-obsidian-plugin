@@ -52,8 +52,8 @@ export function renderCanvasFooter(parent: HTMLElement, state: CanvasFooterState
     history.onclick = () => host.onHistory?.();
   }
   const row = new Setting(parent)
-    .setName('Always keep in my vault')
-    .setDesc(state.autoKeep ? 'Every canvas this pane shows is saved to Myu/Canvas/.' : 'Off — save each canvas yourself.')
+    .setName('Always save to my vault')
+    .setDesc(state.autoKeep ? 'Every canvas this pane shows is saved to Myu/Canvas/.' : 'Off. Save each canvas yourself with the button below.')
     .addToggle((t) => t.setValue(state.autoKeep).onChange((v) => host.onToggle(v)));
   row.settingEl.addClass('myu-canvas-footer');
 
@@ -66,5 +66,5 @@ export function renderCanvasFooter(parent: HTMLElement, state: CanvasFooterState
     return;
   }
   if (state.problem) parent.createDiv({ cls: 'myu-problem', text: state.problem });
-  else if (state.keptPath) parent.createDiv({ cls: 'myu-whisper', text: `kept in ${state.keptPath}` });
+  else if (state.keptPath) parent.createDiv({ cls: 'myu-whisper', text: `Saved to ${state.keptPath}` });
 }

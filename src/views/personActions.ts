@@ -26,14 +26,14 @@ export function mergeCandidates(entities: EntityHeadline[], sourceId: string): E
 export const PERSON_ACTION_COPY = {
   merge: (source: string, target: string) => ({
     title: `Merge ${source} into ${target}?`,
-    body: `Everything Myu knows about ${source} \u2014 memories, threads, history \u2014 moves to ${target}. ${source} is removed from your people, and their note here goes to the trash. This cannot be undone from the vault.`,
+    body: `Everything Myu knows about ${source} (memories, open items, history) moves to ${target}. ${source} is removed from your people, and their note in the Myu folder goes to the trash. This cannot be undone here.`,
     cta: 'Merge',
   }),
   self: (name: string) => ({
-    title: `${name} is you?`,
+    title: `Is ${name} you?`,
     // Backend folds the person into the self (memories, threads, names) as of
     // 2026-08-29. The earlier wording that said it did NOT is gone.
-    body: `Everything Myu knows about ${name} becomes part of you \u2014 memories, threads, and the name itself, so future mentions are recognised as you. ${name} is removed from your people, and their note here goes to the trash.`,
+    body: `Everything Myu knows about ${name} (memories, open items, and the name itself) is added to your own profile, so future mentions of ${name} are recognised as you. ${name} is removed from your people, and their note in the Myu folder goes to the trash.`,
     cta: 'Yes, that\u2019s me',
   }),
 } as const;

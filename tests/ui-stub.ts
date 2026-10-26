@@ -26,6 +26,11 @@ export class FakeEl {
   parent: FakeEl | null = null;
   /** Attributes the UI sets — `data-*` anchors and aria labels are behaviour, not decoration. */
   attrs: Record<string, string> = {};
+  /** A text box's caret and selection, as the paste listeners read and set them (pasted text, 2026-10-06). */
+  selectionStart = 0;
+  selectionEnd = 0;
+  /** Set by focus(): a test can see that the box got the focus back. */
+  focused = false;
 
   constructor(tag = 'div', opts?: { text?: string; cls?: string; attr?: Record<string, string> }) {
     this.tag = tag;
@@ -59,8 +64,11 @@ export class FakeEl {
   appendText(text: string): void {
     this.text += text;
   }
-  createDiv(opts?: { text?: string; cls?: string }): FakeEl {
-    return this.add(new FakeEl('div', opts));
+  /** `prepend`: Obsidian's own option, the new element first among its siblings (a line painted in at the top of a pane). */
+  createDiv(opts?: { text?: string; cls?: string; prepend?: boolean }): FakeEl {
+    const el = this.add(new FakeEl('div', opts));
+    if (opts?.prepend) this.children = [el, ...this.children.filter((c) => c !== el)];
+    return el;
   }
   createSpan(opts?: { text?: string; cls?: string }): FakeEl {
     return this.add(new FakeEl('span', opts));
@@ -68,20 +76,36 @@ export class FakeEl {
   empty(): void {
     this.children = [];
   }
-  /** DOM events the UI actually binds (a <details> fold reporting its state). Fire with `dispatch`. */
-  private listeners = new Map<string, Array<() => void>>();
-  addEventListener(name: string, handler: () => void): void {
+  /**
+   * DOM events the UI actually binds (a <details> fold reporting its state, a box's paste). Fire with `dispatch`,
+   * which hands the event to each listener (a paste's clipboardData, its preventDefault).
+   */
+  private listeners = new Map<string, Array<(ev: never) => void>>();
+  addEventListener(name: string, handler: (ev: never) => void): void {
     const set = this.listeners.get(name) ?? [];
     set.push(handler);
     this.listeners.set(name, set);
   }
-  removeEventListener(name: string, handler: () => void): void {
+  removeEventListener(name: string, handler: (ev: never) => void): void {
     this.listeners.set(name, (this.listeners.get(name) ?? []).filter((h) => h !== handler));
   }
-  dispatch(name: string): void {
-    for (const h of this.listeners.get(name) ?? []) h();
+  dispatch(name: string, ev?: unknown): void {
+    for (const h of this.listeners.get(name) ?? []) h(ev as never);
   }
   hasAttribute(name: string): boolean { return this.attrs?.[name] !== undefined; }
+  /** `el.dispatchEvent(new Event('input'))` — the look-up re-runs its query this way; listeners bound by name fire. */
+  dispatchEvent(ev: { type?: string } | null | undefined): boolean {
+    if (ev?.type) this.dispatch(ev.type, ev);
+    return true;
+  }
+  /** A text box's selection, set the way the DOM's is. */
+  setSelectionRange(start: number, end: number): void {
+    this.selectionStart = start;
+    this.selectionEnd = end;
+  }
+  focus(): void {
+    this.focused = true;
+  }
 
   removeClass(c: string): void { this.classes.delete(c); }
   addClass(c: string): void {
@@ -125,13 +149,23 @@ export class FakeEl {
   }
 }
 
+/** Every modal `open()`ed, in order — a test follows a door from one modal into the next (the look-up's fold). */
+export const openedModals: unknown[] = [];
+
 export class Modal {
   app: unknown;
   contentEl = new FakeEl('div');
+  modalEl = new FakeEl('div');
+  titleEl = new FakeEl('div');
   constructor(app: unknown) {
     this.app = app;
   }
+  setTitle(title: string): this {
+    this.titleEl.text = title;
+    return this;
+  }
   open(): void {
+    openedModals.push(this);
     (this as unknown as { onOpen?: () => void }).onOpen?.();
   }
   close(): void {
@@ -389,14 +423,30 @@ export class ItemView {
   constructor(public leaf: WorkspaceLeaf) {}
 }
 
-/** Fuzzy suggesters, for tests that import a view which imports one. */
+/** Fuzzy suggesters: enough of the host's to open one, type into it, read its suggestions and press its foot. */
 export class FuzzySuggestModal<T> {
   inputEl = new FakeEl('input');
+  modalEl = new FakeEl('div');
+  resultContainerEl = new FakeEl('div');
+  emptyStateText = '';
   constructor(public app: unknown) {}
   setPlaceholder(_t: string): void {}
   onOpen(): void {}
-  open(): void { this.onOpen(); }
-  close(): void {}
+  onClose(): void {}
+  open(): void {
+    openedModals.push(this);
+    this.onOpen();
+  }
+  close(): void { this.onClose(); }
   getItems(): T[] { return []; }
   getItemText(_item: T): string { return ''; }
+  /** The host's fuzzy match, near enough: the items whose text contains the typed words, in the list's order. */
+  getSuggestions(query: string): Array<{ item: T; match: { score: number; matches: number[][] } }> {
+    const q = query.trim().toLowerCase();
+    return this.getItems()
+      .filter((item) => !q || this.getItemText(item).toLowerCase().includes(q))
+      .map((item) => ({ item, match: { score: 0, matches: [] } }));
+  }
+  renderSuggestion(_match: unknown, _el: FakeEl): void {}
+  onChooseItem(_item: T): void {}
 }

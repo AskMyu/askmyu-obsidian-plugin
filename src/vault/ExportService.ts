@@ -36,7 +36,8 @@ export class ExportService {
       progress(`Export \u2014 conversations ${i + 1} of ${heads.length}`);
       if (this.plugin.conversationWriter.hasNoteFor(head.journalId)) { conversations.alreadyThere++; continue; }
       try {
-        const turns = await loadConversation(deps, head.journalId, { day: head.day, preview: head.preview });
+        // The opening carries the entry's pasted text (2026-10-06), so the saved note has it as a callout.
+        const turns = await loadConversation(deps, head.journalId, { day: head.day, preview: head.preview, ...(head.pasted ? { pasted: head.pasted } : {}) });
         const outcome = await this.plugin.conversationWriter.write(turns, { journalId: head.journalId, date: head.day || date });
         if (outcome.status === 'written') conversations.saved++; else if (outcome.status === 'error') conversations.failed++;
       } catch { conversations.failed++; }

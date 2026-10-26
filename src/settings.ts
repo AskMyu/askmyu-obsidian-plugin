@@ -24,6 +24,8 @@ export interface QueuedCapture {
   occurred_at: number;
   entity_hints: string[];
   previous_external_id?: string;
+  /** A Web Clipper note (2026-10-06): replayed with its mark. */
+  web_clipping?: boolean;
   queued_at: number;
   attempts: number;
 }
@@ -83,6 +85,8 @@ export interface AskMyuSettings extends PersistedAuth {
 
   /** Mirror-edition periods the user has been pointed at (P4.4). */
   monthly_seen: Record<string, boolean>;
+  /** R20: accounts that have seen a retro page's "How this works" open once (keys from `howThisWorksKey`). */
+  retro_how_seen: Record<string, boolean>;
 
   /**
    * P8 — the shared surface. Its own consent
@@ -146,6 +150,8 @@ export interface AskMyuSettings extends PersistedAuth {
   /** day → people with memories minted that day (fed by the people pass,
       consumed by the Days weave). Capped at 90 days. */
   memories_by_day: Record<string, string[]>;
+  /** memories_by_day is keyed by the reader's day (2026-10-06; it was the UTC day). False once: the next sync rebuilds it. */
+  memories_by_day_local: boolean;
   /** Epoch ms of the last open-sync (full pass on vault open). Throttles it. */
   last_open_sync: number;
   /** Server time of the last /vault/changes read (0 = never; the next sync is a first sync). */
@@ -211,6 +217,7 @@ export const DEFAULT_SETTINGS: AskMyuSettings = {
   meeting_hashes: {},
 
   monthly_seen: {},
+  retro_how_seen: {},
 
   materialize_consented: false,
   auto_keep_canvas: false,
@@ -231,6 +238,7 @@ export const DEFAULT_SETTINGS: AskMyuSettings = {
   last_people_materialize: 0,
   last_history_materialize: 0,
   memories_by_day: {},
+  memories_by_day_local: false,
   last_open_sync: 0,
   vault_changes_since: 0,
   myu_entity_changed_at: {},

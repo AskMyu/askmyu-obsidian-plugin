@@ -41,11 +41,11 @@ export class HelpMyuView extends ItemView {
     const again = top.createEl('button', { cls: 'myu-affordance myu-icon-button', attr: { 'aria-label': 'Check again' } });
     setIcon(again, 'refresh-cw');
     again.onclick = () => void this.refresh();
-    top.createSpan({ cls: 'myu-whisper', text: this.loading ? 'looking' : 'people Myu cannot place' });
+    top.createSpan({ cls: 'myu-whisper', text: this.loading ? 'looking' : 'people Myu cannot identify' });
 
     if (this.plugin.unlock.current !== 'unlocked') { root.createEl('p', { cls: 'myu-quiet', text: 'Sign in to see who Myu needs help with.' }); return; }
     const items = this.plugin.helpQueue;
-    if (!this.loading && items.length === 0) { root.createEl('p', { cls: 'myu-quiet', text: 'Nothing needs you right now.' }); return; }
+    if (!this.loading && items.length === 0) { root.createEl('p', { cls: 'myu-quiet', text: 'Nothing needs your attention right now.' }); return; }
 
     for (const item of items) {
       const row = root.createDiv({ cls: 'myu-zone myu-help-row' });
@@ -57,13 +57,13 @@ export class HelpMyuView extends ItemView {
         void this.plugin.backend.getCard('person', item.relationship_id).then((res) => {
           matches.empty();
           const sugs = suggestionsOf(res.data?.suggestions);
-          if (!res.ok) { matches.createDiv({ cls: 'myu-quiet', text: 'Could not fetch the matches.' }); return; }
+          if (!res.ok) { matches.createDiv({ cls: 'myu-quiet', text: 'Could not load the matches.' }); return; }
           renderLinkedInMatches(matches, sugs, { app: this.app, owner: this, plugin: this.plugin, relationshipId: item.relationship_id, personName: item.display_name, onResolved: () => void this.refresh() });
           const open = matches.createEl('button', { cls: 'myu-affordance myu-link-button', text: 'Open their card' });
           open.onclick = () => void this.plugin.openCard('person', item.relationship_id, item.display_name);
-        }).catch(() => { matches.empty(); matches.createDiv({ cls: 'myu-quiet', text: 'Could not fetch the matches.' }); });
+        }).catch(() => { matches.empty(); matches.createDiv({ cls: 'myu-quiet', text: 'Could not load the matches.' }); });
       } else {
-        row.createDiv({ cls: 'myu-claim', text: `${item.source.display_name} and ${item.target.display_name} \u2014 the same person?` });
+        row.createDiv({ cls: 'myu-claim', text: `Are ${item.source.display_name} and ${item.target.display_name} the same person?` });
         const why = [item.reason, item.target.subtitle].filter(Boolean).join(' \u00b7 ');
         if (why) row.createDiv({ cls: 'myu-quiet', text: why });
         const actions = row.createDiv({ cls: 'myu-canvas-actions' });

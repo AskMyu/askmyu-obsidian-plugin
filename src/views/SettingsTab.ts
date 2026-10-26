@@ -66,11 +66,11 @@ const MYU_LOOK_URL = 'https://github.com/AskMyu/askmyu-obsidian-plugin/raw/main/
 const INTEGRATION_CARDS = {
   google: {
     name: 'Google Calendar & Gmail',
-    desc: 'Connect and Myu preps your meetings and reads the room from your threads. One browser tab for Google’s consent screen; it sends you right back.',
+    desc: 'Connect it and Myu prepares you for meetings and learns from your email threads. Google’s consent screen opens in one browser tab and sends you right back.',
   },
   microsoft: {
     name: 'Microsoft Outlook & calendar',
-    desc: 'Same idea for the Microsoft side of your life. One browser tab for the consent screen; it sends you right back.',
+    desc: 'The same for your Microsoft accounts. The consent screen opens in one browser tab and sends you right back.',
   },
 } as const;
 
@@ -125,7 +125,7 @@ export class AskMyuSettingTab extends PluginSettingTab {
       section('What Myu can read', ['consent', 'folders', 'tags', 'journal', 'sharing'], (r) => this.renderSharing(r)),
       section('Meeting notes', ['meetings', 'transcripts', 'capture'], (r) => this.renderMeetingNotes(r)),
       section("Myu's folder", ['materialize', 'people', 'companies', 'calendar', 'commitments', 'bases', 'sync', 'sync on open'], (r) => this.renderMaterialization(r)),
-      section('Weave Myu in', ['integrations', 'recipes', 'snippets', 'bases embed', 'tasks', 'dataview', 'daily notes', 'template'], (r) => this.renderIntegrations(r)),
+      section('Add Myu to your notes', ['integrations', 'recipes', 'snippets', 'bases embed', 'tasks', 'dataview', 'daily notes', 'template'], (r) => this.renderIntegrations(r)),
       section('Weekly review', ['review', 'week'], (r) => this.renderWeeklyReview(r)),
       section('Account', ['delete account', 'email', 'aliases', 'sign out', 'export', 'archive', 'uninstall'], (r) => this.renderAccount(r), () => this.plugin.unlock.current === 'unlocked'),
       section('Advanced', ['backend url', 'debug', 'snippet', 'styling'], (r) => this.renderAdvanced(r)),
@@ -141,8 +141,8 @@ export class AskMyuSettingTab extends PluginSettingTab {
       root.createEl('p', {
         cls: 'myu-prose myu-quiet',
         text:
-          'Myu can keep a folder in your vault — a page per person, today, the week, ' +
-          'and your commitments as real checkboxes. Off until you say so.',
+          'Myu can write a folder in your vault: a page per person, today, the week, ' +
+          'and your commitments as real checkboxes. Off until you turn it on.',
       });
       new Setting(root).addButton((b) =>
         b.setButtonText('Let Myu write…').onClick(() => {
@@ -159,7 +159,7 @@ export class AskMyuSettingTab extends PluginSettingTab {
 
     new Setting(root)
       .setName('Writing on')
-      .setDesc(`Myu maintains ${s.materialize_folder}/ — ticking a checkbox there marks it done in Myu.`)
+      .setDesc(`Myu keeps ${s.materialize_folder}/ up to date. Ticking a checkbox there marks it done in Myu.`)
       .addToggle((t) =>
         t.setValue(s.materialize_enabled).onChange(async (v) => {
           s.materialize_enabled = v;
@@ -171,7 +171,7 @@ export class AskMyuSettingTab extends PluginSettingTab {
         b.setButtonText('Sync now').onClick(async () => {
           b.setButtonText('Syncing…').setDisabled(true);
           await this.plugin.materializer.materializeAll();
-          notifyStatus('Synced — Myu’s folder is current.');
+          notifyStatus('Synced. Myu’s folder is up to date.');
           this.rerender();
         }),
       );
@@ -221,11 +221,11 @@ export class AskMyuSettingTab extends PluginSettingTab {
 
     new Setting(root)
       .setName('Sync when the vault opens')
-      .setDesc('A full pass in the background every time you open the vault, so Today is current. Off: nothing runs until you press the sync button (Today pane, or the command).')
+      .setDesc('A full sync in the background every time you open the vault, so Today is up to date. Off: nothing runs until you press the sync button (in the Today pane, or the command).')
       .addToggle((tg) => tg.setValue(this.plugin.settings.sync_on_open).onChange(async (v) => { this.plugin.settings.sync_on_open = v; await this.plugin.saveSettings(); }));
     new Setting(root)
       .setName('Journal history')
-      .setDesc('Your journal from every surface, decrypted into Myu/Journal/ — one note per day.')
+      .setDesc('Your journal from every device and app, decrypted into Myu/Journal/, one note per day.')
       .addToggle((t) =>
         t.setValue(s.materialize_journal_history).onChange(async (v) => {
           s.materialize_journal_history = v;
@@ -241,13 +241,13 @@ export class AskMyuSettingTab extends PluginSettingTab {
     // code block with a copy button — the text in view before it is copied.
     // (Seven rows with a blind Copy each until 2026-09-03.)
     new Setting(root)
-      .setName('Recipes')
+      .setName('Snippets')
       .setDesc(
-        'Your day inside every daily note, the brief, the week, a Tasks query for your commitments, ' +
-          'the people table, a Dataview table, a button to Today. Myu never edits your files: you paste them, ' +
-          'or put one at the cursor with the command "Insert a Myu snippet…".',
+        'Snippets you can paste into your own notes: your day in every daily note, the brief, the week, a Tasks query for your commitments, ' +
+          'the people table, a Dataview table, a button to Today. Myu never edits your files. You paste them yourself, ' +
+          'or insert one at the cursor with the command "Insert a Myu snippet…".',
       )
-      .addButton((b) => b.setButtonText('Open the recipes').onClick(() => void this.plugin.openWeave()));
+      .addButton((b) => b.setButtonText('Open the snippets').onClick(() => void this.plugin.openWeave()));
   }
 
   /**
@@ -285,7 +285,7 @@ export class AskMyuSettingTab extends PluginSettingTab {
     // pane sits after everything it would take with it.
     new Setting(containerEl)
       .setName('Delete my account')
-      .setDesc('Irreversible. Everything Myu holds about you is deleted, immediately. Your vault is untouched.')
+      .setDesc('Cannot be undone. Everything Myu stores about you is deleted immediately. Your vault is not touched.')
       .addButton((b) =>
         b.setButtonText('Delete…').setDestructive().onClick(() => {
           new DeleteAccountModal(this.app, this.plugin, () => this.rerender()).open();
@@ -297,7 +297,7 @@ export class AskMyuSettingTab extends PluginSettingTab {
   private renderLoadFailure(host: HTMLElement, what: string, why: string, retry: () => void): void {
     new Setting(host)
       .setName(what)
-      .setDesc(`Couldn't load — ${why}`)
+      .setDesc(`Couldn't load. ${why}`)
       .addButton((b) => b.setButtonText('Retry').onClick(retry));
   }
 
@@ -323,7 +323,7 @@ export class AskMyuSettingTab extends PluginSettingTab {
     let name = current;
     new Setting(nameHost)
       .setName('Your name')
-      .setDesc('How Myu writes you into your own notes.')
+      .setDesc('The name Myu uses for you in your notes.')
       .addText((t) => t.setPlaceholder('Your name').setValue(current).onChange((v) => { name = v; }))
       .addButton((b) => b.setButtonText('Save').onClick(async () => {
         const trimmed = name.trim();
@@ -502,7 +502,7 @@ export class AskMyuSettingTab extends PluginSettingTab {
 
     new Setting(host)
       .setName('How directly Myu speaks')
-      .setDesc('Auto follows the moment. The rest hold Myu to one register.')
+      .setDesc('Auto lets Myu choose based on the situation. The other options fix one style.')
       .addDropdown((d) =>
         d
           .addOptions({
@@ -604,23 +604,23 @@ export class AskMyuSettingTab extends PluginSettingTab {
     let icalUrl = '';
     new Setting(host)
       .setName('Calendar link')
-      .setDesc('A private iCal address — Google Calendar: Settings → your calendar → secret address in iCal format; Outlook: Publish calendar. Read-only by construction.')
+      .setDesc('A private iCal address. Google Calendar: Settings → your calendar → secret address in iCal format. Outlook: Publish calendar. Myu can only read it, never change it.')
       .addText((t) => t.setPlaceholder('https://…/basic.ics').onChange((v) => { icalUrl = v.trim(); }))
-      .addButton((b) => b.setButtonText('Read my week').onClick(async () => {
-        if (!/^(https:\/\/|webcal:\/\/)/i.test(icalUrl)) { notifyError('Paste the full address — it starts with https://'); return; }
+      .addButton((b) => b.setButtonText('Add calendar').onClick(async () => {
+        if (!/^(https:\/\/|webcal:\/\/)/i.test(icalUrl)) { notifyError('Paste the full address. It starts with https://'); return; }
         const r = await this.plugin.backend.addIcalUrl(icalUrl).catch(() => null);
-        if (r?.ok && r.data?.success !== false) { notifyStatus(`Calendar added — ${r.data?.events_stored ?? 0} events. Your week starts painting in Today.`); void this.plugin.refreshTodayNow(); }
-        else notifyError(r?.data?.error || 'That address did not read as a calendar. Check it ends with .ics and try again.');
+        if (r?.ok && r.data?.success !== false) { notifyStatus(`Calendar added: ${r.data?.events_stored ?? 0} events. Your meetings will show in Today.`); void this.plugin.refreshTodayNow(); }
+        else notifyError(r?.data?.error || 'That link is not a calendar. Check it ends with .ics and try again.');
       }));
     new Setting(host)
       .setName('Calendar file')
-      .setDesc('An .ics export from any calendar. Read once; nothing to revoke.')
+      .setDesc('An .ics export from any calendar. Read once; there is nothing to disconnect later.')
       .addButton((b) => b.setButtonText('Upload an .ics…').onClick(async () => {
         const picked = await pickFile('.ics,text/calendar');
         if (!picked) return;
         const r = await this.plugin.backend.uploadIcs(picked.bytes).catch(() => null);
-        if (r?.ok && r.data?.success !== false) { notifyStatus(`Calendar file read — ${r.data?.events_stored ?? 0} events. Your week starts painting in Today.`); void this.plugin.refreshTodayNow(); }
-        else notifyError(r?.data?.error || 'That file did not read as a calendar export. Export an .ics and try again.');
+        if (r?.ok && r.data?.success !== false) { notifyStatus(`Calendar file read: ${r.data?.events_stored ?? 0} events. Your meetings will show in Today.`); void this.plugin.refreshTodayNow(); }
+        else notifyError(r?.data?.error || 'That file is not a calendar export. Export an .ics file and try again.');
       }));
 
     // Slack — the web's card: each workspace with its own Disconnect; Connect
@@ -632,7 +632,7 @@ export class AskMyuSettingTab extends PluginSettingTab {
       const slackRows = (slack?.data?.connections ?? []).filter((c) => c.status !== 'disconnected');
       const slackRow = new Setting(host)
         .setName('Slack')
-        .setDesc(slackRows.length > 0 ? `${slackRows.length} workspace${slackRows.length === 1 ? '' : 's'} connected.` : 'Myu reads the DMs and channels you choose. Consent happens on Slack’s own screen.');
+        .setDesc(slackRows.length > 0 ? `${slackRows.length} workspace${slackRows.length === 1 ? '' : 's'} connected.` : 'Myu reads the DMs and channels you choose. You give permission on Slack’s own screen.');
       for (const c of slackRows) {
         const id = String(c.connection_id ?? '');
         if (!id) continue;
@@ -640,7 +640,7 @@ export class AskMyuSettingTab extends PluginSettingTab {
           .setName(String(c.workspace_name ?? 'Workspace'))
           .setDesc([c.user_email, c.user_name].filter(Boolean).join(' · '))
           .addButton((b) => { let armed = false; b.setButtonText('Disconnect').onClick(async () => {
-            if (!armed) { armed = true; b.setButtonText('Disconnect — sure?').setDestructive(); return; }
+            if (!armed) { armed = true; b.setButtonText('Disconnect? Click again to confirm').setDestructive(); return; }
             const r = await this.plugin.backend.slackDisconnect(id);
             if (r.ok) { notifyStatus('Slack workspace disconnected.'); this.rerender(); } else notifyError("Couldn’t disconnect.");
           }); });
@@ -648,8 +648,8 @@ export class AskMyuSettingTab extends PluginSettingTab {
       slackRow.addButton((b) => b.setButtonText(slackRows.length ? 'Connect another…' : 'Connect…').onClick(async () => {
         const r = await this.plugin.backend.slackConnect().catch(() => null);
         const url = r?.data?.authorization_url;
-        if (r?.ok && url) { window.open(url, '_blank'); notifyStatus('Finish on Slack’s screen; the workspace shows here when you reopen settings.'); }
-        else notifyError('Could not start the Slack connect.');
+        if (r?.ok && url) { window.open(url, '_blank'); notifyStatus('Finish on Slack’s screen. The workspace appears here when you reopen settings.'); }
+        else notifyError('Could not start connecting to Slack.');
       }));
     }
 
@@ -668,7 +668,7 @@ export class AskMyuSettingTab extends PluginSettingTab {
           .setName(String(c.workspace_name ?? c.workspace_id ?? 'Organization'))
           .setDesc([c.user_email, c.user_name].filter(Boolean).join(' · '))
           .addButton((b) => { let armed = false; b.setButtonText('Disconnect').onClick(async () => {
-            if (!armed) { armed = true; b.setButtonText('Disconnect — sure?').setDestructive(); return; }
+            if (!armed) { armed = true; b.setButtonText('Disconnect? Click again to confirm').setDestructive(); return; }
             const r = await this.plugin.backend.zulipDisconnect(id);
             if (r.ok) { notifyStatus('Zulip organization disconnected.'); this.rerender(); } else notifyError("Couldn’t disconnect.");
           }); });
@@ -689,7 +689,7 @@ export class AskMyuSettingTab extends PluginSettingTab {
       : await this.plugin.backend.microsoftOAuthStatus().catch(() => null);
     const why = loadFailure(res);
     if (why) {
-      row.setDesc(`Couldn't check whether it is connected — ${why}`);
+      row.setDesc(`Couldn't check whether it is connected. ${why}`);
       row.addButton((b) =>
         b.setButtonText('Retry').onClick(() => {
           row.controlEl.empty();
@@ -709,7 +709,7 @@ export class AskMyuSettingTab extends PluginSettingTab {
       const who = creds.length === 1 ? `as ${creds[0]?.email ?? 'one account'}` : `— ${creds.length} accounts`;
       row.setDesc(
         split
-          ? `Connected ${who}. Read-only — Myu prepares and never sends. Each piece below is its own permission.`
+          ? `Connected ${who}. Read-only: Myu never sends anything. Each item below has its own permission.`
           : `Connected ${who}. Myu is reading calendar and mail from it.`,
       );
       // The web's connection card: one row per signed-in account, with Set
@@ -728,7 +728,7 @@ export class AskMyuSettingTab extends PluginSettingTab {
         line.addButton((b) => {
           let armed = false;
           b.setButtonText('Disconnect').onClick(async () => {
-            if (!armed) { armed = true; b.setButtonText('Disconnect — sure?').setDestructive(); return; }
+            if (!armed) { armed = true; b.setButtonText('Disconnect? Click again to confirm').setDestructive(); return; }
             const r = provider === 'google' ? await this.plugin.backend.googleOAuthDisconnect(id) : await this.plugin.backend.microsoftOAuthDisconnect(id);
             if (r.ok && r.data?.success !== false) { notifyStatus(r.data?.message || 'Disconnected.'); this.rerender(); } else { notifyError(r.data?.error || "Couldn’t disconnect."); armed = false; b.setButtonText('Disconnect'); }
           });
@@ -742,17 +742,17 @@ export class AskMyuSettingTab extends PluginSettingTab {
 
   private renderServiceRows(host: HTMLElement, provider: 'google' | 'microsoft', services: NonNullable<NonNullable<OAuthStatusResult['credentials']>[number]['services']>, split: boolean, credentialId: string | undefined): void {
     const rows: Array<[string, keyof typeof services, ScopeSet, string]> = [
-      ['Calendar', 'calendar', 'calendar', 'Not yet \u2014 who you are meeting, and the homework before each one'],
-      ['Mail', 'mail', 'history', 'Not yet \u2014 where you left off with people, what you owe and are owed'],
-      [provider === 'google' ? 'Meeting notes (Drive)' : 'Meeting notes', 'meeting_notes', 'history', 'Not yet \u2014 decisions and commitments from your meeting notes, automatically'],
+      ['Calendar', 'calendar', 'calendar', 'Not connected. Connect it to see who you are meeting and get prepared before each meeting'],
+      ['Mail', 'mail', 'history', 'Not connected. Connect it so Myu knows where you left off with people and what is still outstanding'],
+      [provider === 'google' ? 'Meeting notes (Drive)' : 'Meeting notes', 'meeting_notes', 'history', 'Not connected. Connect it to pull decisions and commitments from your meeting notes'],
     ];
     let anyNot = false;
     for (const [name, key, scope, notYet] of rows) {
       const svc = services[key];
       const state = svc?.state ?? 'not_yet';
       const sub = state === 'connected'
-        ? [svc?.last_sync_at ? `synced ${ago(svc.last_sync_at)}` : 'connected', key === 'calendar' && svc?.events_synced != null ? `${svc.events_synced} events` : '', key === 'mail' && svc?.understood_back_to ? `understood back to ${svc.understood_back_to}${svc.still_reading ? ' \u00b7 still reading' : ''}` : ''].filter(Boolean).join(' \u00b7 ')
-        : state === 'needs_reconnect' ? 'Stopped syncing \u2014 the permission expired' : notYet;
+        ? [svc?.last_sync_at ? `synced ${ago(svc.last_sync_at)}` : 'connected', key === 'calendar' && svc?.events_synced != null ? `${svc.events_synced} events` : '', key === 'mail' && svc?.understood_back_to ? `read back to ${svc.understood_back_to}${svc.still_reading ? ' \u00b7 still reading' : ''}` : ''].filter(Boolean).join(' \u00b7 ')
+        : state === 'needs_reconnect' ? 'Stopped syncing. The permission expired' : notYet;
       const r = new Setting(host).setName(name).setDesc(sub);
       if (state === 'connected' && key === 'mail' && credentialId) {
         // The mail cap (cold start): how far back Myu reads. Verified servlet:
@@ -773,14 +773,14 @@ export class AskMyuSettingTab extends PluginSettingTab {
       else if (state === 'needs_reconnect') r.addButton((b) => b.setButtonText('Reconnect').setDestructive().onClick(() => void this.startOAuth(provider, { scopeSet: 'all' })));
       else { anyNot = true; if (split) r.addButton((b) => b.setButtonText(key === 'calendar' ? 'Connect calendar' : key === 'mail' ? 'Connect mail' : 'Connect notes').onClick(() => void this.startOAuth(provider, { scopeSet: scope }))); }
     }
-    if (anyNot && split) new Setting(host).setName('Connect everything').setDesc('One consent for calendar, mail and meeting notes.').addButton((b) => b.setButtonText('Connect everything\u2026').onClick(() => void this.startOAuth(provider, { scopeSet: 'all' })));
+    if (anyNot && split) new Setting(host).setName('Connect everything').setDesc('One permission for calendar, mail and meeting notes.').addButton((b) => b.setButtonText('Connect everything\u2026').onClick(() => void this.startOAuth(provider, { scopeSet: 'all' })));
   }
 
   private async startOAuth(provider: 'google' | 'microsoft', opts: OAuthInitOptions = {}): Promise<void> {
     const init = provider === 'google' ? await this.plugin.backend.googleOAuthInit(opts) : await this.plugin.backend.microsoftOAuthInit(opts);
     const url = init.data?.auth_url;
     if (init.ok && url) window.open(url, '_blank');
-    else notifyStatus('Could not start the connect — check the connection.');
+    else notifyStatus('Could not start connecting. Check your connection.');
   }
 
   /** Async section: fetch pending transfer requests, render approve/deny rows. */
@@ -793,7 +793,7 @@ export class AskMyuSettingTab extends PluginSettingTab {
     for (const request of pending) {
       const row = new Setting(host)
         .setName(`“${request.device_name ?? 'A device'}” wants to join`)
-        .setDesc('Type the 4-digit code shown on that device to let it in — its own key custody, revocable any time.');
+        .setDesc('Type the 4-digit code shown on that device to approve it. You can remove it from your devices at any time.');
       row.addButton((b) =>
         b.setButtonText('Deny').onClick(async () => {
           await this.plugin.backend.denyDeviceTransfer(request.request_id);
@@ -807,7 +807,7 @@ export class AskMyuSettingTab extends PluginSettingTab {
           .setCta()
           .onClick(() => {
             if (!request.public_key) {
-              notifyStatus('This request is from an older app version — approve it from the web instead.');
+              notifyStatus('This request is from an older app version. Approve it from the web instead.');
               return;
             }
             new ApproveDeviceModal(this.app, this.plugin, request.request_id, request.public_key, () =>
@@ -853,7 +853,7 @@ export class AskMyuSettingTab extends PluginSettingTab {
     };
 
     if (standing.state === 'absent') {
-      row.setDesc(`Myu\u2019s own look on Myu\u2019s panes only \u2014 cyan and amber, a serif voice. Optional: your theme stays yours. Installs as a CSS snippet at ${path}, yours to edit, turn off, or remove.`);
+      row.setDesc(`An optional style for Myu\u2019s panes only: cyan and amber, with a serif font for Myu\u2019s words. Your theme is not changed. Installs as a CSS snippet at ${path}, which you can edit, turn off, or remove.`);
       linkToFile();
       row.addButton((b) => b.setButtonText('Install the look').setCta().onClick(() => void install()));
       return;
@@ -869,7 +869,7 @@ export class AskMyuSettingTab extends PluginSettingTab {
       row.addButton((b) =>
         b.setButtonText('Remove').setDestructive().onClick(async () => {
           await installer.remove().catch(() => undefined);
-          notifyStatus('The Myu look is gone. Install it again any time.');
+          notifyStatus('The Myu look is removed. Install it again any time.');
           again();
         }),
       );
@@ -891,8 +891,8 @@ export class AskMyuSettingTab extends PluginSettingTab {
       b.setButtonText('Remove').setDestructive().onClick(() =>
         new PersonActionConfirmModal(
           this.app,
-          { title: 'Remove the look?', body: `${path} is deleted. It may carry edits of yours.`, cta: 'Remove it' },
-          async (yes) => { if (!yes) return; await installer.remove().catch(() => undefined); notifyStatus('The Myu look is gone.'); again(); },
+          { title: 'Remove the look?', body: `${path} is deleted. It may contain edits you made.`, cta: 'Remove it' },
+          async (yes) => { if (!yes) return; await installer.remove().catch(() => undefined); notifyStatus('The Myu look is removed.'); again(); },
         ).open(),
       ),
     );
@@ -917,7 +917,7 @@ export class AskMyuSettingTab extends PluginSettingTab {
       // Signup's ceremony was closed mid-way: session exists, keys don't.
       new Setting(root)
         .setName('Finish creating your keys')
-        .setDesc('Your account is waiting on the twelve-word step — two minutes, then everything works.')
+        .setDesc('Your account still needs the twelve-word recovery step. It takes two minutes, then everything works.')
         .addButton((b) =>
           b.setButtonText('Finish setup…').setCta().onClick(() => this.plugin.openGenesisCeremony()),
         );
@@ -931,8 +931,8 @@ export class AskMyuSettingTab extends PluginSettingTab {
       new Setting(root)
         .setName('Tell Myu who you are')
         .setDesc(
-          'Your notes teach Myu what you did — not where you are right now. ' +
-          'Two minutes: your arc and your current moment. Briefs get sharper the same day.',
+          'Your notes tell Myu what you did, not where you are right now. ' +
+          'Two minutes: your career so far and your current situation. Briefs get better the same day.',
         )
         .addButton((b) => b.setButtonText('Start…').setCta().onClick(() => this.plugin.openOnboarding(() => this.rerender())));
     }
@@ -943,9 +943,9 @@ export class AskMyuSettingTab extends PluginSettingTab {
       new Setting(root)
         .setName('Add a recovery method')
         .setDesc(
-          'Your key lives on this device. Until a recovery method exists, losing ' +
-          'it means bringing your vault in again. Twelve words, two minutes, ' +
-          'right here — or a passkey on the web.',
+          'Your key is stored on this device only. Without a recovery method, losing ' +
+          'this device means starting over. Set up a twelve-word phrase here in two minutes, ' +
+          'or a passkey on the web.',
         )
         .addButton((b) =>
           b
@@ -1002,7 +1002,7 @@ export class AskMyuSettingTab extends PluginSettingTab {
       // web and mobile toggles write; stopped_ack points users here.
       new Setting(root)
         .setName('Offers in conversation')
-        .setDesc('Myu occasionally offers to connect a calendar, mail or notes right in the conversation. Off: it stops asking; everything stays connectable here.')
+        .setDesc('Myu sometimes offers to connect a calendar, mail or notes in the conversation. Off: it stops asking. You can still connect everything here.')
         .addToggle((t) =>
           t.setValue((this.plugin.onboardingScripts?.offer_all_stopped as boolean | undefined) !== true).onChange(async (v) => {
             const accountId = this.plugin.settings.account_id;
@@ -1017,8 +1017,8 @@ export class AskMyuSettingTab extends PluginSettingTab {
         .setName('Work between visits')
         .setDesc(
           consented === true
-            ? 'On — Myu can keep working on your notes while you are away (compositions, extraction, cards). Turning off stops it immediately.'
-            : 'Off — Myu works on your notes only while you are here. Turn on and Myu can prepare things between visits.',
+            ? 'On. Myu can keep working on your notes while you are away (canvases, reading notes, cards). Turning this off stops it immediately.'
+            : 'Off. Myu works on your notes only while you are here. Turn on and Myu can prepare things between visits.',
         )
         .addToggle((tg) =>
           tg.setValue(consented === true).onChange(async (v) => {
@@ -1028,7 +1028,7 @@ export class AskMyuSettingTab extends PluginSettingTab {
               await this.plugin.saveSettings();
               this.rerender();
             } else {
-              notifyStatus('Could not change it — check the connection.');
+              notifyStatus('Could not change it. Check your connection.');
               tg.setValue(consented === true);
             }
           }),
@@ -1040,7 +1040,7 @@ export class AskMyuSettingTab extends PluginSettingTab {
       // the account starts here. The token card below is for existing users.
       new Setting(root)
         .setName('New to Myu?')
-        .setDesc('Create your account right here — no website first. Vault-only start is fine.')
+        .setDesc('Create your account right here. No website needed.')
         .addButton((b) =>
           b
             .setButtonText('Create my account…')
@@ -1078,9 +1078,9 @@ export class AskMyuSettingTab extends PluginSettingTab {
         .setName('Approve this device')
         .setDesc(
           inFlight?.status === 'pending'
-            ? `Waiting for approval — enter ${inFlight.code} on a device that is already signed in. It finishes on its own; the Today pane shows the same code.`
-            : 'Your notes are encrypted with a key only your devices hold. Approve this ' +
-                'one from a device you are already signed in on, or use your recovery phrase.',
+            ? `Waiting for approval. Enter ${inFlight.code} on a device that is already signed in. It finishes on its own; the Today pane shows the same code.`
+            : 'Your notes are encrypted with a key that only your devices have. Approve this ' +
+                'device from one where you are already signed in, or use your recovery phrase.',
         )
         .addButton((b) =>
           b
@@ -1096,8 +1096,8 @@ export class AskMyuSettingTab extends PluginSettingTab {
       new Setting(root)
         .setName('Locked until this device reaches askMyu')
         .setDesc(
-          'This vault holds your notes encrypted; the key that opens them is on the ' +
-            'server, fetched fresh each time Obsidian starts. Capture is paused until then.',
+          'Your notes here are encrypted. The key that opens them is fetched from the ' +
+            'server each time Obsidian starts. Sharing notes is paused until then.',
         )
         .addButton((b) =>
           b.setButtonText('Try now').onClick(async () => {
@@ -1109,11 +1109,11 @@ export class AskMyuSettingTab extends PluginSettingTab {
 
     new Setting(root)
       .setName('Disconnect')
-      .setDesc('Clears this vault\'s token and its encrypted key material. Your notes are untouched.')
+      .setDesc('Removes this vault\'s sign-in token and its encrypted key. Your notes are not touched.')
       .addButton((b) =>
         b.setDestructive().setButtonText('Disconnect').onClick(async () => {
           await this.plugin.unlock.disconnect();
-          notifyStatus('askMyu disconnected. Nothing further leaves this vault.');
+          notifyStatus('askMyu disconnected. Nothing more is sent from this vault.');
           this.rerender();
         }),
       );
@@ -1130,8 +1130,8 @@ export class AskMyuSettingTab extends PluginSettingTab {
       root.createEl('p', {
         cls: 'myu-prose myu-quiet',
         text:
-          'Nothing. No folder or tag is shared, so the vault watcher is not running ' +
-          'and no note has been read.',
+          'Nothing is shared. No folder or tag is selected, so Myu is not watching ' +
+          'this vault and has not read any note.',
       });
     } else {
       const list = root.createDiv({ cls: 'myu-list' });
@@ -1143,7 +1143,7 @@ export class AskMyuSettingTab extends PluginSettingTab {
       }
       root.createEl('p', {
         cls: 'myu-prose myu-quiet',
-        text: 'Any note with `myu: false` in its frontmatter is skipped, wherever it lives.',
+        text: 'Any note with `myu: false` in its frontmatter is skipped, whichever folder it is in.',
       });
     }
 
@@ -1169,13 +1169,13 @@ export class AskMyuSettingTab extends PluginSettingTab {
       cls: 'myu-prose myu-quiet',
       text:
         folders.length === 0
-          ? 'Off. No meeting-notes folder is shared; notes can still opt in one at a time with `myu-meeting: true`.'
-          : `Sharing: ${folders.map((f) => `${f}/`).join(', ')} — processed server-side like every meeting source.`,
+          ? 'Off. No meeting-notes folder is shared. A single note can still be shared by adding `myu-meeting: true` to it.'
+          : `Sharing: ${folders.map((f) => `${f}/`).join(', ')}. Processed on the server like every other meeting source.`,
     });
 
     new Setting(root)
       .setName('Choose meeting-notes folders')
-      .setDesc('A separate consent from journal capture — meeting notes are a different kind of data.')
+      .setDesc('A separate choice from your journal. Meeting notes are a different kind of data.')
       .addButton((b) =>
         b.setButtonText(folders.length === 0 ? 'Choose folders' : 'Change').onClick(() => {
           new MeetingConsentModal(this.app, this.plugin, () => this.rerender()).open();
@@ -1192,13 +1192,13 @@ export class AskMyuSettingTab extends PluginSettingTab {
     root.createEl('p', {
       cls: 'myu-prose myu-quiet',
       text: enabled
-        ? 'Myu adds a short section to your weekly note when you ask it to. It is the only thing Myu writes into your vault.'
-        : 'Off. Myu writes nothing into your vault — its reads live in panes that close.',
+        ? 'Myu adds a short section to your weekly note when you ask it to.'
+        : 'Off. Myu does not write a weekly review to your vault.',
     });
 
     new Setting(root)
       .setName('Write a weekly review into my weekly note')
-      .setDesc('Movement across your relationships, as counts. Opt-in, and never automatic.')
+      .setDesc('What changed across your relationships, as counts. Only when you turn it on, and never automatic.')
       .addToggle((t) =>
         t.setValue(enabled).onChange((wanted) => {
           if (!wanted) {
@@ -1217,7 +1217,7 @@ export class AskMyuSettingTab extends PluginSettingTab {
 
     if (enabled) {
       new Setting(root)
-        .setName("Write this week's now")
+        .setName("Write this week's review now")
         .addButton((b) => b.setButtonText('Write it').onClick(() => void this.plugin.writeWeeklyReview()));
     }
   }
@@ -1232,26 +1232,26 @@ export class AskMyuSettingTab extends PluginSettingTab {
     new Setting(root).setName('Your data').setHeading();
     new Setting(root)
       .setName('Export everything into the vault')
-      .setDesc('Every surface, every conversation, every canvas that still exists \u2014 as files under Myu/, with a receipt (Myu/Export.md) that says what landed and what did not.')
+      .setDesc('Everything Myu knows, every conversation, and every canvas that still exists, as files under Myu/, with a summary (Myu/Export.md) that says what was saved and what was not.')
       .addButton((b) => b.setButtonText('Export now').onClick(() => void this.plugin.exportEverything()));
     new Setting(root)
       .setName('Request my data archive')
-      .setDesc('Everything the server holds, as one encrypted zip: link by email, passphrase shown once. The part no vault file can carry \u2014 account, devices, keys.')
+      .setDesc('Everything the server stores about you, as one encrypted zip: a link by email, with a passphrase shown once. Includes what vault files cannot hold: account, devices, keys.')
       .addButton((b) => b.setButtonText('Request\u2026').onClick(() => this.plugin.openDataExport()));
     new Setting(root)
       .setName('Remove everything Myu wrote')
-      .setDesc('Every page, note, table and canvas Myu wrote goes to the trash (recoverable). Your own notes are untouched. Turn writing off above first if you want it to stay gone.')
+      .setDesc('Every page, note, table and canvas Myu wrote goes to the trash (you can recover them). Your own notes are not touched. Turn writing off above first if you want it to stay gone.')
       .addButton((b) => b.setButtonText('Remove\u2026').setDestructive().onClick(() => this.plugin.removeEverythingMyuWrote()));
     new Setting(root)
       .setName('If you uninstall')
-      .setDesc('Everything under Myu/ stays exactly as it is and needs no plugin to open. Notes stop refreshing; nothing breaks. The plugin\u2019s own data.json (your token and wrapped key) goes with it, so no custody is left on this device. Your account is untouched \u2014 delete it above, or on the web.');
+      .setDesc('Everything under Myu/ stays exactly as it is and opens without the plugin. Notes stop updating; nothing breaks. The plugin\u2019s own data.json (your sign-in token and encrypted key) is removed with it, so no key is left on this device. Your account is not touched. Delete it above, or on the web.');
 
     const lookHost = root.createDiv();
     void this.renderLook(lookHost);
 
     new Setting(root)
       .setName('Subscription')
-      .setDesc('Billing lives with the payment provider — one door, on the web.')
+      .setDesc('Billing is managed on the web.')
       .addButton((b) =>
         b.setButtonText('Manage on the web').onClick(() => {
           window.open(`${this.webOrigin()}/settings/subscription`, '_blank');
@@ -1260,7 +1260,7 @@ export class AskMyuSettingTab extends PluginSettingTab {
 
     new Setting(root)
       .setName('Quiet period before capture')
-      .setDesc('Seconds of no editing before a note is sent. Notes are living documents; short values capture half-sentences.')
+      .setDesc('How many seconds without edits before a note is sent. Short values can send half-finished sentences.')
       .addText((t) =>
         t.setValue(String(this.plugin.settings.quiescence_seconds)).onChange(async (v) => {
           const parsed = Number.parseInt(v, 10);
@@ -1275,7 +1275,7 @@ export class AskMyuSettingTab extends PluginSettingTab {
     if (queued > 0) {
       new Setting(root)
         .setName('Waiting to send')
-        .setDesc(`${queued} encrypted ${queued === 1 ? 'note is' : 'notes are'} queued — they go out when this device reconnects.`)
+        .setDesc(`${queued} encrypted ${queued === 1 ? 'note is' : 'notes are'} queued. They are sent when this device reconnects.`)
         .addButton((b) =>
           b.setButtonText('Send now').onClick(async () => {
             await this.plugin.capture.flushQueue();
@@ -1324,12 +1324,12 @@ function describeState(state: string, detail: string | null): string {
     case 'unlocked':
       return 'connected';
     case 'relocked':
-      return 'locked — needs the network to reopen';
+      return 'locked. Needs a network connection to reopen';
     case 'blocked':
-      if (detail === 'genesis_pending') return 'one step left — the twelve words';
-      if (detail === 'genesis_failed') return 'key setup didn’t finish — try again';
-      if (detail === 'existing_account') return 'welcome back — approve this device or use your phrase';
-      return detail === 'device_revoked' ? 'this device was removed — approve it again' : 'needs approval';
+      if (detail === 'genesis_pending') return 'one step left: the twelve-word recovery phrase';
+      if (detail === 'genesis_failed') return 'key setup did not finish. Try again';
+      if (detail === 'existing_account') return 'welcome back. Approve this device or use your recovery phrase';
+      return detail === 'device_revoked' ? 'this device was removed. Approve it again' : 'needs approval';
     default:
       return 'not connected';
   }

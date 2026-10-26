@@ -18,6 +18,11 @@ export interface EncryptedJournalPayload {
   entity_hints?: string[];
   previous_external_id?: string;
   no_response: boolean;
+  /**
+   * 2026-10-06: the note is a Web Clipper capture (`clippings` tag, or a web `source`). Beside the ciphertext, never
+   * inside it; sent only when true, and part of the capture hash, so removing the tag sends the note again.
+   */
+  web_clipping?: boolean;
 }
 
 export class PlaintextRefusedError extends Error {
@@ -37,8 +42,9 @@ export function assertEncrypted(payload: EncryptedJournalPayload): void {
   // A plaintext key at all means someone built a plaintext payload and bolted
   // encryption on afterwards. Refuse the whole thing rather than strip it —
   // stripping would hide the caller's bug and ship the rest.
-  if ('content' in carrier || 'text' in carrier || 'body' in carrier) {
-    throw new PlaintextRefusedError('it carries a plaintext field (content/text/body)');
+  // Pasted text (2026-10-06) is plaintext too: a capture never carries it (the server refuses it as it refuses content).
+  if ('content' in carrier || 'text' in carrier || 'body' in carrier || 'pasted_blocks' in carrier) {
+    throw new PlaintextRefusedError('it carries a plaintext field (content/text/body/pasted_blocks)');
   }
   if (typeof payload.encrypted_content !== 'string' || payload.encrypted_content.length === 0) {
     throw new PlaintextRefusedError('encrypted_content is missing or empty');

@@ -60,18 +60,18 @@ export class SetupRecoveryModal extends Modal {
     contentEl.addClass('myu-power-down');
 
     if (this.stage === 'show') {
-      contentEl.createEl('h2', { text: this.mode === 'genesis' ? 'Your keys — and the twelve words that back them' : 'Your recovery phrase' });
+      contentEl.createEl('h2', { text: this.mode === 'genesis' ? 'Your encryption key and its 12-word backup' : 'Your recovery phrase' });
       contentEl.createEl('p', {
         cls: 'myu-prose',
         text:
           this.mode === 'genesis'
-            ? 'Your notes get their own key, created on this device. These twelve ' +
-              'words are its backup — the only way in if this device is lost. ' +
-              'Write them down somewhere real; they are shown once and never ' +
-              'leave this device.'
-            : 'Twelve words that can unlock your notes if this device is lost. ' +
-              'Write them down somewhere real — paper beats pixels. They are shown ' +
-              'once and never leave this device.',
+            ? 'Your notes are encrypted with a key created on this device. These twelve ' +
+              'words are the backup for that key, and the only way to get your notes back ' +
+              'if this device is lost. Write them down somewhere safe. They are shown once ' +
+              'and are never sent anywhere.'
+            : 'These twelve words can unlock your notes if this device is lost. ' +
+              'Write them down on paper and keep it somewhere safe. They are shown ' +
+              'once and are never sent anywhere.',
       });
 
       const grid = contentEl.createDiv({ cls: 'myu-recovery-grid' });
@@ -93,7 +93,7 @@ export class SetupRecoveryModal extends Modal {
       copy.onclick = async () => {
         await navigator.clipboard.writeText(this.phrase);
         this.securedVia = 'manager';
-        copy.textContent = 'Copied — paste it into your manager now';
+        copy.textContent = 'Copied. Paste it into your password manager now.';
         copy.disabled = true;
         const snapshot = this.phrase;
         window.setTimeout(() => {
@@ -119,10 +119,10 @@ export class SetupRecoveryModal extends Modal {
       return;
     }
 
-    contentEl.createEl('h2', { text: 'Prove the paper' });
+    contentEl.createEl('h2', { text: 'Check what you wrote down' });
     contentEl.createEl('p', {
       cls: 'myu-prose',
-      text: 'Two of your twelve, from what you wrote — not from memory of the screen.',
+      text: 'Type two of the twelve words from what you wrote down.',
     });
 
     const [a, b] = this.checkIndexes;
@@ -158,7 +158,7 @@ export class SetupRecoveryModal extends Modal {
       const dialog = electron?.remote?.dialog;
       const fs = w.require?.('fs') as { writeFileSync: (p: string, c: string) => void } | undefined;
       if (!dialog || !fs) {
-        notifyError('Saving needs the desktop app — copy the phrase instead.');
+        notifyError('Saving to a file only works in the desktop app. Copy the phrase instead.');
         return;
       }
 
@@ -171,7 +171,7 @@ export class SetupRecoveryModal extends Modal {
       const adapter = this.app.vault.adapter;
       const vaultBase = adapter instanceof FileSystemAdapter ? adapter.getBasePath() : null;
       if (vaultBase && result.filePath.startsWith(vaultBase)) {
-        notifyError('Not inside your vault — it syncs, and this phrase must never sync. Pick somewhere else.');
+        notifyError('Do not save it inside your vault. Your vault syncs, and this phrase must never sync. Choose another folder.');
         return;
       }
 
@@ -182,8 +182,8 @@ export class SetupRecoveryModal extends Modal {
         this.phrase,
         '',
         'These twelve words unlock your askMyu notes if every signed-in device is lost.',
-        'Anyone holding them can read your notes. Best homes: your password manager,',
-        'a printed page, an offline drive. Avoid cloud-synced folders.',
+        'Anyone who has them can read your notes. Keep them in your password manager,',
+        'on a printed page, or on an offline drive. Avoid cloud-synced folders.',
         '',
       ];
       fs.writeFileSync(result.filePath, lines.join('\n'));
@@ -218,7 +218,7 @@ export class SetupRecoveryModal extends Modal {
     if (this.securedVia) {
       row.addButton((b) =>
         b
-          .setButtonText(this.securedVia === 'manager' ? 'It’s in my password manager — finish' : 'The file is safe — finish')
+          .setButtonText(this.securedVia === 'manager' ? 'Saved in my password manager. Finish' : 'File saved. Finish')
           .setCta()
           .onClick(() => void this.finish(b.buttonEl)),
       );
@@ -242,7 +242,7 @@ export class SetupRecoveryModal extends Modal {
       const words = this.phrase.split(' ');
       const [a, b] = this.checkIndexes;
       if (this.answers[0] !== words[a] || this.answers[1] !== words[b]) {
-        notifyError("Those don't match — check the paper.");
+        notifyError("Those words don't match. Check what you wrote down.");
         return;
       }
     }
@@ -262,8 +262,8 @@ export class SetupRecoveryModal extends Modal {
       await this.plugin.saveSettings();
       notifyStatus(
         this.mode === 'genesis'
-          ? 'Keys created. The phrase on paper is their only backup.'
-          : 'Recovery is set. The phrase on paper is now the only copy.',
+          ? 'Encryption key created. Your written phrase is its only backup.'
+          : 'Recovery phrase set. Your written copy is the only one.',
       );
       this.close();
       this.onFinished();

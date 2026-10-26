@@ -13,12 +13,12 @@ export function canvasAsksLine(spec: CompositionSpecLite | null | undefined): st
   for (const c of spec?.components ?? []) {
     if (c.type === 'offer_block') {
       const options = (c.data as { options?: Array<{ id?: string }> } | undefined)?.options ?? [];
-      parts.push(options.some((o) => (o.id ?? '').startsWith('calendar')) ? 'connect a calendar' : 'an offer to answer');
+      parts.push(options.some((o) => (o.id ?? '').startsWith('calendar')) ? 'connect a calendar' : 'an offer to accept or decline');
     } else if (c.type === 'decision_frame') decisions++;
     else if (c.type === 'reflection_prompt' || c.type === 'inline_chat') questions++;
   }
-  if (decisions) parts.push(decisions === 1 ? 'a decision to weigh' : `${decisions} decisions to weigh`);
+  if (decisions) parts.push(decisions === 1 ? 'a decision to make' : `${decisions} decisions to make`);
   if (questions) parts.push(questions === 1 ? 'a question to answer' : `${questions} questions to answer`);
   if (parts.length === 0) return null;
-  return `Needs you on the canvas: ${parts.join(' \u00b7 ')}`;
+  return `This canvas needs your input: ${parts.join(' \u00b7 ')}`;
 }

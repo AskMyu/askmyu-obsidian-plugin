@@ -398,6 +398,20 @@ check('invariant 17 — styles.css sets no fonts, px type, or colors of its own'
   return problems.length ? `styles.css fights the theme: ${problems.join(', ')}` : null;
 });
 
+// The directory's automated review flagged `text-decoration` on 0.1.0 (the shorthand) and again
+// on 0.1.1 (`text-decoration-line`); 0.1.2 passed with none at all, and the one-list work then
+// brought it back in three rules (caught before 0.1.3, 2026-09-21). Vendor-prefixed properties
+// are the same class of finding. Say it with color, max-height or a border instead.
+check('invariant 17b — styles.css has no text-decoration and no vendor-prefixed properties', () => {
+  const css = readFileSync('styles.css', 'utf8').replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '));
+  const problems = [];
+  for (const [i, line] of css.split('\n').entries()) {
+    if (/text-decoration/.test(line)) problems.push(`${i + 1}: text-decoration`);
+    if (/(^|[\s;{])-(webkit|moz|ms|o)-[a-z-]+\s*:/.test(line) || /:\s*-(webkit|moz|ms|o)-/.test(line)) problems.push(`${i + 1}: vendor prefix`);
+  }
+  return problems.length ? `styles.css uses what the directory's review flags: ${problems.join(', ')}` : null;
+});
+
 // ── invariant 18: what you can press, the keyboard can reach ────────────────
 //
 // Rows that do something are <button>s (Tab, Enter, Space, a focus ring), not

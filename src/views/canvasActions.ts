@@ -95,7 +95,7 @@ export function controlsOf(component: CompositionComponentLite): { buttons: Cont
         buttons.push({ label: o.label, action: `offer:${o.id}`, cta, params: { ...(o.init ? { init: o.init } : {}), ...(moment ? { moment, journal_id: str(data.journal_id) || undefined } : {}), ...(str(data.stopped_ack) ? { stopped_ack: str(data.stopped_ack) } : {}) } });
       }
       if (ids.some((o) => o.id === 'calendar_ical')) {
-        input = { action: 'offer:calendar_ical', param_name: 'url', placeholder: 'https://calendar.google.com/calendar/ical/\u2026/basic.ics', submit_label: 'Read my week', submitting_label: 'Reading\u2026', validate: 'url', help_text: 'Google Calendar \u2192 Settings \u2192 your calendar \u2192 Secret address in iCal format. Outlook: Shared calendars \u2192 Publish. Read-only by construction.' };
+        input = { action: 'offer:calendar_ical', param_name: 'url', placeholder: 'https://calendar.google.com/calendar/ical/\u2026/basic.ics', submit_label: 'Add calendar', submitting_label: 'Reading\u2026', validate: 'url', help_text: 'Google Calendar \u2192 Settings \u2192 your calendar \u2192 Secret address in iCal format. Outlook: Shared calendars \u2192 Publish. Myu can only read this address; it can never change your calendar.' };
       }
       break;
     }
@@ -140,7 +140,7 @@ export function renderComponentActions(parent: HTMLElement, component: Compositi
     if (!action) {
       // Interaction only: the answer goes to the conversation, not to a card.
       await host.interact(component.id, interaction as InteractionSpec).catch(() => undefined);
-      say('Sent \u2014 Myu will pick this up in the conversation.');
+      say('Sent. Myu will reply in the conversation.');
       return;
     }
     const res = await host.run(component.id, action, params);

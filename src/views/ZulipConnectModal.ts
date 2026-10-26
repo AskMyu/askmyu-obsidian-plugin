@@ -35,7 +35,7 @@ export class ZulipConnectModal extends Modal {
 
   private async connect(): Promise<void> {
     const realm = this.realm.trim().replace(/\/$/, '');
-    if (!realm || !this.email.trim() || !this.apiKey.trim()) { this.problem = 'All three are needed.'; this.render(); return; }
+    if (!realm || !this.email.trim() || !this.apiKey.trim()) { this.problem = 'Fill in all three fields.'; this.render(); return; }
     this.busy = true; this.problem = null; this.render();
     const res = await this.plugin.backend.zulipConnect(/^https?:\/\//.test(realm) ? realm : `https://${realm}`, this.email.trim(), this.apiKey.trim()).catch(() => null);
     this.busy = false;

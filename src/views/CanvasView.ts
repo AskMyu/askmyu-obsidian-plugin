@@ -179,7 +179,7 @@ export class CanvasView extends ItemView {
     if (!this.plugin.settings.auto_keep_canvas || !this.compositionId || !this.spec) return;
     const outcome = await this.plugin.exportComposition(this.compositionId, 'canvas', { quiet: true });
     if (outcome.status === 'written') { this.keptPath = outcome.canvasPath; this.keepProblem = null; }
-    else { this.keepProblem = `Couldn\u2019t keep this canvas: ${outcome.message}`; }
+    else { this.keepProblem = `Couldn\u2019t save this canvas: ${outcome.message}`; }
     this.render();
   }
 
@@ -258,7 +258,7 @@ export class CanvasView extends ItemView {
     const out = await runOfferOption(this.plugin, option, params);
     if (out.done === 'connected' && this.spec) {
       this.snapshot();
-      this.spec = applyMutations(this.spec, [{ op: 'update', target_id: componentId, data_patch: { lead: 'Calendar\u2019s in. Your week starts painting in Today.', gap_line: '', options: [], trust_line: '', named_person: null } }]);
+      this.spec = applyMutations(this.spec, [{ op: 'update', target_id: componentId, data_patch: { lead: 'Calendar connected. Your meetings will start showing in Today.', gap_line: '', options: [], trust_line: '', named_person: null } }]);
       this.render();
     }
     if (out.done === 'dismissed' && this.spec) {
@@ -276,7 +276,7 @@ export class CanvasView extends ItemView {
     root.empty();
 
     if (this.state === 'loading') {
-      root.createDiv({ cls: 'myu-quiet', text: 'reading\u2026' });
+      root.createDiv({ cls: 'myu-quiet', text: 'Loading\u2026' });
       return;
     }
     if (this.state === 'error') {
@@ -358,12 +358,12 @@ export class CanvasView extends ItemView {
     // What the pin DOES, in the tooltip and in words below — an icon that only
     // changes colour teaches nobody (operator: "what is supposed to happen?").
     const pin = row.createEl('button', { cls: `myu-affordance myu-icon-button myu-canvas-pin${this.pinned ? ' myu-cta' : ''}`, attr: { 'aria-label': this.pinned
-      ? 'Pinned: this canvas stays put. A newer one waits, and says so here.'
-      : 'Following the newest: a new canvas takes this pane. Pin to hold this one.' } });
+      ? 'Pinned: this canvas stays open. When a newer one arrives, a link to it appears here.'
+      : 'Following the newest: a new canvas replaces this one. Pin to keep this one open.' } });
     setIcon(pin, this.pinned ? 'pin' : 'pin-off');
     pin.onclick = () => { this.pinned = !this.pinned; if (!this.pinned) this.newer = null; this.render(); };
 
-    head.createDiv({ cls: 'myu-whisper', text: this.pinned ? 'pinned \u2014 a newer canvas will wait for you' : 'following the newest canvas' });
+    head.createDiv({ cls: 'myu-whisper', text: this.pinned ? 'Pinned. A newer canvas will not replace this one.' : 'Showing the newest canvas' });
 
     // The way back. A canvas without its conversation is an orphan.
     const back = head.createEl('button', { cls: 'myu-affordance myu-link-button', text: 'Show in the conversation' });

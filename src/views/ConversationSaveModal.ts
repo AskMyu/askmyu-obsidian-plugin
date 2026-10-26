@@ -17,13 +17,13 @@ export class ConversationSaveModal extends Modal {
     const { contentEl } = this;
     contentEl.addClass('myu-power-down');
 
-    contentEl.createEl('h2', { text: 'Save this conversation into your vault?' });
+    contentEl.createEl('h2', { text: 'Save this conversation to your vault?' });
     contentEl.createEl('p', {
       cls: 'myu-prose',
       text:
-        "It becomes a note in Myu/Conversations/ — Myu's words about you and the people " +
-        'you discussed, in a file that syncs wherever your vault syncs and stays after ' +
-        'Myu forgets. Saving is always per-conversation; nothing saves itself.',
+        'It is saved as a note in Myu/Conversations/. The note includes what Myu said about you ' +
+        'and the people you discussed. It syncs wherever your vault syncs, and Myu cannot ' +
+        'delete it later. Conversations are only saved when you choose to save them.',
     });
 
     new Setting(contentEl)

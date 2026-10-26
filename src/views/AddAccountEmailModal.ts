@@ -29,8 +29,8 @@ export class AddAccountEmailModal extends Modal {
     contentEl.createEl('p', {
       cls: 'myu-prose',
       text:
-        'Myu emails this address a link. Click it and the address can sign you ' +
-        'in too — useful when work and personal mail both reach you.',
+        'Myu will email a link to this address. Click the link and you can also sign in ' +
+        'with this address. Useful if you use both a work and a personal email.',
     });
 
     new Setting(contentEl)

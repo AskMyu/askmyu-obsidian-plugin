@@ -83,20 +83,19 @@ export class ConsentModal extends Modal {
     contentEl.createEl('p', {
       cls: 'myu-prose',
       text:
-        'Nothing in this vault has been read. Choose the folders whose notes should ' +
-        'go to Myu — usually the one you journal in. Everything outside them stays ' +
-        'here, untouched.',
+        'Myu has not read anything in this vault yet. Choose the folders you want to share ' +
+        'with Myu — usually the one you journal in. Myu never reads anything ' +
+        'outside them.',
     });
 
     contentEl.createEl('p', {
       cls: 'myu-prose myu-quiet',
       text:
-        'Only the folders you choose leave this device, encrypted with a key that ' +
-        'stays on your devices. Everything else in your vault is never read. You can ' +
-        'change this list or disconnect at any time, and any single note can opt out ' +
-        'with `myu: false` in its frontmatter.',
+        'Only notes in the folders you choose are sent, and they are encrypted with a key ' +
+        'that stays on your devices. You can change this list or disconnect at any time. ' +
+        'To keep a single note private, add `myu: false` to its frontmatter.',
     });
-    contentEl.createEl('p', { cls: 'myu-prose myu-quiet', text: `One server: ${serverHost(this.plugin.settings.base_url)}. No telemetry.` });
+    contentEl.createEl('p', { cls: 'myu-prose myu-quiet', text: `Your notes go to one server only: ${serverHost(this.plugin.settings.base_url)}. No usage tracking.` });
 
     if (!this.loaded) {
       contentEl.createEl('p', { cls: 'myu-prose myu-quiet', text: 'Looking at your vault setup…' });
@@ -140,7 +139,7 @@ export class ConsentModal extends Modal {
 
     new Setting(contentEl)
       .setName('Or by tag')
-      .setDesc('Notes carrying any of these tags are shared wherever they live.')
+      .setDesc('Notes with any of these tags are shared, whichever folder they are in.')
       .addText((t) =>
         t
           .setPlaceholder('Myu, journal')

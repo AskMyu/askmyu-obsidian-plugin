@@ -56,8 +56,8 @@ export class PersonEditModal extends Modal {
     contentEl.createEl('p', {
       cls: 'myu-prose',
       text:
-        'These go to Myu, not to the note — the note is rewritten from what Myu ' +
-        'knows, so this is the end that sticks.',
+        'Your changes go to Myu, not to the note. Myu rewrites the note from what it ' +
+        'knows, so changes made here stay.',
     });
 
     new Setting(contentEl).setName('Facts').setHeading();
@@ -72,9 +72,9 @@ export class PersonEditModal extends Modal {
       contentEl.createEl('p', {
         cls: 'myu-prose',
         text:
-          'Correcting one keeps the original as a down-weighted memory and ' +
-          'records your correction, so Myu learns the difference. Deleting ' +
-          'removes it entirely.',
+          'Correcting one keeps the original but gives it less weight, and ' +
+          'saves your correction so Myu learns the difference. Deleting ' +
+          'removes it completely.',
       });
       for (const memory of this.memories.slice(0, 12)) this.memoryRow(contentEl, memory);
     }
@@ -86,7 +86,7 @@ export class PersonEditModal extends Modal {
       .addButton((b) => b.setButtonText('Choose who stays').onClick(() => { this.close(); this.plugin.mergePerson({ id: this.relationshipId, name: this.displayName }); }));
     new Setting(contentEl)
       .setName('This is me')
-      .setDesc('Myu made a person out of you.')
+      .setDesc('Myu created this person by mistake. It is actually you.')
       .addButton((b) => b.setButtonText('That\u2019s me').onClick(() => { this.close(); this.plugin.markPersonAsSelf({ id: this.relationshipId, name: this.displayName }); }));
     if (this.linkedinUrl) {
       new Setting(contentEl)
@@ -100,7 +100,7 @@ export class PersonEditModal extends Modal {
     }
     new Setting(contentEl)
       .setName('Archive')
-      .setDesc('Myu stops surfacing them. Reversible, and nothing is deleted.')
+      .setDesc('Myu stops showing them. You can undo this, and nothing is deleted.')
       .addButton((b) =>
         b.setButtonText('Archive').onClick(async () => {
           const res = await this.plugin.backend.archiveRelationship(this.relationshipId, 'archive');
@@ -114,7 +114,7 @@ export class PersonEditModal extends Modal {
 
     new Setting(contentEl)
       .setName('Forget entirely')
-      .setDesc('Deletes them and everything Myu derived from them. Cannot be undone.')
+      .setDesc('Deletes them and everything Myu has learned from them. Cannot be undone.')
       .addButton((b) =>
         b.setButtonText('Forget').setDestructive().onClick(async () => {
           const res = await this.plugin.backend.purgeRelationship(this.relationshipId);
@@ -151,12 +151,12 @@ export class PersonEditModal extends Modal {
     row.addButton((b) =>
       b.setButtonText('Correct').onClick(async () => {
         if (!correction) {
-          notifyError('Say what is actually true first.');
+          notifyError('Type the correction first.');
           return;
         }
         const res = await this.plugin.backend.editRelationshipMemory(memory.memory_id, 'correct', correction);
         if (res.ok) {
-          notifyStatus('Corrected — Myu keeps both and weights yours.');
+          notifyStatus('Corrected. Myu keeps both versions and trusts yours more.');
           this.onChanged();
         } else notifyError("Couldn't record that correction.");
       }),

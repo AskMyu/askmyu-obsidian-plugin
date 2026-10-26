@@ -14,6 +14,7 @@
  * likes.
  */
 
+import { syncTimeZone } from './timeZone';
 import { Plugin, TAbstractFile, TFile, WorkspaceLeaf, Platform } from 'obsidian';
 import { AskMyuSettingTab } from './views/SettingsTab';
 import { TodayView, TODAY_VIEW_TYPE } from './views/TodayView';
@@ -25,7 +26,7 @@ import { WeeklyReviewWriter, editionToLines, isWeeklyEditionFresh } from './vaul
 import { BackfillModal } from './views/BackfillModal';
 import { ConsentModal } from './views/ConsentModal';
 import { Transport } from './transport/index';
-import { type PendingTransfer, Api, type AskMyuApi, type CardEntityType } from './transport/api';
+import { type PendingTransfer, Api, type AskMyuApi, type CardEntityType, type MyuLineLite } from './transport/api';
 import { MockApi } from './transport/mock';
 import { KeyHolder, type UnlockState } from './crypto/KeyHolder';
 import { generateDeviceId } from './crypto/primitives';
@@ -50,6 +51,7 @@ import { ExportService } from './vault/ExportService';
 import { DataExportModal } from './views/DataExportModal';
 import { CanvasHistoryModal } from './views/CanvasHistoryModal';
 import { FeedbackModal } from './views/FeedbackModal';
+import type { FeedbackFile } from './feedbackFiles';
 import { findEverythingMyuWrote, trashEverythingMyuWrote } from './vault/removeEverything';
 import { surveyLinks, type LinkedPerson } from './capture/linkSurvey';
 import { FeedSearchModal } from './views/FeedSearchModal';
@@ -73,6 +75,12 @@ import { MaterializeConsentModal } from './views/MaterializeConsentModal';
 import { OnboardingModal } from './views/OnboardingModal';
 import { SetupRecoveryModal } from './views/SetupRecoveryModal';
 import { RefreshGate } from './refreshGate';
+import { noteBlock, selectionBlock } from './pastedText';
+import { answersInConversation, meetingQuestionAt } from './lineAnswers';
+import { conversationSubjectType, type ConversationSubjectType } from './spaceConversation';
+import { MenuMarksKeeper, todayPaneMarks } from './menuMarksBar';
+import type { MenuItemKey } from './menuMarks';
+import { SeenWatcher, forgetAnswered } from './linesSeenWatch';
 
 /** At most one recovery-triggered repaint this often — a server that keeps refusing must not loop the pane. */
 const RECOVERY_REPAINT_MS = 30_000;
@@ -119,6 +127,25 @@ export default class AskMyuPlugin extends Plugin {
   private termsUpdateDismissed = false;
   /** GET /oauth/google/status, cached per session — the scope-aware picture (calendar · mail · meeting notes). */
   integration: OAuthStatusResult | null = null;
+  /**
+   * The menu's marks (2026-10-06): what is new in each of Myu's places, said in the status bar (on a phone, at the
+   * top of the Today pane), and the places opened here told to the server. Nothing while the server has no door.
+   * See menuMarksBar.ts.
+   */
+  menuMarks = new MenuMarksKeeper({ doors: () => this.backend, onChange: () => this.paintMenuMarks() });
+  /**
+   * "Seen" (2026-10-06): a line is reported the first time its words have been in view for a second, in the Today
+   * pane, the chat pane or a meeting's card (each hands in its content when it opens). One watcher, so a line on
+   * Today's row and in its conversation is reported once. Nothing changes while the server has no door.
+   * See linesSeenWatch.ts.
+   */
+  linesSeen = new SeenWatcher({ send: (lineIds) => this.reportLinesSeen(lineIds) });
+
+  /** The report itself: only signed in and past the terms; otherwise the lines are reported the next time they are in view. */
+  private reportLinesSeen(lineIds: string[]): Promise<unknown> {
+    if (this.unlock?.current !== 'unlocked' || this.termsStanding() === 'gated') return Promise.reject(new Error('lines seen: not signed in'));
+    return this.backend.markLinesSeen(lineIds);
+  }
 
   async loadFeatures(): Promise<void> {
     const res = await this.backend.getFeatures().catch(() => null);
@@ -158,6 +185,8 @@ export default class AskMyuPlugin extends Plugin {
     await this.loadFeatures();
     await this.refreshToday({ now: true });
     this.startLiveStream();
+    // The menu's marks were never read while the account was held at the terms.
+    this.refreshMenuMarks();
     void this.loadIntegrationStatus(true);
     void this.syncOnOpen();
     return true;
@@ -224,6 +253,8 @@ export default class AskMyuPlugin extends Plugin {
   settingTab: AskMyuSettingTab | null = null;
   private statusBarEl: HTMLElement | null = null;
   private returningSetupOffered = false;
+  /** The person's own day (2026-09-28): this computer's zone saved once per signed-in stretch. */
+  private timeZoneSynced = false;
   /** P8 — the writers behind the shared surface. */
   materializer!: MaterializationService;
   /** P8 — the user's edits in Myu/, shipped back as interaction events. */
@@ -279,6 +310,8 @@ export default class AskMyuPlugin extends Plugin {
     });
 
     this.backend = this.settings.use_mock_backend ? new MockApi() : new Api(this.transport);
+    // "Seen": a line answered, from any pane, is forgotten, so one put off ("Not now") is reported again when it comes back.
+    forgetAnswered(this.backend, (lineId) => this.linesSeen.forget(lineId));
 
     this.unlock = new UnlockMachine({
       api: this.backend,
@@ -387,14 +420,16 @@ export default class AskMyuPlugin extends Plugin {
     this.registerEvent(
       this.app.workspace.on('editor-menu', (menu, editor, info) => {
         if (this.unlock.current !== 'unlocked') return;
-        const selection = editor.getSelection().trim();
-        if (selection) {
+        const selection = editor.getSelection();
+        const file = info.file;
+        if (selection.trim()) {
+          // The selection goes as pasted text from the note (2026-10-06), with its lines; nothing is typed for you.
+          const block = selectionBlock(selection, file?.path, editor.getCursor('from'), editor.getCursor('to'));
           menu.addItem((i) =>
             i.setTitle('Ask Myu about this selection').setIcon('message-circle')
-              .onClick(() => void this.openChat({ text: `About this:\n\n${selection}\n\n`, send: false })),
+              .onClick(() => void this.openChat({ text: '', send: false, pasted: [block] })),
           );
         }
-        const file = info.file;
         if (file && file.extension === 'md') {
           menu.addItem((i) =>
             i.setTitle('Ask Myu about this note').setIcon('message-circle')
@@ -438,13 +473,22 @@ export default class AskMyuPlugin extends Plugin {
     // quiet-structure register applied to presence itself.
     this.statusBarEl = this.addStatusBarItem();
     this.statusBarEl.addClass('myu-statusbar');
+    this.statusBarEl.setAttr('data-tooltip-position', 'top');
     this.statusBarEl.onclick = () => void this.openToday();
     this.setStatusBar('disconnected', null);
+    // The menu's marks (2026-10-06): a place brought in front of the person is a place opened. Its "new" clears here
+    // and on every other device; nothing is sent while the server has no door, and a place with nothing new here is
+    // sent at most once a minute. The chat pane's moves inside itself are told by the pane (chatPaneMoved).
+    this.registerEvent(this.app.workspace.on('active-leaf-change', (leaf) => this.broughtForward(leaf)));
 
     // Ambient refresh + queue drain. `registerInterval` so Obsidian tears them
     // down with the plugin — a leaked interval outlives disable and keeps
     // talking to the network, which for this plugin is a trust bug, not a leak.
-    this.registerInterval(window.setInterval(() => void this.refreshToday(), TODAY_REFRESH_MS));
+    this.registerInterval(window.setInterval(() => {
+      void this.refreshToday();
+      // The menu's marks ride the same rhythm (and are pushed live besides); a server without the door is asked again.
+      this.refreshMenuMarks();
+    }, TODAY_REFRESH_MS));
     // The live layer is not taken on faith: re-open a dead stream, and poll the
     // one thing that must never be missed — another device asking to join.
     this.registerInterval(window.setInterval(() => {
@@ -482,7 +526,7 @@ export default class AskMyuPlugin extends Plugin {
       stamp('myu-connected');
       // The /connected/obsidian landing fired us back after a Google/Microsoft
       // connect. Refresh; the calendar-fed surfaces light up on their own.
-      notifyStatus('Welcome back — Myu is syncing your calendar and email now.');
+      notifyStatus('Welcome back. Myu is syncing your calendar and email now.');
       void this.loadIntegrationStatus(true).then(() => this.refreshToday({ now: true }));
       void this.openToday();
     });
@@ -506,6 +550,13 @@ export default class AskMyuPlugin extends Plugin {
       // thread, resumable (the next send chains the same journal id).
       if (typeof params.journal === 'string' && params.journal) {
         void this.openConversation(params.journal);
+        return;
+      }
+      // The Today file's `talk ▸` — `about=<subject_type>:<subject_id>`, the
+      // same door the pane's rows open.
+      if (typeof params.about === 'string' && params.about.includes(':')) {
+        const idx = params.about.indexOf(':');
+        void this.openChatAbout(params.about.slice(0, idx), params.about.slice(idx + 1));
       }
     });
     this.registerObsidianProtocolHandler('myu-signin', (params) => {
@@ -536,6 +587,20 @@ export default class AskMyuPlugin extends Plugin {
       void this.materializer.refreshHistoryIfDue(true);
     });
     this.sse.subscribe('brief_item_updated', () => void this.refreshToday());
+    // The menu's marks: the server pushes the whole body on every change; a line that changes is also a reason to
+    // read again soon, in case a push was missed (only while the server has the door).
+    this.sse.subscribe('menu_marks', (payload) => this.menuMarks.take(payload));
+    for (const type of ['line_new', 'line_updated']) this.sse.subscribe(type, () => this.menuMarks.lineChanged());
+    // Space mode (R14): a new ask or a readback on the server → the open space conversation reads
+    // again (one ask at a time means the next ask arrives this way after a button elsewhere).
+    for (const type of ['line_new', 'line_updated', 'space.retro.updated']) {
+      this.sse.subscribe(type, (payload) => {
+        const spaceId = typeof payload.space_id === 'string' ? payload.space_id : undefined;
+        for (const leaf of this.app.workspace.getLeavesOfType(CHAT_VIEW_TYPE)) {
+          if (leaf.view instanceof ChatView) leaf.view.refreshSpace(spaceId);
+        }
+      });
+    }
     // ALWAYS KEEP, every surface (operator, 2026-08-29: "we want that"): a
     // canvas made on the web or mobile fires composition_ready here too, so
     // with the switch on, the vault catches every panel — not just the ones
@@ -622,7 +687,7 @@ export default class AskMyuPlugin extends Plugin {
       if (!s.first_run_shown && !s.token && !s.wrapped_mdek && !s.account_id && !s.consent_completed) {
         s.first_run_shown = true;
         void this.saveSettings();
-        notifyStatus('askMyu is installed \u2014 the Myu pane is where you set it up.');
+        notifyStatus('askMyu is installed. Set it up in the Myu pane.');
         void this.openToday();
       }
     });
@@ -637,6 +702,7 @@ export default class AskMyuPlugin extends Plugin {
     this.capture?.stop();
     this.myuWatcher?.stop();
     this.sse?.stop();
+    this.linesSeen.stop();
   }
 
   // ── lifecycle ─────────────────────────────────────────────────────────────
@@ -682,6 +748,8 @@ export default class AskMyuPlugin extends Plugin {
     this.setStatusBar(state, detail);
     // A pane showing the resting state (signed out, blocked, locked) must move the moment the machine does.
     if (state !== 'unlocked') void this.refreshToday({ now: true });
+    // Signed out or locked: the next sign-in saves the zone again.
+    if (state !== 'unlocked') this.timeZoneSynced = false;
     if (state === 'unlocked') {
       void this.refreshOnboardingState();
       void this.unlock.ensurePluginToken();
@@ -691,6 +759,15 @@ export default class AskMyuPlugin extends Plugin {
       void this.loadFeatures().then(() => {
         void this.refreshToday({ now: true });
         this.startLiveStream();
+        this.refreshMenuMarks();
+        // The person's own day (2026-09-28): the brief is built on the saved zone; save this computer's when it
+        // differs (after the terms answer, so a gated account is not asked).
+        if (!this.timeZoneSynced) {
+          this.timeZoneSynced = true;
+          void syncTimeZone(this.backend).then((ok) => {
+            if (!ok) this.timeZoneSynced = false;
+          });
+        }
       });
       void this.loadIntegrationStatus(true);
       // RETURNING-USER choreography (2026-08-25): approval/recovery sign-ins
@@ -736,6 +813,8 @@ export default class AskMyuPlugin extends Plugin {
       this.capture.stop();
       this.meetingCapture.stop();
       this.sse.stop();
+      this.menuMarks.reset();
+      this.linesSeen.reset();
     }
 
     if (state === 'disconnected' && detail === 'token_revoked') {
@@ -782,7 +861,7 @@ export default class AskMyuPlugin extends Plugin {
       checkCallback: (checking: boolean) => {
         if (this.unlock.current !== 'unlocked' || !this.settings.materialize_consented) return false;
         if (checking) return true;
-        void this.materializer.materializeAll().then(() => notifyStatus('Synced — Myu’s folder is current.'));
+        void this.materializer.materializeAll().then(() => notifyStatus('Synced. Myu’s folder is up to date.'));
         return true;
       },
     });
@@ -817,10 +896,12 @@ export default class AskMyuPlugin extends Plugin {
             result === 'sent'
               ? 'Sent to Myu.'
               : result === 'queued'
-                ? 'Saved — it goes out when you are back online.'
+                ? 'Saved. It will be sent when you are back online.'
                 : result === 'vetoed'
-                  ? 'This note opts out with `myu: false`.'
-                  : 'Nothing new in this note since the last time.',
+                  ? 'This note is excluded by `myu: false` in its frontmatter.'
+                  : result === 'generated'
+                    ? 'Myu wrote this note, so it is not sent back as your writing.'
+                    : 'Nothing new in this note since the last time.',
           );
         });
         return true;
@@ -842,11 +923,12 @@ export default class AskMyuPlugin extends Plugin {
     this.addCommand({
       id: 'ask-about-selection',
       name: 'Ask Myu about this selection',
-      editorCheckCallback: (checking, editor) => {
+      editorCheckCallback: (checking, editor, ctx) => {
         const selection = editor.getSelection();
         if (!selection.trim() || this.unlock.current !== 'unlocked') return false;
         if (checking) return true;
-        void this.openChat({ text: `About this:\n\n${selection.trim()}\n\n`, send: false });
+        // The chat opens with the selection as a chip and an empty box; nothing is sent until you send it.
+        void this.openChat({ text: '', send: false, pasted: [selectionBlock(selection, ctx.file?.path, editor.getCursor('from'), editor.getCursor('to'))] });
         return true;
       },
     });
@@ -874,7 +956,7 @@ export default class AskMyuPlugin extends Plugin {
     this.addCommand({ id: 'new-conversation', name: 'Start a new conversation', callback: () => { void this.openChat({ text: '', send: false }); this.chatView()?.startNew(); } });
     this.addCommand({ id: 'cancel-backfill', name: 'Cancel bringing in notes', checkCallback: (checking) => { if (!this.backfillActive) return false; if (!checking) this.cancelBackfill(); return true; } });
     this.addCommand({ id: 'remove-myu-files', name: 'Remove everything Myu wrote', checkCallback: (checking) => { if (this.unlock.current !== 'unlocked' && Object.keys(this.settings.myu_file_hashes).length === 0) return false; if (!checking) this.removeEverythingMyuWrote(); return true; } });
-    this.addCommand({ id: 'weave-myu-in', name: 'Weave Myu in (recipes for your notes)', callback: () => void this.openWeave() });
+    this.addCommand({ id: 'weave-myu-in', name: 'Add Myu to your notes (snippets)', callback: () => void this.openWeave() });
     this.addCommand({
       id: 'insert-myu-snippet',
       name: 'Insert a Myu snippet\u2026',
@@ -882,7 +964,7 @@ export default class AskMyuPlugin extends Plugin {
         new WeaveSnippetModal(this.app, this.settings.materialize_folder || 'Myu', (snippet) => editor.replaceSelection(snippet.text)).open();
       },
     });
-    this.addCommand({ id: 'help-myu', name: 'Help Myu (people it cannot place)', checkCallback: (checking) => { if (this.unlock.current !== 'unlocked') return false; if (!checking) void this.openHelpMyu(); return true; } });
+    this.addCommand({ id: 'help-myu', name: 'Help Myu (people it cannot identify)', checkCallback: (checking) => { if (this.unlock.current !== 'unlocked') return false; if (!checking) void this.openHelpMyu(); return true; } });
     this.addCommand({ id: 'search-myu', name: 'Search Myu (people, companies, memories)', checkCallback: (checking) => { if (this.unlock.current !== 'unlocked') return false; if (!checking) new FeedSearchModal(this.app, this).open(); return true; } });
     this.addCommand({ id: 'import-from-drive', name: 'Import meeting notes from Google Drive\u2026', checkCallback: (checking) => { if (this.unlock.current !== 'unlocked') return false; if (!checking) new DriveImportModal(this.app, this).open(); return true; } });
     this.addCommand({ id: 'send-feedback', name: 'Send feedback', checkCallback: (checking) => { if (this.unlock.current !== 'unlocked') return false; if (!checking) new FeedbackModal(this.app, this).open(); return true; } });
@@ -892,7 +974,7 @@ export default class AskMyuPlugin extends Plugin {
 
     this.addCommand({
       id: 'save-composition',
-      name: 'Save a Myu composition to my vault',
+      name: 'Save a Myu canvas to my vault',
       checkCallback: (checking: boolean) => {
         if (this.unlock.current !== 'unlocked') return false;
         if (checking) return true;
@@ -934,12 +1016,12 @@ export default class AskMyuPlugin extends Plugin {
         void this.meetingCapture.capture(file).then((result) => {
           notifyStatus(
             result === 'sent'
-              ? 'Meeting note sent — Myu is reading it now.'
+              ? 'Meeting note sent. Myu is reading it now.'
               : result === 'unchanged'
                 ? 'Nothing new in this note since the last send.'
                 : result === 'refused'
                   ? "The server refused this note (too large, or it has no date Myu can find)."
-                  : 'Not sent — check the connection.',
+                  : 'Not sent. Check your connection.',
           );
         });
         return true;
@@ -948,7 +1030,7 @@ export default class AskMyuPlugin extends Plugin {
 
     this.addCommand({
       id: 'next-meeting-prep',
-      name: "Look at my next meeting's prep",
+      name: 'Prepare me for my next meeting',
       checkCallback: (checking: boolean) => {
         if (this.unlock.current !== 'unlocked') return false;
         if (checking) return true;
@@ -1012,7 +1094,7 @@ export default class AskMyuPlugin extends Plugin {
 
     this.addCommand({
       id: 'let-myu-write',
-      name: 'Let Myu keep a folder in my vault',
+      name: 'Let Myu create a folder in my vault',
       checkCallback: (checking: boolean) => {
         if (this.unlock.current !== 'unlocked') return false;
         if (checking) return true;
@@ -1040,7 +1122,7 @@ export default class AskMyuPlugin extends Plugin {
         void this.materializer.materializeAll().then(({ people, skipped }) => {
           notifyStatus(
             skipped > 0
-              ? `Refreshed. ${skipped} ${skipped === 1 ? 'file has' : 'files have'} unshipped edits and ${skipped === 1 ? 'was' : 'were'} left alone.`
+              ? `Refreshed. ${skipped} ${skipped === 1 ? 'file has' : 'files have'} edits you made and ${skipped === 1 ? 'was' : 'were'} left alone.`
               : `Refreshed ${people} ${people === 1 ? 'page' : 'pages'}.`,
           );
         });
@@ -1065,6 +1147,7 @@ export default class AskMyuPlugin extends Plugin {
     const existing = this.app.workspace.getLeavesOfType(TODAY_VIEW_TYPE);
     if (existing.length > 0) {
       await this.app.workspace.revealLeaf(existing[0]);
+      this.broughtForward(existing[0]);
       // Opening the pane is the person's own ask: fresh now, not after the gap.
       void this.refreshToday({ now: true });
       return;
@@ -1074,6 +1157,7 @@ export default class AskMyuPlugin extends Plugin {
     if (!leaf) return;
     await leaf.setViewState({ type: TODAY_VIEW_TYPE, active: true });
     await this.app.workspace.revealLeaf(leaf);
+    this.broughtForward(leaf);
   }
 
   /**
@@ -1082,31 +1166,100 @@ export default class AskMyuPlugin extends Plugin {
    * accumulate.
    */
   private setStatusBar(state: UnlockState, detail: string | null): void {
-    if (!this.statusBarEl) return;
+    const el = this.statusBarEl;
+    if (!el) return;
     const word =
       state === 'unlocked' ? 'ready'
       : state === 'relocked' ? (detail === 'offline' ? 'offline' : 'locked')
       : state === 'blocked' ? 'setup'
       : 'off';
-    this.statusBarEl.setText(`myu · ${word}`);
+    // What is new in Myu's places takes the word's place, lit; what waits for an answer is in the tooltip.
+    const marks = state === 'unlocked' ? this.menuMarks.words() : { lit: null, tooltip: null };
+    el.setText(`myu · ${marks.lit ? '' : word}`);
+    if (marks.lit) el.createSpan({ cls: 'myu-statusbar-new', text: marks.lit });
+    if (marks.tooltip) el.setAttr('aria-label', marks.tooltip);
+    else el.removeAttribute('aria-label');
   }
 
-  /** Shared by the palette command and the context menus. */
+  /** The menu's marks moved: the status bar says so, unless it is counting notes being read. */
+  private paintStatusBar(): void {
+    if (this.backfillActive || !this.unlock) return;
+    this.setStatusBar(this.unlock.current, this.lastStateDetail);
+  }
+
+  /**
+   * The menu's marks moved, or a place was opened: the status bar; the dots beside the Today pane's rows (lit while
+   * something is new since Today was opened before this visit); and on a phone (which has no status bar) the line at
+   * the top of the Today pane.
+   */
+  private paintMenuMarks(): void {
+    this.paintStatusBar();
+    for (const leaf of this.app.workspace.getLeavesOfType(TODAY_VIEW_TYPE)) {
+      if (leaf.isDeferred) continue;
+      const view = leaf.view;
+      if (!(view instanceof TodayView)) continue;
+      view.paintDots();
+      if (Platform.isMobile) view.paintMenuMarks();
+    }
+  }
+
+  /** On a phone, what is new in Myu's places, for the top of the Today pane; null on a computer (the status bar says it). */
+  menuMarksLine(): string | null {
+    return todayPaneMarks(this.menuMarks.words(), { mobile: Platform.isMobile, unlocked: this.unlock?.current === 'unlocked' });
+  }
+
+  /** The menu's marks, read again: only signed in and past the terms (a gated account is answered 428, which shows the terms screen). */
+  private refreshMenuMarks(): void {
+    if (this.unlock?.current !== 'unlocked' || this.termsStanding() === 'gated') return;
+    void this.menuMarks.load();
+  }
+
+  /**
+   * Which of Myu's places (the menu's items) a pane is: Today, the chat pane (a space's conversation or any other), the
+   * canvas, a card, a meeting's card. By its type, so a pane not loaded yet (deferred) still says which it is.
+   */
+  private menuItemOf(leaf: WorkspaceLeaf | null | undefined): MenuItemKey | null {
+    const view = leaf?.view;
+    if (!view) return null;
+    if (view instanceof ChatView) return view.menuItem();
+    switch (view.getViewType()) {
+      case TODAY_VIEW_TYPE: return 'home';
+      case CHAT_VIEW_TYPE: return 'conversations';
+      case CANVAS_VIEW_TYPE: return 'canvas';
+      case CARD_VIEW_TYPE: return 'people';
+      case PREP_VIEW_TYPE: return 'calendar';
+      default: return null;
+    }
+  }
+
+  /** A pane brought in front of the person (by them, or by a door they pressed): that place was opened. */
+  private broughtForward(leaf: WorkspaceLeaf | null | undefined): void {
+    this.menuMarks.opened(this.menuItemOf(leaf));
+  }
+
+  /**
+   * The chat pane moved on inside itself (a new conversation, the list of past ones and back, a past one opened): the
+   * pane in front did not change, so no leaf change says so. While it is the pane in front, the place it shows now
+   * was opened.
+   */
+  chatPaneMoved(view: ChatView): void {
+    if (this.app.workspace.getActiveViewOfType(ChatView) !== view) return;
+    this.broughtForward(view.leaf);
+  }
+
+  /**
+   * Shared by the palette command and the context menus. The note goes whole as pasted text from the vault
+   * (`vault_note`, 2026-10-06), at once, as a message with nothing typed: no words are written on the person's
+   * behalf. A note over the pasted-text limit is not sent: the chat opens with it as a chip, Send held, and says why.
+   */
   async askMyuAboutNote(file: TFile): Promise<void> {
     const raw = await this.app.vault.cachedRead(file);
-    // Clipped to a sane cap: the model reads a note, not a book. The content
-    // rides IN THE MESSAGE — the supported contract — rather than in a
-    // context source the backend doesn't know.
-    const clipped = raw.length > 6000 ? `${raw.slice(0, 6000)}\n\n[… clipped]` : raw;
+    const block = noteBlock(raw, file.path);
     // GROUND the conversation: a question about a person page must carry the
     // entity, or Myu answers from the text alone and ignores everything it
     // KNOWS about the relationship (live finding, 2026-08-25).
     const context = await this.chatContextForFile(file);
-    await this.openChat({
-      text: `About my note "${file.basename}":\n\n${clipped}\n\nWhat do you notice?`,
-      send: true,
-      context,
-    });
+    await this.openChat({ text: '', send: true, context, pasted: block ? [block] : [] });
   }
 
   /** Entity grounding for a note: Myu-materialized pages carry their entity id
@@ -1209,6 +1362,7 @@ export default class AskMyuPlugin extends Plugin {
     if (!existing.length) await leaf.setViewState({ type: CARD_VIEW_TYPE, active: true });
     await this.app.workspace.revealLeaf(leaf);
 
+    this.broughtForward(leaf);
     const view = leaf.view;
     if (view instanceof CardView) await view.showEntity(entityType, entityId, name);
   }
@@ -1302,8 +1456,11 @@ export default class AskMyuPlugin extends Plugin {
     void this.refreshToday({ now: true });
   }
 
-  /** `POST /feedback/submit` with what an Obsidian plugin can honestly say about itself. */
-  sendFeedback(opts: { message: string; category: string; rating?: 1 | -1; surface: string; journalId?: string; attachments?: { attached_content?: string; attached_summary?: string } }) {
+  /**
+   * `POST /feedback/submit` with what an Obsidian plugin can honestly say about itself. `attachments.files` (2026-10-14)
+   * are the files the person added in the modal, passed through as they are.
+   */
+  sendFeedback(opts: { message: string; category: string; rating?: 1 | -1; surface: string; journalId?: string; attachments?: { attached_content?: string; attached_summary?: string; files?: FeedbackFile[] } }) {
     return this.backend.submitFeedback({ message: opts.message, category: opts.category, ...(opts.rating ? { rating: opts.rating } : {}), app: 'obsidian', version: BUILD_STAMP, context: { surface_state: opts.surface, ...(opts.journalId ? { journal_id: opts.journalId } : {}), platform: Platform.isMobile ? 'mobile' : 'desktop' }, ...(opts.attachments ? { attachments: opts.attachments } : {}) });
   }
 
@@ -1341,12 +1498,15 @@ export default class AskMyuPlugin extends Plugin {
     const leaf = existing[0] ?? this.app.workspace.getRightLeaf(false);
     if (!leaf) return;
     if (!existing.length) await leaf.setViewState({ type: CANVAS_VIEW_TYPE, active: true });
-    if (reveal) await this.app.workspace.revealLeaf(leaf);
+    if (reveal) {
+      await this.app.workspace.revealLeaf(leaf);
+      this.broughtForward(leaf);
+    }
     const view = leaf.view;
     if (view instanceof CanvasView) await view.showComposition(compositionId);
   }
 
-  /** Prep opens in the right sidebar; one prep leaf, reused, like cards. */
+  /** The meeting's card opens in the right sidebar; one leaf, reused, like cards. */
   async openPrep(eventId: string): Promise<void> {
     const existing = this.app.workspace.getLeavesOfType(PREP_VIEW_TYPE);
     const leaf = existing[0] ?? this.app.workspace.getRightLeaf(false);
@@ -1354,6 +1514,7 @@ export default class AskMyuPlugin extends Plugin {
 
     if (!existing.length) await leaf.setViewState({ type: PREP_VIEW_TYPE, active: true });
     await this.app.workspace.revealLeaf(leaf);
+    this.broughtForward(leaf);
 
     const view = leaf.view;
     if (view instanceof PrepView) await view.showMeeting(eventId);
@@ -1376,6 +1537,11 @@ export default class AskMyuPlugin extends Plugin {
    * per progress line, is what tripped the WAF on 2026-09-03.)
    */
   private todayGate = new RefreshGate(() => this.fetchTodayLeaves(), TODAY_REFRESH_GAP_MS);
+  /** The Today pane again, now (a question answered in the chat pane changes it). */
+  requestTodayRefresh(): void {
+    void this.refreshToday({ now: true });
+  }
+
   private refreshToday(opts: { now?: boolean } = {}): Promise<void> {
     return this.todayGate.request(opts);
   }
@@ -1416,12 +1582,12 @@ export default class AskMyuPlugin extends Plugin {
     } else if (outcome === 'existing_account') {
       // The pane carries the way forward — the approval lives there now, so a
       // person who came back from the browser is not left with a toast.
-      notifyStatus('Welcome back — this device needs approving. Myu shows how.');
+      notifyStatus('Welcome back. This device needs approval. The Myu pane shows how.');
       void this.openToday();
     } else if (outcome === 'invalid') {
       notifyError('That sign-in link has expired or was already used. Request a fresh one.');
     } else {
-      notifyError('Sign-in failed — check the connection and try again.');
+      notifyError('Sign-in failed. Check your connection and try again.');
     }
   }
 
@@ -1544,7 +1710,7 @@ export default class AskMyuPlugin extends Plugin {
     if (this.unlock.current !== 'unlocked') return;
     const { files } = this.meetingCapture.surveyBackfill();
     if (files.length === 0) return;
-    notifyStatus(`Bringing in ${files.length} existing meeting ${files.length === 1 ? 'note' : 'notes'}…`);
+    notifyStatus(`Sharing ${files.length} existing meeting ${files.length === 1 ? 'note' : 'notes'}…`);
     await this.meetingCapture.backfill(files, (done, total) => {
       this.materializeProgress = `Reading your meeting notes — ${done} of ${total}`;
       this.paintProgress();
@@ -1555,7 +1721,7 @@ export default class AskMyuPlugin extends Plugin {
   }
 
   reportBackfillFinished(total: number): void {
-    notifyStatus(`Brought in ${total} ${total === 1 ? 'note' : 'notes'}.`);
+    notifyStatus(`Shared ${total} ${total === 1 ? 'note' : 'notes'}.`);
     this.settings.backfill_done = true;
     void this.saveSettings();
     void this.refreshToday({ now: true });
@@ -1636,7 +1802,7 @@ export default class AskMyuPlugin extends Plugin {
     await this.openChat({ text: '', send: false });
     if (this.chatView()?.revealCanvas(compositionId)) return;
     const journalId = await this.journalForComposition(compositionId);
-    if (!journalId) { notifyStatus('That canvas belongs to another conversation \u2014 find it under Past conversations.'); return; }
+    if (!journalId) { notifyStatus('That canvas belongs to another conversation. Find it under Past conversations.'); return; }
     await this.openConversation(journalId);
     if (!this.chatView()?.revealCanvas(compositionId)) notifyStatus('Opened the conversation this canvas belongs to.');
   }
@@ -1664,7 +1830,7 @@ export default class AskMyuPlugin extends Plugin {
     const n = found.files.length;
     new PersonActionConfirmModal(this.app, {
       title: 'Remove everything Myu wrote?',
-      body: `${n} ${n === 1 ? 'file goes' : 'files go'} to the trash \u2014 every page, note, table and canvas Myu wrote, recoverable from there. Your own notes are untouched. Writing stays ${this.settings.materialize_consented ? 'on, so the folder fills again on the next sync; turn it off in settings to stop that' : 'off'}.`,
+      body: `${n} ${n === 1 ? 'file goes' : 'files go'} to the trash: every page, note, table and canvas Myu wrote. You can recover them from the trash. Your own notes are not touched. Writing stays ${this.settings.materialize_consented ? 'on, so the folder fills again on the next sync. Turn it off in settings to stop that' : 'off'}.`,
       cta: 'Remove',
     }, (yes) => {
       if (!yes) return;
@@ -1672,7 +1838,7 @@ export default class AskMyuPlugin extends Plugin {
         const trashed = await trashEverythingMyuWrote(this.app, found.files);
         this.settings.myu_file_hashes = {};
         await this.saveSettings();
-        notifyStatus(`Removed ${trashed} ${trashed === 1 ? 'file' : 'files'} \u2014 they are in the trash.`);
+        notifyStatus(`Removed ${trashed} ${trashed === 1 ? 'file' : 'files'}. They are in the trash.`);
         void this.refreshToday({ now: true });
       })();
     }).open();
@@ -1696,7 +1862,7 @@ export default class AskMyuPlugin extends Plugin {
     if (this.backfillActive || files.length === 0) return;
     this.backfillActive = true;
     this.backfillStop = false;
-    notifyStatus(`Bringing in ${files.length} ${files.length === 1 ? 'note' : 'notes'} \u2014 progress in the status bar; \u201cCancel bringing in notes\u201d stops it.`);
+    notifyStatus(`Sharing ${files.length} ${files.length === 1 ? 'note' : 'notes'}. Progress shows in the status bar; the command \u201cCancel bringing in notes\u201d stops it.`);
     const result = await this.capture.backfill(files, (done, total) => {
       this.statusBarEl?.setText(`myu \u00b7 reading ${done}/${total}`);
       this.materializeProgress = `Reading your notes \u2014 ${done} of ${total}`;
@@ -1705,7 +1871,7 @@ export default class AskMyuPlugin extends Plugin {
     this.backfillActive = false;
     this.materializeProgress = null;
     this.setStatusBar(this.unlock.current, this.lastStateDetail);
-    if (result.stopped) { notifyStatus('Stopped. What was sent stays sent; press Start again to continue \u2014 notes already in are skipped.'); void this.refreshToday({ now: true }); return; }
+    if (result.stopped) { notifyStatus('Stopped. Notes already sent stay sent. Press Start again to continue; notes already sent are skipped.'); void this.refreshToday({ now: true }); return; }
     this.reportBackfillFinished(files.length);
   }
 
@@ -1725,6 +1891,131 @@ export default class AskMyuPlugin extends Plugin {
     if (view instanceof ChatView) await view.openPastConversation(journalId);
   }
 
+  /**
+   * `talk ▸` on a row (F0): the chat pane opens about that one thing, Myu
+   * speaking first — its line on the row is its latest turn about the subject,
+   * so it opens the conversation; the person's first message continues it.
+   * The context names the subject for the backend's formatter; for a meeting
+   * it carries the prep fields the meeting conversation already reads.
+   */
+  async openChatAbout(
+    subjectType: string,
+    subjectId: string,
+    opts: { label?: string; occurrenceKey?: string; phase?: 'before' | 'after'; line?: string; lineObj?: MyuLineLite; retro?: boolean; debrief?: boolean } = {},
+  ): Promise<void> {
+    // A space has its own conversation (space mode): one ask at a time, the person's own typed
+    // words first, read as this team's retro. It is never seeded as a journal thread; that path
+    // stays only for a backend that does not say `mode: "space"` yet.
+    if (subjectType === 'space' && (await this.openSpaceConversation(subjectId, opts.label ?? '', { retro: opts.retro, debrief: opts.debrief }))) return;
+    let opening = (opts.line ?? '').trim();
+    // The line itself, so a question opens with its buttons (2026-09-25), not only its words.
+    let openingLine: MyuLineLite | undefined = opts.lineObj;
+    if (!opening) {
+      const scope = subjectType === 'meeting' || subjectType === 'account' ? 'today' : subjectType === 'space' ? 'spaces' : 'people';
+      const res = await this.backend.getMyuLines(scope).catch(() => null);
+      const line = (res?.data?.lines ?? []).find((l) =>
+        (l.subjects ?? []).some((s) => s.type === subjectType && s.id === subjectId && (!opts.occurrenceKey || !s.occurrence_key || s.occurrence_key === opts.occurrenceKey)),
+      );
+      opening = (line?.text ?? '').trim();
+      openingLine = line;
+    }
+    const lineHere = openingLine && (openingLine.text ?? '').trim() === opening ? openingLine : undefined;
+    // The account's own question ("About you", 2026-10-03), and any line about a person or a company that takes
+    // several picks or a typed name: its own conversation in the pane, where the choices are toggles and the box
+    // takes the name. A row's single-press buttons cannot answer it, and a journal thread is not its conversation.
+    const kind = conversationSubjectType(lineHere?.conversation?.subject_type || subjectType);
+    if (kind && kind !== 'space' && kind !== 'meeting' && (kind === 'account' || (lineHere && answersInConversation(lineHere)))) {
+      await this.openSubjectConversation(kind, lineHere?.conversation?.subject_id || subjectId, opts.label ?? '');
+      return;
+    }
+    // A meeting whose line is a question (the one before it, the arc, "Anything you didn't say in
+    // there?", the Yes/No after it) opens the meeting's own conversation: words typed there are the
+    // answer, which a journal thread would never be (2026-09-30).
+    const question = subjectType === 'meeting' && lineHere ? meetingQuestionAt(lineHere, opts.occurrenceKey) : null;
+    if (question) {
+      await this.openMeetingConversation(subjectId, opts.label ?? '', question.occurrenceKey);
+      return;
+    }
+    const isEntity = subjectType === 'person' || subjectType === 'company';
+    await this.openChat({
+      text: '',
+      send: false,
+      opening: opening || undefined,
+      openingLine: opening && openingLine && (openingLine.text ?? '').trim() === opening ? openingLine : undefined,
+      context: {
+        source: subjectType,
+        source_id: subjectId,
+        entity_references: isEntity ? [{ entity_type: subjectType, entity_id: subjectId, display_name: opts.label ?? '' }] : [],
+        ...(subjectType === 'meeting' ? { prep_event_id: subjectId, prep_meeting_title: opts.label, prep_phase: opts.phase ?? 'before' } : {}),
+      },
+    });
+  }
+
+  /**
+   * The chat pane, showing a meeting's own conversation (2026-09-30): the question before it, the
+   * arc's session, "Anything you didn't say in there?" and the Yes/No after it, each answered there.
+   */
+  async openMeetingConversation(eventId: string, label: string, occurrenceKey?: string): Promise<void> {
+    const existing = this.app.workspace.getLeavesOfType(CHAT_VIEW_TYPE);
+    const leaf = existing[0] ?? this.app.workspace.getRightLeaf(false);
+    if (!leaf) return;
+    if (!existing.length) await leaf.setViewState({ type: CHAT_VIEW_TYPE, active: true });
+    await this.app.workspace.revealLeaf(leaf);
+    const view = leaf.view;
+    if (view instanceof ChatView) await view.openMeeting(eventId, label, occurrenceKey);
+    this.broughtForward(leaf);
+  }
+
+  /**
+   * The chat pane, showing a line's own conversation (2026-10-03): the account's "About you" question, or a
+   * person's or a company's line answered with several picks or a typed name. False when the pane cannot open.
+   */
+  async openSubjectConversation(type: ConversationSubjectType, id: string, label: string): Promise<boolean> {
+    const existing = this.app.workspace.getLeavesOfType(CHAT_VIEW_TYPE);
+    const leaf = existing[0] ?? this.app.workspace.getRightLeaf(false);
+    if (!leaf) return false;
+    if (!existing.length) await leaf.setViewState({ type: CHAT_VIEW_TYPE, active: true });
+    await this.app.workspace.revealLeaf(leaf);
+    const view = leaf.view;
+    const opened = view instanceof ChatView ? await view.openSubject(type, id, label) : false;
+    this.broughtForward(leaf);
+    return opened;
+  }
+
+  /** A conversation an answer asks to open (`open_conversation`: the arc's Now). */
+  async openConversationRef(ref: { subject_type: string; subject_id: string; occurrence_key?: string }, label = ''): Promise<void> {
+    if (ref.subject_type === 'meeting') await this.openMeetingConversation(ref.subject_id, label, ref.occurrence_key);
+    else await this.openChatAbout(ref.subject_type, ref.subject_id, { label, occurrenceKey: ref.occurrence_key });
+  }
+
+  /**
+   * A meeting's note in Myu's folder (written from the meeting history, `type: myu-meeting` and its
+   * id), opened in the workspace. False when the vault has none: the caller shows the notes in place.
+   */
+  async openMeetingNote(meetingId: string): Promise<boolean> {
+    const file = this.app.vault.getMarkdownFiles().find((f) => {
+      const fm: Record<string, unknown> | undefined = this.app.metadataCache.getFileCache(f)?.frontmatter;
+      return fm?.type === 'myu-meeting' && fm['myu-id'] === meetingId;
+    });
+    if (!file) return false;
+    await this.app.workspace.getLeaf(false).openFile(file);
+    return true;
+  }
+
+  /** The chat pane, showing a space's own conversation. False when this backend has no space mode. */
+  async openSpaceConversation(spaceId: string, label: string, opts: { retro?: boolean; debrief?: boolean } = {}): Promise<boolean> {
+    const existing = this.app.workspace.getLeavesOfType(CHAT_VIEW_TYPE);
+    const leaf = existing[0] ?? this.app.workspace.getRightLeaf(false);
+    if (!leaf) return false;
+    if (!existing.length) await leaf.setViewState({ type: CHAT_VIEW_TYPE, active: true });
+    await this.app.workspace.revealLeaf(leaf);
+    const view = leaf.view;
+    const opened = view instanceof ChatView ? await view.openSpace(spaceId, label, opts) : false;
+    // A space that is not space mode on this server falls back to a conversation; that one says itself.
+    if (opened) this.broughtForward(leaf);
+    return opened;
+  }
+
   async openChat(seed: ChatSeed): Promise<void> {
     const existing = this.app.workspace.getLeavesOfType(CHAT_VIEW_TYPE);
     const leaf = existing[0] ?? this.app.workspace.getRightLeaf(false);
@@ -1733,6 +2024,7 @@ export default class AskMyuPlugin extends Plugin {
     await this.app.workspace.revealLeaf(leaf);
     const view = leaf.view;
     if (view instanceof ChatView) view.seed(seed);
+    this.broughtForward(leaf);
   }
 
   /** P6.3 — the exposure modal, then the vault-module write. Never automatic. */
@@ -1808,7 +2100,7 @@ export default class AskMyuPlugin extends Plugin {
     if (this.unlock.current !== 'unlocked' || !this.settings.materialize_consented) { notifyError('Sign in and allow Myu to write first (Settings \u2192 askMyu).'); return; }
     const summary = await this.exporter.exportEverything((line) => { this.materializeProgress = line || null; void this.refreshToday(); });
     this.lastSyncAt = Date.now();
-    notifyStatus(`Exported \u2014 ${summary.conversations.saved} conversations, ${summary.canvases.kept} canvases, ${summary.people} people. Receipt: Myu/Export.md`);
+    notifyStatus(`Exported: ${summary.conversations.saved} conversations, ${summary.canvases.kept} canvases, ${summary.people} people. Summary: Myu/Export.md`);
   }
 
   openDataExport(): void {
@@ -1845,8 +2137,8 @@ export default class AskMyuPlugin extends Plugin {
     // A vault write the user did not initiate must never be silent: ONE short
     // Notice — Obsidian's standard for an outcome — no OS notification. The
     // pane's own keeps say "kept in …" in place instead.
-    if (outcome.status === 'written') notifyStatus(`Kept canvas${summary ? ` \u2014 ${summary}` : ''}: ${outcome.canvasPath}`);
-    else notifyError(`Couldn\u2019t keep a canvas: ${outcome.message}`);
+    if (outcome.status === 'written') notifyStatus(`Saved canvas${summary ? ` \u2014 ${summary}` : ''}: ${outcome.canvasPath}`);
+    else notifyError(`Couldn\u2019t save a canvas: ${outcome.message}`);
   }
 
   async exportComposition(
@@ -1858,7 +2150,7 @@ export default class AskMyuPlugin extends Plugin {
     const res = await this.backend.getComposition(compositionId);
     const spec = res.data?.composition;
     if (!res.ok || !spec) {
-      if (!opts.quiet) notifyError("Couldn't load that composition. Check the id and your connection.");
+      if (!opts.quiet) notifyError("Couldn't load that canvas. Check the id and your connection.");
       return { status: 'error', message: res.error || 'could not load the composition' };
     }
 
@@ -1935,7 +2227,7 @@ export default class AskMyuPlugin extends Plugin {
         notifyError('No weekly note configured in Periodic Notes, so there is nowhere to write it.');
         break;
       case 'nothing_to_write':
-        notifyStatus('No movement to report this week — nothing written.');
+        notifyStatus('Nothing changed this week, so nothing was written.');
         break;
       case 'error':
         notifyError(`Could not write the weekly review: ${outcome.message}`);

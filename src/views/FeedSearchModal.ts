@@ -26,7 +26,7 @@ export class FeedSearchModal extends SuggestModal<Hit> {
     const res = await this.plugin.backend.searchFeed(q, 12).catch(() => null);
     if (mine !== this.seq) return [];
     const r = res?.data?.results;
-    if (!res?.ok || !r) { this.emptyStateText = 'Search is not answering right now.'; return []; }
+    if (!res?.ok || !r) { this.emptyStateText = 'Search is not available right now.'; return []; }
     const card = (kind: CardEntityType) => (c: CardSpecLite): Hit | null => (c.entity_id ? { kind, id: c.entity_id, title: c.header?.display_name || 'Unnamed', subtitle: c.header?.subtitle } : null);
     const hits = [...(r.people ?? []).map(card('person')), ...(r.companies ?? []).map(card('company'))].filter((h): h is Hit => !!h);
     for (const f of r.feed_items ?? []) if (f.title) hits.push({ kind: 'feed_item', id: f.feed_item_id ?? '', title: f.title, subtitle: f.summary });

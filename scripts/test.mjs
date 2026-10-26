@@ -14,7 +14,13 @@ mkdirSync(OUT, { recursive: true });
 
 // Entry 1: logic tests — obsidian THROWS (proves no host-API dependence).
 await esbuild.build({
-  entryPoints: ['tests/invariants.test.ts'],
+  // spaceMode: a space's conversation decides everything with no host API (R14).
+  // todayLines: Today's "for you" rows (one per subject, the rest behind a count), same rule.
+  // spaceRetro: a space's row on Today and the team's retro as the pane shows it, same rule.
+  // lineAnswers: Myu's questions outside a space answered with a tap (2026-09-25), same rule.
+  // menuMarks: the status bar's words for what is new, and the keeper behind them (2026-10-06), same rule.
+  // linesSeen: a line reported as seen after a second in view, once (2026-10-06), same rule.
+  entryPoints: ['tests/invariants.test.ts', 'tests/spaceMode.test.ts', 'tests/todayLines.test.ts', 'tests/spaceRetro.test.ts', 'tests/lineAnswers.test.ts', 'tests/menuMarks.test.ts', 'tests/linesSeen.test.ts'],
   bundle: true,
   loader: { '.css': 'text' },
   platform: 'node',
@@ -51,6 +57,16 @@ await esbuild.build({
   entryPoints: [
     'tests/ceremony.test.ts',
     'tests/coldstart.test.ts',
+    'tests/spaceModePane.test.ts',
+    'tests/lineAnswersPane.test.ts',
+    // The interview debrief (2026-09-29): its asks in the space pane, and its Today row.
+    'tests/debriefPane.test.ts',
+    // Pasted text (2026-10-06): chips on the four composers, the vault's note and selection, capture, write-back.
+    'tests/pastedText.test.ts',
+    // The dots beside Today's rows (2026-10-06): orange is new, grey is waiting; an opening repaints them.
+    'tests/todayDots.test.ts',
+    // Send feedback with files (2026-10-14): which picks are kept, what a send carries, an old server, a 413.
+    'tests/feedbackModal.test.ts',
     // Internal-only test files (tests/internal/, absent from the public
     // source) join the run when present, so both flavors gate identically.
     ...internalTests,
@@ -68,7 +84,7 @@ await esbuild.build({
 
 const result = spawnSync(
   process.execPath,
-  ['--test', `${OUT}/invariants.test.cjs`, `${OUT}/ceremony.test.cjs`, `${OUT}/coldstart.test.cjs`, ...internalTests.map((t) => `${OUT}/${t.replace(/^tests\//, '').replace(/\.ts$/, '.cjs')}`)],
+  ['--test', `${OUT}/invariants.test.cjs`, `${OUT}/spaceMode.test.cjs`, `${OUT}/todayLines.test.cjs`, `${OUT}/spaceRetro.test.cjs`, `${OUT}/lineAnswers.test.cjs`, `${OUT}/menuMarks.test.cjs`, `${OUT}/linesSeen.test.cjs`, `${OUT}/ceremony.test.cjs`, `${OUT}/coldstart.test.cjs`, `${OUT}/spaceModePane.test.cjs`, `${OUT}/lineAnswersPane.test.cjs`, `${OUT}/debriefPane.test.cjs`, `${OUT}/pastedText.test.cjs`, `${OUT}/todayDots.test.cjs`, `${OUT}/feedbackModal.test.cjs`, ...internalTests.map((t) => `${OUT}/${t.replace(/^tests\//, '').replace(/\.ts$/, '.cjs')}`)],
   { stdio: 'inherit' },
 );
 process.exit(result.status ?? 1);

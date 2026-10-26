@@ -13,6 +13,7 @@
 
 import { normalizePath, type App } from 'obsidian';
 import type { ChatTurn } from '../views/ChatView';
+import { pastedCallout } from './myuFiles';
 
 export type ConversationWriteOutcome =
   | { status: 'written'; path: string }
@@ -58,7 +59,10 @@ export class ConversationWriter {
   }
 }
 
-/** Speakers as `**You:** / **Myu:**`; blocks flattened to their text. Exported for tests. */
+/**
+ * Speakers as `**You:** / **Myu:**`; blocks flattened to their text. Your pasted text (2026-10-06) follows your
+ * words as folded quote callouts; a turn of pasted text only is a bare `**You:**` and its callouts. Exported for tests.
+ */
 export function renderConversation(turns: ChatTurn[]): string | null {
   const parts: string[] = [];
   for (const turn of turns) {
@@ -68,8 +72,11 @@ export function renderConversation(turns: ChatTurn[]): string | null {
         .map((b) => (b.text ?? (b.type === 'composition_offer' ? offerLine(b.composition_id, b.summary_text) : '')))
         .filter(Boolean)
         .join('\n\n');
-    if (!text) continue;
-    parts.push(`**${turn.role === 'user' ? 'You' : 'Myu'}:** ${text}`);
+    const pasted = turn.role === 'user' ? (turn.pasted ?? []) : [];
+    if (!text && pasted.length === 0) continue;
+    const speaker = `**${turn.role === 'user' ? 'You' : 'Myu'}:**`;
+    parts.push(text ? `${speaker} ${text}` : speaker);
+    pasted.forEach((block, i) => parts.push(pastedCallout(block, pasted.length > 1 ? i + 1 : undefined)));
     if (turn.references?.length) {
       parts.push(turn.references.map((r) => `> [${r.id}] ${r.url ? `[${r.title || r.url}](${r.url})` : (r.title ?? 'source')}`).join('\n'));
     }

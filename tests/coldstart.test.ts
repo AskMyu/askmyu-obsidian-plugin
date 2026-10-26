@@ -64,12 +64,12 @@ test('Me.md: known facts lead, each with its source; a read is marked a read, a 
     { key: 'empty', value: '   ', source: 'you', kind: 'fact' },
   ] });
   assert.match(md, /## What Myu knows so far/);
-  assert.match(md, /- \*\*title\*\* — Founder, AskMyu · linkedin/);
-  assert.match(md, /- \*\*career\*\* — \*Twelve years in product\.\* \(a read, worth testing · read\)/);
-  assert.match(md, /- \*\*not yet\*\* — Where you left off · mail/);
+  assert.match(md, /- \*\*title\*\* — Founder, AskMyu · from LinkedIn/);
+  assert.match(md, /- \*\*career\*\* — \*Twelve years in product\.\* \(Myu’s guess, not confirmed\)/);
+  assert.match(md, /- \*\*not yet\*\* — Where you left off$/m, 'a gap has no source: it is what Myu cannot see yet');
   assert.doesNotMatch(md, /empty/, 'a blank value is not a fact');
-  assert.doesNotMatch(md, /still forming its picture/, 'facts count as content');
-  assert.match(buildSelfMarkdown({ known_facts: [] }), /still forming its picture/);
+  assert.doesNotMatch(md, /still learning about you/, 'facts count as content');
+  assert.match(buildSelfMarkdown({ known_facts: [] }), /still learning about you/);
 });
 
 test('payback copy is the web’s, word for word', () => {
@@ -92,6 +92,7 @@ test('offer runner: a real "no" persists the dismissal and latches every surface
   };
   const no = await runOfferOption(plugin as never, 'just_tell', undefined);
   assert.equal(no.done, 'dismissed');
+  assert.equal(no.message, 'Okay. You can tell Myu about your meetings as you go.', 'the backend\u2019s word for a settled "no" (2026-09-25)');
   assert.equal(plugin.welcomeOfferAnswered, true, 'the ask ends everywhere');
   const [, patch] = calls[0] as [string, { myuScripts?: { offer_dismissed_at?: string } }];
   assert.ok(patch.myuScripts?.offer_dismissed_at, 'the "no" is server truth, like the web');
@@ -128,7 +129,7 @@ test('chat-inline offer: every server-authored line renders — lead, gap, perso
   const parent = new FakeEl('div');
   (view as unknown as { renderInlineOffer(p: unknown): void }).renderInlineOffer(parent);
   const texts = [...parent.walk()].map((e) => e.text ?? '').join('\n');
-  for (const line of ['I can prepare you for Priya', 'Right now I know nothing', 'Priya — this week', 'Connect Google Calendar', "I'll just tell you", 'Read my week', 'Read-only. Myu prepares; it never sends anything.']) {
+  for (const line of ['I can prepare you for Priya', 'Right now I know nothing', 'Priya — this week', 'Connect Google Calendar', "I'll just tell you", 'Add calendar', 'Read-only. Myu prepares; it never sends anything.']) {
     assert.ok(texts.includes(line), `missing: ${line}`);
   }
   assert.ok(texts.includes('Google Calendar'), 'help text names where the address lives');
@@ -172,10 +173,12 @@ test('delivered offers: init starts that OAuth verbatim (drive included); answer
 
   const snooze = await runOfferOption(plugin as never, 'not_now', { moment: 'connect_rest', journal_id: 'j-77' });
   assert.equal(snooze.done, 'dismissed');
+  assert.equal(snooze.message, 'Okay.');
   assert.deepEqual(scripts(2), { offer_snoozed_journal: 'j-77' }, 'not_now silences this conversation only');
 
   const none = await runOfferOption(plugin as never, 'notes_none', { moment: 'notes' });
   assert.equal(none.done, 'dismissed');
+  assert.equal(none.message, 'Okay.');
   assert.deepEqual(scripts(3), { offer_notes_state: 'none' }, 'the VALUE is the servlet\u2019s, not the option id');
   const tr = await runOfferOption(plugin as never, 'notes_transcripts', { moment: 'notes' });
   assert.deepEqual(scripts(4), { offer_notes_state: 'transcripts' });
@@ -209,7 +212,7 @@ test('the canvas row names what needs you; a quiet canvas stays a quiet row', as
     { id: '2', type: 'reflection_prompt', data: {} },
     { id: '3', type: 'decision_frame', data: {} },
     { id: '4', type: 'text_block', data: { text: 'read' } },
-  ] }), 'Needs you on the canvas: connect a calendar \u00b7 a decision to weigh \u00b7 a question to answer');
+  ] }), 'This canvas needs your input: connect a calendar \u00b7 a decision to make \u00b7 a question to answer');
   assert.equal(canvasAsksLine({ id: 'c', components: [{ id: '1', type: 'text_block', data: {} }, { id: '2', type: 'chart', data: {} }] }), null, 'reads alone earn no ask line');
   assert.equal(canvasAsksLine(null), null);
 });
@@ -338,7 +341,7 @@ test('a device asking to join survives a dead stream: it is polled, shown in Tod
   assert.ok(text.includes('\u201cChrome on Linux\u201d wants to join your account'), 'the ask is named in Today');
   assert.ok(text.includes('Type the 4-digit code it shows.'), 'and says what to do');
   assert.ok(/About 4 minutes left/.test(text), 'the 5-minute fuse is shown honestly');
-  assert.ok(text.includes('This one has expired'), 'an expired request says so rather than pretending');
+  assert.ok(text.includes('This request has expired'), 'an expired request says so rather than pretending');
   assert.ok(text.includes('\u201cUnknown window\u201d wants to join your account'), 'a request without expires_at still shows');
   assert.equal(text.split('About ').length - 1, 1, 'with no server expiry the client invents no countdown');
   assert.ok(text.includes('Approve\u2026') && text.includes('Deny'), 'both doors are here, not only in settings');
@@ -402,7 +405,7 @@ test('a refused refresh is not an empty day: prior data survives, the pane says 
   const root = new FakeEl('div');
   (fresh as unknown as { renderBrief(r: unknown): void }).renderBrief(root);
   const text = [...root.walk()].map((e) => e.text ?? '').join('\n');
-  assert.ok(text.includes('Still reading your day'), `expected the honest line, got: ${text}`);
+  assert.ok(text.includes('Still loading your day'), `expected the honest line, got: ${text}`);
   assert.ok(!text.includes('Nothing pressing'), 'never claim an empty day it has not verified');
 });
 
@@ -449,7 +452,7 @@ test('the canvas header names the canvas and steps through history in place', as
   const buttons = [...root.walk()].filter((e) => e.tag === 'button');
   assert.deepEqual(buttons.map((b) => b.attrs['aria-label'] ?? b.text), [
     'Older canvas', 'Newer canvas',
-    'Following the newest: a new canvas takes this pane. Pin to hold this one.',
+    'Following the newest: a new canvas replaces this one. Pin to keep this one open.',
     'Show in the conversation',
   ], 'steppers, the pin, and the way back to the reply that made it — all in place, not in a modal');
   assert.equal((buttons[0] as unknown as { disabled: boolean }).disabled, false, 'an older canvas is one click away');
@@ -578,6 +581,8 @@ test('a new conversation is reachable from inside one, and leaves nothing of the
   view['ratings'] = new Map([[0, 1]]);
   let rendered = 0;
   view['render'] = () => { rendered++; };
+  const moved: unknown[] = [];
+  view['plugin'] = { chatPaneMoved: (v: unknown) => moved.push(v) };
 
   (view as unknown as { startNew(): void }).startNew();
 
@@ -593,6 +598,69 @@ test('a new conversation is reachable from inside one, and leaves nothing of the
   assert.equal(view['linkedinAsk'], null);
   assert.equal((view['ratings'] as Map<number, unknown>).size, 0, 'nor its ratings, which are keyed by turn index');
   assert.equal(rendered, 1);
+  // The menu's marks (2026-10-06): the pane in front did not change, so the pane itself says it moved on.
+  assert.deepEqual(moved, [view], 'the plugin hears the pane moved, once');
+});
+
+test('on a phone, what is new stands at the top of Today: painted in, changed in place, gone when nothing is new', async () => {
+  const { TodayView } = await import('../src/views/TodayView');
+  const { FakeEl } = await import('./ui-stub');
+  const view = Object.create(TodayView.prototype) as InstanceType<typeof TodayView> & Record<string, unknown>;
+  let line: string | null = null;
+  let standing = 'ok';
+  view['plugin'] = { menuMarksLine: () => line, termsStanding: () => standing };
+  const root = new FakeEl('div');
+  view['contentEl'] = root;
+  view['loading'] = false;
+  view['errorState'] = null;
+  root.createDiv({ cls: 'myu-sync-bar' });
+  const lines = () => root.querySelectorAll('.myu-menu-new');
+
+  // A computer (the plugin says null there), or nothing new: nothing.
+  view.paintMenuMarks();
+  assert.equal(lines().length, 0);
+
+  // Something new: one lit line, at the very top, in plain words.
+  line = '3 new in Today \u00b7 2 in Spaces';
+  view.paintMenuMarks();
+  assert.equal(lines().length, 1);
+  assert.equal(root.children[0], lines()[0], 'the line is the first thing on the pane');
+  assert.equal(lines()[0].text, '3 new in Today \u00b7 2 in Spaces');
+
+  // The marks move: the same line says the new words; nothing else is drawn again.
+  const first = lines()[0];
+  line = '4 new in Today \u00b7 2 in Spaces';
+  view.paintMenuMarks();
+  assert.equal(lines().length, 1);
+  assert.equal(lines()[0], first);
+  assert.equal(first.text, '4 new in Today \u00b7 2 in Spaces');
+  assert.equal(root.children.length, 2, 'the rest of the pane is left as it was');
+
+  // Nothing new any more: the line goes.
+  line = null;
+  view.paintMenuMarks();
+  assert.equal(lines().length, 0);
+
+  // Not over the day (opening, resting, at the terms): nothing is painted in.
+  line = '1 new in Canvas';
+  view['loading'] = true;
+  view.paintMenuMarks();
+  view['loading'] = false;
+  view['errorState'] = 'locked';
+  view.paintMenuMarks();
+  view['errorState'] = null;
+  standing = 'gated';
+  view.paintMenuMarks();
+  assert.equal(lines().length, 0);
+
+  // A whole render draws it the same way.
+  const fresh = new FakeEl('div');
+  (view as unknown as { renderMenuMarks(r: unknown): void }).renderMenuMarks(fresh);
+  assert.deepEqual(fresh.querySelectorAll('.myu-menu-new').map((e) => e.text), ['1 new in Canvas']);
+  line = null;
+  const none = new FakeEl('div');
+  (view as unknown as { renderMenuMarks(r: unknown): void }).renderMenuMarks(none);
+  assert.equal(none.children.length, 0);
 });
 
 test('a canvas belongs to the reply that made it, not to the bottom of the thread', async () => {
@@ -878,7 +946,7 @@ test('terms — the Today pane: gated shows one screen and nothing else; an upda
       pendingTransfers: [], pendingOffers: [], helpQueue: [], flags: {},
     };
     // Everything below the gate is someone else's test; stub the day's renderers.
-    for (const m of ['renderSyncBar', 'renderDeviceRequests', 'renderSetup', 'renderMaterializeProgress', 'renderCues', 'renderInsights', 'renderOffers', 'renderHelpMyu', 'renderWeekEdition', 'renderLoop', 'renderBrief', 'renderNext', 'renderWeek', 'renderMonthlyPointer', 'renderMirror', 'renderChatDoor']) {
+    for (const m of ['renderMenuMarks', 'renderSyncBar', 'renderDeviceRequests', 'renderSetup', 'renderMaterializeProgress', 'renderCues', 'renderInsights', 'renderOffers', 'renderHelpMyu', 'renderWeekEdition', 'renderLoop', 'renderBrief', 'renderNext', 'renderWeek', 'renderMonthlyPointer', 'renderMirror', 'renderChatDoor']) {
       view[m] = () => undefined;
     }
     (view as unknown as { render(): void }).render();
@@ -905,4 +973,99 @@ test('terms — the Today pane: gated shows one screen and nothing else; an upda
   assert.equal(dismissed, 1, 'dismissible — never a lockout');
 
   assert.ok(!make('ok').visibleTexts().some((t) => /Before you start|updated the terms/.test(t)), 'nothing when nothing is owed');
+});
+
+test('From Myu — the pane (F0): the title and the brief, Next and Earlier rows with the line under each, talk ▸ on every row and prep ▸ on the next one, Open with you today as checkboxes that mark done in Myu', async () => {
+  const { TodayView } = await import('../src/views/TodayView');
+  const { FakeEl } = await import('./ui-stub');
+  const view = Object.create(TodayView.prototype) as InstanceType<typeof TodayView> & Record<string, unknown>;
+  const now = Date.now();
+  const opened: unknown[] = [];
+  const preps: string[] = [];
+  const events: Array<{ myu_id: string; kind: string }> = [];
+  const links: string[] = [];
+  const settings = { materialize_folder: 'Myu', myu_checkbox_state: {} as Record<string, boolean>, vault_event_queue: [] as unknown[] };
+  view['app'] = { workspace: { openLinkText: (p: string) => { links.push(p); } } };
+  view['plugin'] = {
+    settings,
+    personIndex: { find: () => null },
+    backend: {
+      vaultInteraction: async (ev: Array<{ myu_id: string; kind: string }>) => {
+        events.push(...ev);
+        return { ok: true, status: 200, data: { results: [{ myu_id: 'c-4471', kind: 'tick', outcome: 'resolved' }] } };
+      },
+    },
+    saveSettings: async () => undefined,
+    materializer: { refreshCommitmentSurfaces: async () => undefined },
+    openChatAbout: async (type: string, id: string, opts: unknown) => { opened.push([type, id, opts]); },
+    openPrep: async (id: string) => { preps.push(id); },
+  };
+  view['brief'] = { date: '2026-09-12', sections: [{ section: 'today', visible: true, items: [{ text: 'Two things from earlier this week are done.' }] }] };
+  view['loadedOnce'] = true;
+  view['briefExpanded'] = false;
+  view['meetings'] = [
+    { event_id: 'evt_retro', summary: 'Sprint retro', attendee_emails: ['a', 'b', 'c', 'd', 'e', 'f'], startDate: new Date(now + 2 * 3600_000) },
+    { event_id: 'evt_dan', summary: 'Dan, migrations sync', startDate: new Date(now + 3 * 3600_000) },
+    { event_id: 'evt_standup', summary: 'Platform standup', startDate: new Date(now - 3 * 3600_000) },
+  ];
+  view['todayLines'] = [
+    { line_id: 'l1', subjects: [{ type: 'meeting', id: 'evt_retro' }], text: 'Three things you might want to bring.', needs_you: true, ask_kind: 'choice', est: 'About two minutes.' },
+    { line_id: 'l2', subjects: [{ type: 'meeting', id: 'evt_standup' }], text: 'The rollback check has been merged.', ask_kind: 'tell' },
+    { line_id: 'l3', subjects: [{ type: 'person', id: 'rel_dan', label: 'Dan Park' }], text: 'Hold Thursday for his review?', needs_you: true, ask_kind: 'yes_no', conversation: { subject_type: 'person', subject_id: 'rel_dan' } },
+  ];
+  view['commitments'] = [
+    { commitment_id: 'c-4471', content: 'review your migration changes', owner: 'Dan Park', deadline: '2026-09-08', status: 'open', meeting_title: 'You and Dan' },
+    { commitment_id: 'c-4482', content: 'on-call handover write-up', deadline: '2026-09-15', status: 'open' },
+  ];
+  view['render'] = () => undefined;
+  view['refresh'] = async () => undefined;
+  const root = new FakeEl('div');
+  const v = view as unknown as { renderBrief(r: unknown): void; renderForYou(r: unknown): void; renderNext(r: unknown): void; renderOpenWithYou(r: unknown): void };
+  v.renderBrief(root);
+  v.renderForYou(root);
+  v.renderNext(root);
+  v.renderOpenWithYou(root);
+  const texts = root.visibleTexts();
+
+  assert.ok(texts.some((t) => /^From Myu — /.test(t)), 'the title says who is speaking');
+  assert.ok(texts.includes('Two things from earlier this week are done.'), 'the brief, in Myu’s voice');
+
+  const retro = root.find((e) => e.classes.has('myu-ttl') && e.text === 'Sprint retro');
+  assert.ok(retro, 'the meeting row');
+  assert.ok(retro!.find((e) => e.text === '6 people'), 'who, as a count — never names');
+  assert.ok(root.find((e) => e.classes.has('myu-line') && e.text === 'Three things you might want to bring.'), 'Myu’s line under the row, in the accent');
+  assert.ok(root.find((e) => e.classes.has('myu-est') && e.text === 'About two minutes.'), 'the estimate beside it');
+  assert.ok(root.find((e) => e.classes.has('myu-dot') && e.classes.has('myu-dot-waiting')), 'the dot: a question waits (grey; orange is only ever new)');
+  assert.ok(root.find((e) => e.classes.has('myu-done') && e.text === 'The rollback check has been merged.'), 'a tell under Earlier, in the success colour');
+  assert.ok(texts.includes('next') && texts.includes('earlier') && texts.includes('for you'), 'the zones');
+  assert.ok(root.find((e) => e.classes.has('myu-ttl') && e.text === 'Dan Park'), 'a person’s line is a row of its own');
+
+  const buttons = root.querySelectorAll('button');
+  assert.equal(buttons.filter((b) => b.text === 'talk about this ▸').length, 4, 'talk about this ▸ on every row: two next, one earlier, one for you');
+  assert.equal(buttons.filter((b) => b.text === 'prepare ▸').length, 1, 'prepare ▸ on the next meeting only');
+  assert.ok(await root.click('prepare ▸'));
+  assert.deepEqual(preps, ['evt_retro']);
+  const retroRow = root.querySelectorAll('.myu-mrow').find((r) => !!r.find((e) => e.text === 'Sprint retro'))!;
+  await retroRow.querySelectorAll('button').find((b) => b.text === 'talk about this ▸')!.onclick!();
+  assert.equal(opened.length, 1);
+  const [type, id, opts] = opened[0] as [string, string, { line?: string; phase?: string; label?: string }];
+  assert.equal(type, 'meeting');
+  assert.equal(id, 'evt_retro');
+  assert.equal(opts.line, 'Three things you might want to bring.', 'Myu speaks first with its line on the row');
+  assert.equal(opts.phase, 'before');
+
+  assert.ok(texts.includes('open items today'));
+  const owner = root.find((e) => e.classes.has('myu-wl') && e.text === 'Dan Park');
+  assert.ok(owner, 'the owner as a wikilink');
+  owner!.onclick!();
+  assert.deepEqual(links, ['Myu/People/Dan Park.md'], 'the link opens their file under Myu/People');
+  assert.ok(texts.some((t) => t.includes('📅 2026-09-08')), 'the due date');
+  assert.ok(texts.some((t) => t.includes('(from You and Dan)')), 'where it came from');
+  const boxes = root.querySelectorAll('input');
+  assert.equal(boxes.length, 2, 'two open commitments, two checkboxes');
+  boxes[0]!.checked = true;
+  boxes[0]!.onchange!();
+  await new Promise((r) => setTimeout(r, 0));
+  assert.deepEqual(events.map((e) => [e.myu_id, e.kind]), [['c-4471', 'tick']], 'ticking ships the same vault interaction the folder watcher does');
+  assert.equal(settings.myu_checkbox_state['c-4471'], true, 'resolved → done in Myu');
 });

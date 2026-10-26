@@ -49,24 +49,24 @@ export class MeetingConsentModal extends Modal {
     contentEl.createEl('p', {
       cls: 'myu-prose',
       text:
-        'Notes in the folders you choose become meetings Myu understands: decisions, ' +
-        'who owns what, and the read on each person deepen from what you already write.',
+        'Notes in the folders you choose are read as meetings. Myu picks up decisions ' +
+        'and who owns what, and learns more about each person from what you already write.',
     });
 
     contentEl.createEl('p', {
       cls: 'myu-prose',
       text:
-        'This is a different kind of sharing than your journal. Meeting notes carry ' +
-        "other people's words, and their content is processed on askMyu's servers " +
-        'like every meeting source — it is not end-to-end encrypted the way journal ' +
-        'capture is. Say no and nothing changes.',
+        'This is different from sharing your journal. Meeting notes contain ' +
+        "other people's words, and they are processed on askMyu's servers " +
+        'like every other meeting source. They are not encrypted with your device key ' +
+        'the way your journal is. If you say no, nothing changes.',
     });
 
     contentEl.createEl('p', {
       cls: 'myu-prose myu-quiet',
       text:
-        'A note outside these folders can opt in with `myu-meeting: true` in its ' +
-        'frontmatter; clearing the list stops the watching entirely.',
+        'To share a note outside these folders, add `myu-meeting: true` to its ' +
+        'frontmatter. Clear the list to stop sharing meeting notes.',
     });
 
     new Setting(contentEl)
@@ -104,7 +104,7 @@ export class MeetingConsentModal extends Modal {
     void this.plugin.runMeetingBackfill();
 
     notifyStatus(
-      folders.length === 0 ? 'No meeting folders shared. Myu reads none.' : `Sharing meeting notes from: ${folders.join(', ')}`,
+      folders.length === 0 ? 'No meeting folders shared. Myu will not read any meeting notes.' : `Sharing meeting notes from: ${folders.join(', ')}`,
     );
     this.close();
     this.onFinished();

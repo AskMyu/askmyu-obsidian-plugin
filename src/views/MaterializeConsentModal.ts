@@ -54,31 +54,31 @@ export class MaterializeConsentModal extends Modal {
     contentEl.empty();
     contentEl.addClass('myu-power-down');
 
-    contentEl.createEl('h2', { text: 'Let Myu keep a folder in your vault?' });
+    contentEl.createEl('h2', { text: 'Let Myu create a folder in your vault?' });
 
     contentEl.createEl('p', {
       cls: 'myu-prose',
       text:
-        'Myu keeps one folder in your vault, up to date: a page for each ' +
-        'person and company, your journal, meetings, your calendar, today and ' +
-        'the week, and any canvas you save. All plain markdown. Myu writes ' +
-        'only in this folder — your own notes are never touched.',
+        'Myu writes one folder in your vault and keeps it up to date: a page for each ' +
+        'person and company, your journal, meetings, your calendar, today’s brief, ' +
+        'the weekly review, and any canvas you save. All plain markdown. Myu only writes ' +
+        'in this folder. Your own notes are never touched.',
     });
 
     contentEl.createEl('p', {
       cls: 'myu-prose',
       text:
-        'Worth knowing: these files are plain text on your disk, and they sync ' +
-        'wherever your vault syncs. Right now this content lives only on ' +
-        'askMyu’s servers, encrypted. If you’d rather keep it that way, say no ' +
-        '— nothing changes.',
+        'Note: these files are plain text on your disk, and they sync ' +
+        'wherever your vault syncs. Right now this content is stored only on ' +
+        'askMyu’s servers, encrypted. If you’d rather keep it that way, choose Not now. ' +
+        'Nothing changes.',
     });
 
     contentEl.createEl('p', {
       cls: 'myu-prose',
       text:
-        'You can tick a checkbox in these files to mark something done — Myu ' +
-        'sees it. But don’t write notes in them: Myu rewrites these files, and ' +
+        'You can tick a checkbox in these files to mark something done, and Myu ' +
+        'will see it. Don’t write notes in them: Myu rewrites these files, so ' +
         'your edits would be lost.',
     });
 
@@ -92,7 +92,7 @@ export class MaterializeConsentModal extends Modal {
 
     new Setting(contentEl)
       .setName('Folder')
-      .setDesc('Everything Myu writes lives under this path.')
+      .setDesc('Everything Myu writes goes in this folder.')
       .addText((t) =>
         t.setPlaceholder('Myu').setValue(this.folder).onChange((v) => {
           this.folder = v;
@@ -101,12 +101,12 @@ export class MaterializeConsentModal extends Modal {
 
     new Setting(contentEl)
       .setName('People')
-      .setDesc('A page per person — role, company, what Myu knows. A ready-made base makes it a table.')
+      .setDesc('A page per person: role, company, and what Myu knows about them. A ready-made base shows them as a table.')
       .addToggle((t) => t.setValue(this.people).onChange((v) => (this.people = v)));
 
     new Setting(contentEl)
       .setName('Today and the week')
-      .setDesc('The brief and weekly review as files — embed `![[Myu/Today]]` in your daily template.')
+      .setDesc('Today’s brief and the weekly review as files. You can embed `![[Myu/Today]]` in your daily note template.')
       .addToggle((t) => t.setValue(this.today).onChange((v) => (this.today = v)));
 
     new Setting(contentEl)
@@ -134,7 +134,7 @@ export class MaterializeConsentModal extends Modal {
     s.materialize_commitments = this.commitments;
     await this.plugin.saveSettings();
 
-    notifyStatus(`Myu is filling ${s.materialize_folder}/ — watch it build.`);
+    notifyStatus(`Myu is now writing ${s.materialize_folder}/.`);
     this.accepted = true;
     this.close(); // onClose fires onFinished(true)
   }

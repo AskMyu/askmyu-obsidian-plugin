@@ -26,7 +26,10 @@ import type { AskMyuApi, BackendFlags, CardSpecLite, EntityHeadline, VaultChange
 import type { ApiResponse } from '../transport';
 import type { AskMyuSettings } from '../settings';
 import { hashContent } from '../capture/noteMeta';
+import { withReadExtras } from '../selfCard';
+import { cardStampMs } from '../cardDays';
 import { decryptWithKey } from '../crypto/primitives';
+import { readPastedBlocks } from '../pastedText';
 import { isWeeklyEditionFresh } from './WeeklyReviewWriter';
 import { WEAVE_NOTE } from './weaveRecipes';
 import { firstPresent, parseWhen, flattenMemoryPayload, buildSelfMarkdown, type JournalDayEntry, buildDayMarkdown, buildMonthCalendarMarkdown, buildMeetingHistoryMarkdown, buildJournalDayMarkdown, buildCompanyMarkdown,
@@ -36,6 +39,8 @@ import { firstPresent, parseWhen, flattenMemoryPayload, buildSelfMarkdown, type 
   buildPersonMarkdown,
   safeFirstNameAlias,
   buildTodayMarkdown,
+  buildTodayLinesSection,
+  buildMyuLogMarkdown,
   buildWeekMarkdown,
   sanitizeName,
 } from './myuFiles';
@@ -97,6 +102,24 @@ export class MaterializationService {
     return this.deps.settings().materialize_folder.replace(/\/+$/, '') || 'Myu';
   }
 
+  /**
+   * Me.md's card (2026-10-05): the whole card (the deep dive: the read in full, every section, and — since the server
+   * sends them there too — the tiles and the pressing item). A deep card with no tiles is an older server's: the read
+   * card fills them in (`withReadExtras`). `readCard`: the read card already in hand (the changes feed's). Null when no
+   * card came back.
+   */
+  private async selfCardForVault(readCard?: CardSpecLite | null): Promise<CardSpecLite | null> {
+    const api = this.deps.api();
+    // A reader that is missing or throws (an older transport) gives the feed's card, never a failed sync.
+    const get = (level: 'read' | 'deep_dive') => Promise.resolve().then(() => api.getSelfCard(level)).catch(() => null);
+    const deep = await get('deep_dive');
+    const whole = deep?.ok ? (deep.data?.card ?? null) : null;
+    if (whole && whole.tiles != null) return whole;
+    const read = readCard ? null : await get('read');
+    const small = readCard ?? (read?.ok ? (read.data?.card ?? null) : null);
+    return whole ? withReadExtras(whole, small) : small;
+  }
+
   private enabled(): boolean {
     const s = this.deps.settings();
     return s.materialize_consented && s.materialize_enabled && this.deps.canRun();
@@ -119,6 +142,15 @@ export class MaterializationService {
 
   private async sweep(): Promise<{ people: number; skipped: number }> {
     const s = this.deps.settings();
+    // Once (2026-10-06): the Days notes file a memory under the reader's day, as the person's note shows it; the map was
+    // keyed by the UTC day. It is rebuilt from every person on this sync (a first sync's full pass), so quiet people move
+    // over too.
+    if (!s.memories_by_day_local) {
+      s.memories_by_day = {};
+      s.myu_entity_changed_at = {};
+      s.vault_changes_since = 0;
+      s.memories_by_day_local = true;
+    }
 
     await this.writeBaseOnce();
     await this.refreshAmbient();
@@ -134,9 +166,10 @@ export class MaterializationService {
       return r;
     }
 
-    // Myu/Me.md — the SELF (operator, 2026-08-25: "what about the self?").
-    const selfCard = await this.deps.api().getSelfCard().catch(() => null);
-    await this.writeHeld(`${this.folder}/Me.md`, buildSelfMarkdown(selfCard?.data?.card ?? null));
+    // Myu/Me.md — the SELF (operator, 2026-08-25: "what about the self?"); the whole card, the read in full (2026-10-05).
+    // No card back: the Me.md there stays as it is.
+    const selfCard = await this.selfCardForVault();
+    if (selfCard) await this.writeHeld(`${this.folder}/Me.md`, buildSelfMarkdown(selfCard));
 
     let people = 0;
     let skipped = 0;
@@ -191,7 +224,7 @@ export class MaterializationService {
     }
     const total = listed.data?.count ?? meetings.length;
     if (total > meetings.length) {
-      this.deps.onProgress(`Meeting history: ${meetings.length} of ${total} this pass — the rest follow on later passes`);
+      this.deps.onProgress(`Meeting history: ${meetings.length} of ${total} so far. The rest follow on later syncs`);
     }
   }
 
@@ -263,9 +296,23 @@ export class MaterializationService {
     const s = this.deps.settings();
     const map = s.memories_by_day;
     const cutoff = new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10);
+    // A memory is filed under the reader's day, the day its person's note shows ("*(28 Sep)*", 2026-10-06); it used to
+    // be the UTC day, so this person's name leaves those days first.
+    const localDay = (ms: number) => { const d = new Date(ms); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
     for (const m of memories) {
-      const day = String(m.created_at ?? '').slice(0, 10);
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || day < cutoff) continue;
+      const utcDay = String(m.created_at ?? '').slice(0, 10);
+      const was = map[utcDay];
+      if (was) {
+        const kept = was.filter((n) => n !== name);
+        if (kept.length) map[utcDay] = kept;
+        else delete map[utcDay];
+      }
+    }
+    for (const m of memories) {
+      const ms = cardStampMs(m.created_at);
+      if (ms == null) continue;
+      const day = localDay(ms);
+      if (day < cutoff) continue;
       const names = map[day] ?? [];
       if (!names.includes(name)) names.push(name);
       map[day] = names;
@@ -386,7 +433,9 @@ export class MaterializationService {
     } else if (typeof entry.content === 'string') {
       text = entry.content;
     }
-    if (!text.trim()) return null;
+    // Pasted text (2026-10-06) comes opened by the server; an entry of pasted text only is still an entry.
+    const pasted = readPastedBlocks(entry.pasted_blocks);
+    if (!text.trim() && pasted.length === 0) return null;
     const journalId = String(entry.journal_id ?? entry.id ?? '') || undefined;
 
     const recentCutoff = Date.now() - 7 * 86400000;
@@ -406,7 +455,8 @@ export class MaterializationService {
             continue;
           }
         }
-        if (!content.trim()) continue;
+        const chatPasted = readPastedBlocks(chat.pasted_blocks);
+        if (!content.trim() && chatPasted.length === 0) continue;
         // Role from chatter_id (the reliable signal the web uses), not a
         // brace heuristic (audit 2026-08-25): an agent turn is anything not
         // authored by the account.
@@ -421,11 +471,11 @@ export class MaterializationService {
             // fall through — plain text that happens to start with a brace
           }
         }
-        collected.push({ role: isUser ? 'you' : 'myu', text: content });
+        collected.push({ role: isUser ? 'you' : 'myu', text: content, ...(chatPasted.length ? { pasted: chatPasted } : {}) });
       }
       if (collected.length > 0) turns = collected;
     }
-    return { day, entry: { time, text, journalId, turns } };
+    return { day, entry: { time, text, journalId, turns, ...(pasted.length ? { pasted } : {}) } };
   }
 
   /** Myu/Companies/ — org pages with wikilinked people. Person-pass sibling. */
@@ -469,6 +519,7 @@ export class MaterializationService {
     if (s.materialize_today) {
       await this.writeToday();
       await this.writeWeek();
+      await this.writeMyuLog();
     }
     if (s.materialize_commitments) {
       await this.writeCommitmentsRollup();
@@ -533,7 +584,14 @@ export class MaterializationService {
     allDisplayNames: string[] = [],
   ): Promise<'written' | 'held' | 'unchanged' | 'error'> {
     await this.paced();
-    const cardRes = await this.deps.api().getCard('person', entity.entity_id);
+    // The full view (deep_dive) carries the four new agentic sections (slice 6);
+    // fall back to the read card if the deep dive is refused or unavailable.
+    const api = this.deps.api();
+    const deepRes =
+      typeof api.getCardDeep === 'function'
+        ? await api.getCardDeep('person', entity.entity_id).catch(() => null)
+        : null;
+    const cardRes = deepRes && deepRes.ok && deepRes.data?.card ? deepRes : await api.getCard('person', entity.entity_id);
     // A refused card (a pause, a 5xx, a WAF 403) is not an empty card: writing
     // it would replace a good page with a thin one. Skip; the next pass returns.
     if (!cardRes.ok) return 'error';
@@ -567,6 +625,7 @@ export class MaterializationService {
       this.deps.findTheirPage(entity.display_name)?.replace(/\.md$/, '').split('/').pop() ?? null,
       memories,
       aliases,
+      (s.base_url ?? 'https://myu.askmyu.com/api').replace(/\/api\/?$/, ''),
     );
     const outcome = await this.writeHeld(path, md);
     if (outcome === 'written') {
@@ -599,6 +658,9 @@ export class MaterializationService {
 
     // Headlines for whoever changed — one list call per kind; the feed's
     // cards carry no organization or last-contact of their own.
+    // People on the map (2026-10-03): the list and this feed share the server's one membership rule
+    // (EntityFeedListService.isListablePerson, false on the map), so neither names them and no note is written for
+    // anyone Myu has only seen pass by in mail. Keeping or opening one brings them into both.
     const headlines = new Map<string, EntityHeadline>();
     if (s.materialize_people) {
       const listOpts = mode === 'delta' && since > 0 && this.deps.flags().entity_changed_at ? { changedSince: since } : undefined;
@@ -624,7 +686,9 @@ export class MaterializationService {
       page++;
       if (serverTime === null && typeof d.server_time === 'number') serverTime = d.server_time;
       if (page === 1 && d.self?.card) {
-        await this.writeHeld(`${this.folder}/Me.md`, buildSelfMarkdown(d.self.card));
+        // The feed carries the read-level card; Me.md is the whole one (2026-10-05), with the feed's as its fallback.
+        const selfCard = await this.selfCardForVault(d.self.card);
+        await this.writeHeld(`${this.folder}/Me.md`, buildSelfMarkdown(selfCard ?? d.self.card));
       }
       if (s.materialize_people) {
         for (const item of d.people ?? []) {
@@ -732,12 +796,34 @@ export class MaterializationService {
       brief?: { date?: string; sections?: Array<{ title?: string; items?: Array<{ text?: string }> }> };
     } | null)?.brief;
     if (!brief) return;
-    const date = brief.date ?? new Date().toISOString().slice(0, 10);
-    const sections = (brief.sections ?? []).map((section) => ({
-      title: section.title,
-      items: (section.items ?? []).map((i) => i.text ?? '').filter(Boolean),
-    }));
+    // The brief's date is the person's own day (backend, 2026-09-28); without one, this computer's day, never UTC's.
+    const now = new Date();
+    const date = brief.date ?? `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const sections: Array<{ title?: string; items: string[] }> = [];
+    // One list, two lenses (slice 15): the lines under rows lead the file.
+    const linesRes = await this.deps.api().getMyuLines('today').catch(() => null);
+    const lines = linesRes?.data?.lines ?? [];
+    if (lines.length > 0) {
+      const linesSection = buildTodayLinesSection(lines);
+      if (linesSection.items.length > 0) sections.push(linesSection);
+    }
+    for (const section of brief.sections ?? []) {
+      sections.push({
+        title: section.title,
+        items: (section.items ?? []).map((i) => i.text ?? '').filter(Boolean),
+      });
+    }
     await this.writeHeld(`${this.folder}/Today.md`, buildTodayMarkdown(date, sections));
+  }
+
+  /** Myu/Log/<day>.md — the Days log (slice 15). What Myu read/assumed/said/did/waited. */
+  private async writeMyuLog(): Promise<void> {
+    const day = new Date().toISOString().slice(0, 10);
+    const since = `${day}T00:00:00Z`;
+    const res = await this.deps.api().getMyuLog({ since, limit: 100 }).catch(() => null);
+    if (!res?.ok) return;
+    const items = res.data?.items ?? [];
+    await this.writeHeld(`${this.folder}/Log/${day}.md`, buildMyuLogMarkdown(day, items));
   }
 
   private async writeWeek(): Promise<void> {

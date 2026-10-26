@@ -26,6 +26,7 @@
  */
 
 import type { AskMyuApi } from '../transport/api';
+import { unwrapWithPassword, validPasswordKdf, type PasswordWrappedKey } from '../devicePassword';
 import type { UnlockState } from '../crypto/KeyHolder';
 import { KeyHolder } from '../crypto/KeyHolder';
 import {
@@ -674,6 +675,54 @@ export class UnlockMachine {
       // Valid BIP-39 checksum, wrong phrase for this account.
       return 'invalid_phrase';
     }
+  }
+
+  // ── the password for new devices (2026-10-26) ─────────────────────────────
+
+  /** The door's copy, read once per connect window; null when the account has none. */
+  private passwordCopy: PasswordWrappedKey | null | undefined = undefined;
+
+  /**
+   * Whether the account has a password for new devices: the door's copy is read once and kept, so every attempt
+   * after that is an unwrap here and never another read (the door is rate-limited). 'rate_limited' carries the
+   * seconds the server asks for, when it says.
+   */
+  async hasDevicePassword(): Promise<{ has: boolean; rateLimited?: boolean; retryAfter?: number }> {
+    if (this.passwordCopy !== undefined) return { has: this.passwordCopy !== null };
+    let res: Awaited<ReturnType<AskMyuApi['fetchPasswordWrappedMDEK']>>;
+    try {
+      res = await this.deps.api.fetchPasswordWrappedMDEK();
+    } catch {
+      // The door could not be reached (or a backend without it): the other doors are the way in, and the window
+      // asks again the next time it opens.
+      return { has: false };
+    }
+    if (res.ok && res.data?.has_password && res.data.wrapped_mdek_password && validPasswordKdf(res.data.kdf)) {
+      this.passwordCopy = res.data;
+      return { has: true };
+    }
+    if (res.status === 429) {
+      const body = res.data as unknown as { retry_after?: unknown } | null;
+      return { has: false, rateLimited: true, retryAfter: typeof body?.retry_after === 'number' ? body.retry_after : undefined };
+    }
+    // 404 no_password, or a copy that cannot be read here: the other doors are the way in.
+    this.passwordCopy = null;
+    return { has: false };
+  }
+
+  /** The typed password opens the copy; this device then holds the key as the phrase path leaves it. */
+  async unlockWithPassword(password: string): Promise<'ok' | 'wrong_password' | 'no_password' | 'error'> {
+    if (!password) return 'wrong_password';
+    const known = await this.hasDevicePassword();
+    if (!known.has || !this.passwordCopy?.wrapped_mdek_password || !this.passwordCopy.kdf) return known.rateLimited ? 'error' : 'no_password';
+    let mdek: CryptoKey;
+    try {
+      mdek = await unwrapWithPassword(this.passwordCopy.wrapped_mdek_password, password, this.passwordCopy.kdf);
+    } catch {
+      // AES-KW refuses a wrong password; nothing was sent.
+      return 'wrong_password';
+    }
+    return (await this.adoptMDEK(mdek)) ? 'ok' : 'error';
   }
 
   // ── shared tail of both onboarding paths ──────────────────────────────────

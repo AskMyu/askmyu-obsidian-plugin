@@ -24,7 +24,7 @@ export class WeaveView extends ItemView {
     return WEAVE_VIEW_TYPE;
   }
   getDisplayText(): string {
-    return 'Myu — weave Myu in';
+    return 'Myu — add Myu to your notes';
   }
   override getIcon(): string {
     return 'puzzle';
@@ -42,14 +42,14 @@ export class WeaveView extends ItemView {
     const folder = (s.materialize_folder || 'Myu').replace(/\/+$/, '');
     if (s.materialize_consented && s.materialize_enabled) {
       const top = root.createDiv({ cls: 'myu-sync-bar' });
-      const keep = top.createEl('button', { cls: 'myu-affordance', text: `Keep a copy in ${folder}/` });
+      const keep = top.createEl('button', { cls: 'myu-affordance', text: `Save a copy in ${folder}/` });
       keep.onclick = async () => {
         const path = await this.plugin.materializer.writeGuide(weaveGuide(folder, { asNote: true }));
         if (path) {
           notifyStatus(`Saved — ${path}.`);
           void this.plugin.app.workspace.openLinkText(path, '', true);
         } else {
-          notifyError('Could not write the note — it may carry your own edits, which Myu will not overwrite.');
+          notifyError('Could not write the note. It may contain your own edits, and Myu will not overwrite them.');
         }
       };
     }

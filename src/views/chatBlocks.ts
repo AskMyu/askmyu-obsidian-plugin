@@ -183,6 +183,9 @@ export function chatBlockMarkdown(block: ChatBlock): string | null {
       if (s(b.gut_check)) out.push('', `> [!question] Gut Check\n> ${s(b.gut_check)}`);
       return out.length > 1 ? out.join('\n') : null;
     }
+    case 'support_actions':
+      // Buttons the web draws under a reply (round 2): nothing to read here, and the canvas floor would print every field.
+      return null;
     default: {
       // Unknown to the chat but maybe known to the canvas — the composition
       // renderer covers fifty shapes and has a data-walking floor. K2.

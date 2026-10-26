@@ -24,7 +24,12 @@
 
 import { Component, MarkdownRenderer, App, Modal, Platform, Setting } from 'obsidian';
 import type AskMyuPlugin from '../main';
+import type { PastedBlockWire } from '../wire';
 import { componentMarkdown } from '../vault/myuFiles';
+import { PASTE_WORDS, canPutBack, chipAdded, chipLabel, pastedBlocksProblem, putBackText, undoChip, type PasteUndo } from '../pastedText';
+import { announce, attachPasteListeners, isUndoKey, pastedLiveRegion, renderPastedRow } from './pastedChips';
+import { PastedTextModal } from './PastedTextModal';
+import { WHOSE_PROFILE_WORDS, WhoseProfileModal } from './WhoseProfileModal';
 
 /** The web's ONBOARDING_COPY (OnboardingChat.tsx), verbatim — the payback beats. */
 export const ONBOARDING_COPY = {
@@ -70,6 +75,14 @@ export class OnboardingModal extends Modal {
   private working = false;
   /** Arc succeeded WITH a current role during this session. */
   private arcCompleted = false;
+  /**
+   * Pasted text in the moment's field, as chips (2026-10-06): classified with the typed words, then sent with them
+   * as the first journal entry. The last paste that became one, while Undo can put it back inline.
+   */
+  private momentPasted: PastedBlockWire[] = [];
+  private momentUndo: PasteUndo | null = null;
+  /** The modal's live region, outside contentEl (which every render empties). */
+  private liveEl: HTMLElement | null = null;
 
   constructor(
     app: App,
@@ -84,6 +97,7 @@ export class OnboardingModal extends Modal {
   override onOpen(): void {
     this.isOpen = true;
     this.contentEl.addClass('myu-power-down');
+    if (!this.liveEl) this.liveEl = pastedLiveRegion(this.modalEl);
     // Bind to the plugin-scope session: a dismissed conversation comes back.
     const accountId = this.plugin.settings.account_id ?? null;
     if (onboardingSession.accountId !== accountId) {
@@ -106,7 +120,7 @@ export class OnboardingModal extends Modal {
       this.setStage('moment');
       if (!resuming) this.say(this.momentPrompt(scripts));
     } else if (!resuming) {
-      this.say("Hey — I'm Myu. Your notes will teach me plenty over time, but they can't tell me where you are RIGHT NOW. Two minutes fixes that. To start: your career arc — share your LinkedIn, or a resume.");
+      this.say("Hey — I'm Myu. Your notes will teach me a lot over time, but they can't tell me where you are right now. Two minutes fixes that. To start, share your LinkedIn or a resume so I can see your career so far.");
     }
     this.render();
   }
@@ -178,10 +192,10 @@ export class OnboardingModal extends Modal {
       if (line.role === 'read') {
         const fold = log.createEl('details', { cls: 'myu-fold myu-onboard-read' });
         if (this.readOpen) fold.setAttr('open', '');
-        fold.createEl('summary', { text: 'What Myu read from your career' });
+        fold.createEl('summary', { text: 'What Myu learned from your career' });
         const body = fold.createDiv({ cls: 'markdown-rendered' });
         void MarkdownRenderer.render(this.app, line.text, body, '/', this.mdHost);
-        body.createDiv({ cls: 'myu-quiet', text: 'The full canvas is open behind this window \u2014 yours to keep, and to explore after.' });
+        body.createDiv({ cls: 'myu-quiet', text: 'The full canvas is open behind this window. You can look at it after this.' });
         fold.addEventListener('toggle', () => { this.readOpen = fold.hasAttribute('open'); });
         continue;
       }
@@ -237,15 +251,93 @@ export class OnboardingModal extends Modal {
         chip.onclick = () => { text = `About ${p.name}: `; field?.setValue(text); field?.inputEl.focus(); };
       }
     }).catch(() => undefined);
+    let tell: { setDisabled(disabled: boolean): unknown } | null = null;
     new Setting(root)
       .setName('Right now')
       .addText((t) => {
         field = t;
-        t.setPlaceholder(this.payback() ? ONBOARDING_COPY.situatedPlaceholder : 'A sentence or two, in your words').onChange((v) => (text = v));
+        t.setPlaceholder(this.payback() ? ONBOARDING_COPY.situatedPlaceholder : 'A sentence or two, in your words').onChange((v) => {
+          text = v;
+          // The hint goes at the next edit.
+          if (this.momentUndo) {
+            this.momentUndo = null;
+            drawRow();
+          }
+        });
       })
-      .addButton((b) =>
-        b.setButtonText('Tell Myu').setCta().onClick(() => void this.submitMoment(text.trim())),
-      );
+      .addButton((b) => {
+        tell = b;
+        b.setButtonText('Tell Myu').setCta().onClick(() => void this.submitMoment(text.trim()));
+      });
+    // Pasted text (2026-10-06): a long paste or drop in the field becomes a chip under it, drawn in place.
+    const row = root.createDiv({ cls: 'myu-pasted-row' });
+    const input = (field as { inputEl: HTMLInputElement } | null)?.inputEl ?? null;
+    const drawRow = (): void => {
+      renderPastedRow(row, this.momentPasted, {
+        open: (id) => openChip(id),
+        remove: (id) => removeChip(id),
+        undo: this.momentUndo ? undo : null,
+      });
+      tell?.setDisabled(!!pastedBlocksProblem(this.momentPasted));
+    };
+    const undo = (): void => {
+      const pending = this.momentUndo;
+      this.momentUndo = null;
+      const out = input && pending ? undoChip(input.value, this.momentPasted, pending) : null;
+      if (input && out) {
+        this.momentPasted = out.chips;
+        input.value = out.value;
+        text = out.value;
+      }
+      drawRow();
+      if (input && out) {
+        input.focus();
+        input.setSelectionRange(out.caret, out.caret);
+      }
+    };
+    const removeChip = (id: string): void => {
+      this.momentPasted = this.momentPasted.filter((c) => c.id !== id);
+      this.momentUndo = null;
+      drawRow();
+      input?.focus();
+    };
+    const openChip = (id: string): void => {
+      const at = this.momentPasted.findIndex((c) => c.id === id);
+      const chip = this.momentPasted[at];
+      if (!chip) return;
+      new PastedTextModal(this.app, chip, this.momentPasted.length > 1 ? at + 1 : undefined, text, {
+        putBack: () => {
+          if (!canPutBack(text, chip).ok) return;
+          text = putBackText(text, chip);
+          this.momentPasted = this.momentPasted.filter((c) => c !== chip);
+          this.momentUndo = null;
+          if (input) input.value = text;
+          drawRow();
+          input?.focus();
+          input?.setSelectionRange(text.length, text.length);
+        },
+        remove: () => removeChip(id),
+      }).open();
+    };
+    if (input) {
+      attachPasteListeners(input, {
+        addPasted: (pastedText, source, at) => {
+          const out = chipAdded(this.momentPasted, pastedText, source, at);
+          this.momentPasted = out.chips;
+          this.momentUndo = out.undo;
+          text = input.value;
+          announce(this.liveEl, PASTE_WORDS.announce(out.chip.chars));
+          drawRow();
+        },
+      });
+      input.addEventListener('keydown', (event) => {
+        if (this.momentUndo && isUndoKey(event)) {
+          event.preventDefault();
+          undo();
+        }
+      });
+    }
+    drawRow();
     new Setting(root).addButton((b) =>
       b.setButtonText('Not now').onClick(() => {
         // Server state is untouched → the settings row and Today cue keep
@@ -280,8 +372,25 @@ export class OnboardingModal extends Modal {
       return;
     }
     const summary = seek.data?.body?.content ?? 'LinkedIn profile found.';
+    // The profile is in another name (2026-10-15): the person says whose it is before it goes on the account; "someone
+    // else" puts nothing on it. The server refuses an unconfirmed mismatch too.
+    let confirmed = false;
+    const profileName = typeof seek.data?.profile_name === 'string' ? seek.data.profile_name.trim() : '';
+    if (seek.data?.name_match === 'mismatch' && profileName) {
+      this.say(WHOSE_PROFILE_WORDS.whose(profileName));
+      this.render();
+      const theirs = await new Promise<boolean>((resolve) => new WhoseProfileModal(this.app, profileName, resolve).open());
+      this.you(theirs ? WHOSE_PROFILE_WORDS.itsMe : WHOSE_PROFILE_WORDS.notMe);
+      if (!theirs) {
+        this.say(WHOSE_PROFILE_WORDS.notMine(profileName));
+        this.render();
+        return;
+      }
+      confirmed = true;
+    }
     const lid = url.match(/linkedin\.com\/in\/([^/?]+)/)?.[1] ?? '';
-    if (lid) await this.plugin.backend.saveLinkedinId(accountId, lid);
+    // The flag goes only when the person confirmed: the call is as it was otherwise.
+    if (lid) await (confirmed ? this.plugin.backend.saveLinkedinId(accountId, lid, true) : this.plugin.backend.saveLinkedinId(accountId, lid));
     await this.finishArc('linkedin', summary);
   }
 
@@ -293,7 +402,7 @@ export class OnboardingModal extends Modal {
     const dialog = electron?.remote?.dialog;
     const fs = w.require?.('fs') as { readFileSync: (p: string) => Uint8Array } | undefined;
     if (!dialog || !fs) {
-      notifyError('Resume upload needs the desktop app — paste your LinkedIn instead.');
+      notifyError('Resume upload only works in the desktop app. Paste your LinkedIn URL instead.');
       return;
     }
     const picked = await dialog.showOpenDialog({
@@ -314,7 +423,7 @@ export class OnboardingModal extends Modal {
     const upload = await this.plugin.backend.resumeUpload(accountId, name, bytes.buffer as ArrayBuffer);
     this.working = false;
     if (!upload.ok) {
-      this.say("That upload didn't take. Try again, paste your LinkedIn, or skip for now.");
+      this.say("That upload failed. Try again, paste your LinkedIn, or skip for now.");
       this.render();
       return;
     }
@@ -398,10 +507,16 @@ export class OnboardingModal extends Modal {
   }
 
   private async submitMoment(text: string): Promise<void> {
-    if (!text) return;
+    const chips = [...this.momentPasted];
+    if (!text && chips.length === 0) return;
+    // Over a cap: nothing is sent; the row under the field says why.
+    if (pastedBlocksProblem(chips)) return;
     const accountId = this.plugin.settings.account_id;
     if (!accountId) return;
-    this.you(text);
+    // What was said, as it shows in the conversation: the typed words, then each chip's label.
+    this.you([text, ...chips.map((c, i) => chipLabel(c, chips.length > 1 ? i + 1 : undefined))].filter(Boolean).join('\n'));
+    this.momentPasted = [];
+    this.momentUndo = null;
     this.working = true;
     this.render();
 
@@ -412,7 +527,7 @@ export class OnboardingModal extends Modal {
     // second-attempt borderline is the smart escape; two thins stay incomplete.
     let shouldComplete = arcProvided;
     try {
-      const classify = await this.plugin.backend.classifyCareerMoment(accountId, text);
+      const classify = await this.plugin.backend.classifyCareerMoment(accountId, text, chips);
       const confidence = classify.data?.confidence ?? 0;
       const captured = classify.data?.moment_captured === true || confidence >= CONFIDENCE_SUFFICIENT;
       const borderline = !captured && confidence >= CONFIDENCE_BORDERLINE_MIN;
@@ -441,6 +556,6 @@ export class OnboardingModal extends Modal {
     onboardingSession.stage = null;
     this.close();
     this.handOff();
-    void this.plugin.openChat({ text, send: true, templateType: 'onboarding_moment' });
+    void this.plugin.openChat({ text, send: true, pasted: chips, templateType: 'onboarding_moment' });
   }
 }

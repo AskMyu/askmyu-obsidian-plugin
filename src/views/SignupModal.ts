@@ -177,7 +177,7 @@ export class SignupModal extends Modal {
       contentEl.createEl('h2', { text: 'Sign in to Myu' });
       contentEl.createEl('p', {
         cls: 'myu-prose',
-        text: 'Welcome back. Any door below reaches your existing account.',
+        text: 'Welcome back. Any of the options below signs you in to your existing account.',
       });
     } else {
       appendBrand(contentEl);
@@ -185,9 +185,9 @@ export class SignupModal extends Modal {
       contentEl.createEl('p', {
         cls: 'myu-prose',
         text:
-          'Your account starts in the vault. Share a meeting-notes folder and Myu ' +
-          'builds your people, decisions, and commitments from notes you already ' +
-          'have — no calendar or email needed to begin.',
+          'Your account starts here in your vault. Share a meeting-notes folder and Myu ' +
+          'builds a picture of your people, decisions, and commitments from notes you already ' +
+          'have. No calendar or email is needed to begin.',
       });
     }
 
@@ -236,7 +236,7 @@ export class SignupModal extends Modal {
         .setName('Password')
         .setDesc(
           'For signing in to askMyu on the web or your phone later. It is not an ' +
-          'encryption passphrase — your notes’ key is created separately on this ' +
+          'encryption passphrase. Your notes’ key is created separately on this ' +
           'device and never comes from this password.',
         )
         .addText((t) => {
@@ -313,20 +313,20 @@ export class SignupModal extends Modal {
         cls: 'myu-prose',
         text:
           'A browser tab is open with the Google sign-in. When it finishes, ' +
-          'press “Open in Obsidian” on the page it lands on — you come right back here.',
+          'press “Open in Obsidian” on the page that follows. You come right back here.',
       });
     } else {
       contentEl.createEl('h2', { text: 'Check your email' });
       contentEl.createEl('p', {
         cls: 'myu-prose',
         text:
-          `A sign-in link is on its way to ${this.email}. It opens right back ` +
-          'here — press “Open in Obsidian” on the page it lands on.',
+          `A sign-in link is on its way to ${this.email}. Click it, then ` +
+          'press “Open in Obsidian” on the page that opens. You come right back here.',
       });
     }
     contentEl.createEl('p', {
       cls: 'myu-prose myu-quiet',
-      text: 'Nothing happening when you click? Paste the link from the page below.',
+      text: 'Nothing happens when you click the link? Paste the link into the box below.',
     });
 
     new Setting(contentEl).setName('Paste the sign-in link').addText((t) => {
@@ -345,7 +345,7 @@ export class SignupModal extends Modal {
   private async submitMagic(button: HTMLButtonElement): Promise<void> {
     if (this.working || !this.doorOpen()) return;
     if (!this.email) {
-      notifyError('Email first — the sign-in link needs somewhere to go.');
+      notifyError('Enter your email first.');
       return;
     }
     this.working = true;
@@ -369,7 +369,7 @@ export class SignupModal extends Modal {
     const token = /[?&]token=([^&\s]+)/.exec(this.pasted)?.[1]
       ?? (/^[a-fA-F0-9]{32}$/.test(this.pasted) ? this.pasted : undefined);
     if (!token) {
-      notifyError("That doesn't look like the sign-in link — it carries a token= part.");
+      notifyError("That doesn't look like the sign-in link. The link contains a token= part.");
       return;
     }
     button.disabled = true;
@@ -380,7 +380,7 @@ export class SignupModal extends Modal {
   private async submitPassword(button: HTMLButtonElement): Promise<void> {
     if (this.working || !this.doorOpen()) return;
     if (!this.email || !this.name || this.password.length < 8) {
-      notifyError('Email, name, and a password of at least 8 characters.');
+      notifyError('Enter your email, your name, and a password of at least 8 characters.');
       return;
     }
     this.working = true;
@@ -402,7 +402,7 @@ export class SignupModal extends Modal {
       this.close();
       new ApprovalModal(this.app, this.plugin.unlock, () => this.onFinished()).open();
     } else if (outcome === 'email_not_allowed') {
-      notifyError('askMyu is in closed beta — this email isn’t on the list yet. Ask for an invite.');
+      notifyError('askMyu is in closed beta. This email is not on the list yet. Ask for an invite.');
       button.disabled = false;
       button.textContent = 'Create my account';
     } else {

@@ -41,8 +41,8 @@ var require_eventsource = __commonJS({
   "node_modules/event-source-polyfill/src/eventsource.js"(exports, module2) {
     (function(global) {
       "use strict";
-      var setTimeout = global.setTimeout;
-      var clearTimeout = global.clearTimeout;
+      var setTimeout2 = global.setTimeout;
+      var clearTimeout2 = global.clearTimeout;
       var XMLHttpRequest = global.XMLHttpRequest;
       var XDomainRequest = global.XDomainRequest;
       var ActiveXObject = global.ActiveXObject;
@@ -229,7 +229,7 @@ var require_eventsource = __commonJS({
         var timeout = 0;
         this._abort = function(silent) {
           if (that._sendTimeout !== 0) {
-            clearTimeout(that._sendTimeout);
+            clearTimeout2(that._sendTimeout);
             that._sendTimeout = 0;
           }
           if (state === 1 || state === 2 || state === 3) {
@@ -241,7 +241,7 @@ var require_eventsource = __commonJS({
             xhr.onreadystatechange = k;
             xhr.abort();
             if (timeout !== 0) {
-              clearTimeout(timeout);
+              clearTimeout2(timeout);
               timeout = 0;
             }
             if (!silent) {
@@ -306,7 +306,7 @@ var require_eventsource = __commonJS({
           if (state === 1 || state === 2 || state === 3) {
             state = 4;
             if (timeout !== 0) {
-              clearTimeout(timeout);
+              clearTimeout2(timeout);
               timeout = 0;
             }
             that.readyState = 4;
@@ -338,7 +338,7 @@ var require_eventsource = __commonJS({
           }
         };
         var onTimeout = function() {
-          timeout = setTimeout(function() {
+          timeout = setTimeout2(function() {
             onTimeout();
           }, 500);
           if (xhr.readyState === 3) {
@@ -373,7 +373,7 @@ var require_eventsource = __commonJS({
         }
         xhr.open(method, url, true);
         if ("readyState" in xhr) {
-          timeout = setTimeout(function() {
+          timeout = setTimeout2(function() {
             onTimeout();
           }, 0);
         }
@@ -396,7 +396,7 @@ var require_eventsource = __commonJS({
       XHRWrapper.prototype.send = function() {
         if ((!("ontimeout" in XMLHttpRequest.prototype) || !("sendAsBinary" in XMLHttpRequest.prototype) && !("mozAnon" in XMLHttpRequest.prototype)) && document2 != void 0 && document2.readyState != void 0 && document2.readyState !== "complete") {
           var that = this;
-          that._sendTimeout = setTimeout(function() {
+          that._sendTimeout = setTimeout2(function() {
             that._sendTimeout = 0;
             that.send();
           }, 4);
@@ -533,7 +533,7 @@ var require_eventsource = __commonJS({
         this._listeners = /* @__PURE__ */ Object.create(null);
       }
       function throwError(e) {
-        setTimeout(function() {
+        setTimeout2(function() {
           throw e;
         }, 0);
       }
@@ -765,8 +765,8 @@ var require_eventsource = __commonJS({
                     } else if (field === "heartbeatTimeout") {
                       heartbeatTimeout = parseDuration(value, heartbeatTimeout);
                       if (timeout !== 0) {
-                        clearTimeout(timeout);
-                        timeout = setTimeout(function() {
+                        clearTimeout2(timeout);
+                        timeout = setTimeout2(function() {
                           onTimeout();
                         }, heartbeatTimeout);
                       }
@@ -820,10 +820,10 @@ var require_eventsource = __commonJS({
           if (currentState === OPEN || currentState === CONNECTING) {
             currentState = WAITING;
             if (timeout !== 0) {
-              clearTimeout(timeout);
+              clearTimeout2(timeout);
               timeout = 0;
             }
-            timeout = setTimeout(function() {
+            timeout = setTimeout2(function() {
               onTimeout();
             }, retry);
             retry = clampDuration(Math.min(initialRetry * 16, retry * 2));
@@ -843,7 +843,7 @@ var require_eventsource = __commonJS({
             abortController = void 0;
           }
           if (timeout !== 0) {
-            clearTimeout(timeout);
+            clearTimeout2(timeout);
             timeout = 0;
           }
           es.readyState = CLOSED;
@@ -860,7 +860,7 @@ var require_eventsource = __commonJS({
             } else {
               var nextHeartbeat = Math.max((wasActivity || Date.now()) + heartbeatTimeout - Date.now(), 1);
               wasActivity = false;
-              timeout = setTimeout(function() {
+              timeout = setTimeout2(function() {
                 onTimeout();
               }, nextHeartbeat);
             }
@@ -868,7 +868,7 @@ var require_eventsource = __commonJS({
           }
           wasActivity = false;
           textLength = 0;
-          timeout = setTimeout(function() {
+          timeout = setTimeout2(function() {
             onTimeout();
           }, heartbeatTimeout);
           currentState = CONNECTING;
@@ -953,7 +953,46 @@ __export(main_exports, {
   default: () => AskMyuPlugin
 });
 module.exports = __toCommonJS(main_exports);
-var import_obsidian54 = require("obsidian");
+
+// src/timeZone.ts
+function deviceTimeZone() {
+  try {
+    const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    return zone && zone !== "Etc/Unknown" && isTimeZone(zone) ? zone : null;
+  } catch {
+    return null;
+  }
+}
+function isTimeZone(zone) {
+  if (typeof zone !== "string" || !zone.trim()) return false;
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: zone });
+    return true;
+  } catch {
+    return false;
+  }
+}
+function timeZoneToSave(saved, device) {
+  if (!isTimeZone(device)) return null;
+  return saved === device ? null : device;
+}
+async function syncTimeZone(api, device = deviceTimeZone()) {
+  try {
+    const res = await api.getAccountPreferences();
+    if (!res.ok) return false;
+    const raw = res.data?.preferences;
+    const saved = raw !== null && typeof raw === "object" && "timezone" in raw ? raw.timezone : null;
+    const zone = timeZoneToSave(saved, device);
+    if (!zone) return true;
+    const up = await api.updateAccountPreferences({ timezone: zone });
+    return up.ok;
+  } catch {
+    return false;
+  }
+}
+
+// src/main.ts
+var import_obsidian57 = require("obsidian");
 
 // src/views/SettingsTab.ts
 var import_obsidian14 = require("obsidian");
@@ -1041,7 +1080,7 @@ var ZulipConnectModal = class extends import_obsidian2.Modal {
   async connect() {
     const realm = this.realm.trim().replace(/\/$/, "");
     if (!realm || !this.email.trim() || !this.apiKey.trim()) {
-      this.problem = "All three are needed.";
+      this.problem = "Fill in all three fields.";
       this.render();
       return;
     }
@@ -1111,6 +1150,7 @@ var DEFAULT_SETTINGS = {
   people_folders: ["People"],
   meeting_hashes: {},
   monthly_seen: {},
+  retro_how_seen: {},
   materialize_consented: false,
   auto_keep_canvas: false,
   materialize_enabled: false,
@@ -1130,6 +1170,7 @@ var DEFAULT_SETTINGS = {
   last_people_materialize: 0,
   last_history_materialize: 0,
   memories_by_day: {},
+  memories_by_day_local: false,
   last_open_sync: 0,
   vault_changes_since: 0,
   myu_entity_changed_at: {},
@@ -1158,6 +1199,98 @@ function normalizeSettings(raw) {
   return merged;
 }
 
+// src/devicePassword.ts
+var PASSWORD_KDF_ITERATIONS = 6e5;
+var PASSWORD_KDF_NAME = "pbkdf2-sha256";
+var DEVICE_PASSWORD_WORDS = {
+  rowLabel: "Password for new devices",
+  notSet: "Not set",
+  isSet: "Set",
+  setButton: "Set",
+  changeButton: "Change",
+  removeButton: "Remove",
+  rowExplain: "Sign in on your phone or another computer with your email, type this password, and you're in. Without it, you get in on a new device by typing your recovery phrase, or by approving it from a device you already use.",
+  unlockFirst: "Unlock this device first.",
+  sheetTitle: "Choose a password for new devices.",
+  changeTitle: "Change the password for new devices",
+  sheetExplain: "Sign in on your phone or another computer with your email, type this password, and you're in. Choose one you'll remember: Myu can't reset it. If you forget it, you can still get in by typing your recovery phrase, or by approving the new device from one you already use. Longer is safer.",
+  password: "Password",
+  again: "Again",
+  tooShort: "Too short",
+  couldBeLonger: "Could be longer",
+  good: "Good",
+  /** The two fields differ (the note gives no sentence; this one is plain). */
+  mismatch: "The two don't match.",
+  setThePassword: "Set the password",
+  changeThePassword: "Change the password",
+  removeAsk: "Remove the password? To get in on a new device you'll then type your recovery phrase, or approve it from a device you already use.",
+  remove: "Remove",
+  cancel: "Cancel",
+  working: "Working\u2026",
+  /** The new device. */
+  newDeviceField: "Your password for new devices",
+  open: "Open",
+  wrong: "That password isn't right.",
+  /** The terminal's lines. */
+  terminalSet: "set. sign in on another device with your email, type it, and you're in.",
+  terminalChanged: "changed.",
+  terminalRemoved: "removed.",
+  terminalTooShort: "too short: 12 characters or more",
+  terminalRemoveAsk: "remove the password for new devices? to get in on a new device you'll then type your recovery phrase, or approve it from a device you already use.",
+  terminalUnlockAsk: "type your password for new devices (hidden):",
+  terminalWrong: "that password isn't right."
+};
+var webCrypto = () => {
+  const c = globalThis.crypto;
+  if (!c?.subtle) throw new Error("Web Crypto is not available here.");
+  return c;
+};
+function bytesToBase64(bytes) {
+  let s2 = "";
+  for (const b of bytes) s2 += String.fromCharCode(b);
+  return btoa(s2);
+}
+function base64ToBytes(b64) {
+  const s2 = atob(b64);
+  const out = new Uint8Array(s2.length);
+  for (let i = 0; i < s2.length; i++) out[i] = s2.charCodeAt(i);
+  return out;
+}
+function newPasswordKdf() {
+  const salt = new Uint8Array(16);
+  webCrypto().getRandomValues(salt);
+  return { name: PASSWORD_KDF_NAME, iterations: PASSWORD_KDF_ITERATIONS, salt: bytesToBase64(salt) };
+}
+function validPasswordKdf(kdf) {
+  if (!kdf || String(kdf.name).toLowerCase() !== PASSWORD_KDF_NAME) return false;
+  if (typeof kdf.iterations !== "number" || kdf.iterations < PASSWORD_KDF_ITERATIONS) return false;
+  try {
+    return typeof kdf.salt === "string" && base64ToBytes(kdf.salt).length >= 16;
+  } catch {
+    return false;
+  }
+}
+async function derivePasswordKEK(password, kdf) {
+  const subtle2 = webCrypto().subtle;
+  const material = await subtle2.importKey("raw", new TextEncoder().encode(password.normalize("NFKC")), "PBKDF2", false, ["deriveKey"]);
+  return subtle2.deriveKey(
+    { name: "PBKDF2", salt: base64ToBytes(kdf.salt), iterations: kdf.iterations, hash: "SHA-256" },
+    material,
+    { name: "AES-KW", length: 256 },
+    true,
+    ["wrapKey", "unwrapKey"]
+  );
+}
+async function wrapWithPassword(mdek, password, kdf = newPasswordKdf()) {
+  const kek = await derivePasswordKEK(password, kdf);
+  const wrapped = await webCrypto().subtle.wrapKey("raw", mdek, kek, "AES-KW");
+  return { wrapped_mdek_password: bytesToBase64(new Uint8Array(wrapped)), kdf };
+}
+async function unwrapWithPassword(wrappedMdekPassword, password, kdf) {
+  const kek = await derivePasswordKEK(password, kdf);
+  return webCrypto().subtle.unwrapKey("raw", base64ToBytes(wrappedMdekPassword), kek, "AES-KW", { name: "AES-GCM", length: 256 }, true, ["encrypt", "decrypt"]);
+}
+
 // src/views/ApprovalModal.ts
 var import_obsidian3 = require("obsidian");
 
@@ -1167,39 +1300,57 @@ function loadFailure(res) {
   if (!res || res.status === 0) return "askMyu could not be reached. Check the connection and try again.";
   switch (res.status) {
     case 401:
-      return "The session had to be reopened. Try again.";
+      return "Your session was refreshed. Try again.";
     case 403:
-      return "This session is still being opened. Try again in a moment.";
+      return "Still signing in. Try again in a moment.";
     case 428:
-      return "Agree to the beta terms first \u2014 the Today pane has them.";
+      return "Accept the beta terms first. They are in the Today pane.";
     case 429:
-      return "askMyu asked for a pause. Try again in a minute.";
+      return "Too many requests. Try again in a minute.";
     default:
-      return res.status >= 500 ? `askMyu could not answer (${res.status}). Try again.` : `askMyu answered ${res.status}. Try again.`;
+      return res.status >= 500 ? `askMyu had a server error (${res.status}). Try again.` : `askMyu returned an error (${res.status}). Try again.`;
   }
 }
 
 // src/views/approvalCopy.ts
 function approvalFailureText(f) {
-  if (f.step === "handover") return "The key handover did not finish on this device. Try again.";
+  if (f.step === "handover") return "This device did not finish receiving your key. Try again.";
   if (f.step === "request" && f.status === 429) {
-    return "Too many approval requests in the last hour, so askMyu asked for a pause. Try again later, or use your recovery phrase.";
+    return "Too many approval requests in the last hour. Wait a while and try again, or use your recovery phrase.";
   }
   const why = loadFailure({ ok: false, status: f.status, error: f.error }) ?? "Something went wrong.";
   return f.step === "request" ? `Could not start the approval. ${why}` : `Could not check on the approval. ${why}`;
 }
 
 // src/views/ApprovalModal.ts
+function rateLimitNote(retryAfter) {
+  if (typeof retryAfter === "number" && retryAfter > 0) {
+    const minutes = Math.ceil(retryAfter / 60);
+    return `Too many tries with the password for new devices. Try again in ${minutes === 1 ? "a minute" : `${minutes} minutes`}, or use one of the doors below.`;
+  }
+  return "Too many tries with the password for new devices. Try again later, or use one of the doors below.";
+}
 var ApprovalModal = class extends import_obsidian3.Modal {
   constructor(app, unlock, onFinished, initialStage = "choose") {
     super(app);
     this.unlock = unlock;
     this.onFinished = onFinished;
     this.message = null;
+    /** The password for new devices: unknown until the door answered; then whether there is one, and what to say. */
+    this.hasPassword = null;
+    this.passwordNote = null;
+    this.passwordBusy = false;
+    this.password = "";
     this.unobserve = null;
     this.stage = initialStage;
   }
   onOpen() {
+    void this.unlock.hasDevicePassword().then((known2) => {
+      this.hasPassword = known2.has;
+      if (known2.rateLimited) this.passwordNote = rateLimitNote(known2.retryAfter);
+    }).catch(() => {
+      this.hasPassword = false;
+    }).then(() => this.render());
     if (this.unlock.approval?.status === "pending") this.stage = "waiting";
     this.unobserve = this.unlock.observeApproval(() => this.onApprovalMoved());
     this.render();
@@ -1249,8 +1400,10 @@ var ApprovalModal = class extends import_obsidian3.Modal {
     const { contentEl } = this;
     contentEl.createEl("p", {
       cls: "myu-prose",
-      text: "Your notes are encrypted with a key only your devices hold. To let this one read and write with that key, approve it from a device you are already signed in on."
+      text: "Your notes are encrypted with a key that only your devices have. To give this device the key, approve it from a device where you are already signed in."
     });
+    if (this.hasPassword) this.renderPasswordField();
+    else if (this.passwordNote) contentEl.createEl("p", { cls: "myu-prose myu-warn", text: this.passwordNote });
     new import_obsidian3.Setting(contentEl).setName("Approve from another device").setDesc("Shows a 4-digit code here; you type it in askMyu on your phone or the web app.").addButton(
       (b) => b.setButtonText("Start").setCta().onClick(() => void this.beginApproval())
     );
@@ -1260,6 +1413,41 @@ var ApprovalModal = class extends import_obsidian3.Modal {
         this.render();
       })
     );
+  }
+  /** The field and its Open button, above the two doors; the words are the shared ones every surface shows. */
+  renderPasswordField() {
+    const { contentEl } = this;
+    new import_obsidian3.Setting(contentEl).setName(DEVICE_PASSWORD_WORDS.newDeviceField).setDesc("Type it and you're in. Or use one of the two doors below.").addText((t) => {
+      t.inputEl.type = "password";
+      t.inputEl.addClass("myu-password-input");
+      t.setValue(this.password).onChange((v) => {
+        this.password = v;
+      });
+    }).addButton((b) => {
+      b.setButtonText(this.passwordBusy ? DEVICE_PASSWORD_WORDS.working : DEVICE_PASSWORD_WORDS.open).setCta().onClick(() => void this.openWithPassword());
+      if (this.passwordBusy) b.setDisabled(true);
+    });
+    if (this.passwordNote) contentEl.createEl("p", { cls: "myu-prose myu-warn", text: this.passwordNote });
+  }
+  async openWithPassword() {
+    if (this.passwordBusy) return;
+    this.passwordBusy = true;
+    this.passwordNote = null;
+    this.render();
+    const result = await this.unlock.unlockWithPassword(this.password);
+    this.passwordBusy = false;
+    if (result === "ok") {
+      this.password = "";
+      this.stage = "done";
+    } else if (result === "wrong_password") {
+      this.passwordNote = DEVICE_PASSWORD_WORDS.wrong;
+    } else if (result === "no_password") {
+      this.hasPassword = false;
+      this.passwordNote = "This account has no password for new devices. Use one of the doors below.";
+    } else {
+      this.passwordNote = "Couldn't reach askMyu just now. Try again in a moment.";
+    }
+    this.render();
   }
   async beginApproval() {
     this.stage = "waiting";
@@ -1483,13 +1671,13 @@ var ConsentModal = class extends import_obsidian4.Modal {
     contentEl.createEl("h2", { text: "What may Myu read?" });
     contentEl.createEl("p", {
       cls: "myu-prose",
-      text: "Nothing in this vault has been read. Choose the folders whose notes should go to Myu \u2014 usually the one you journal in. Everything outside them stays here, untouched."
+      text: "Myu has not read anything in this vault yet. Choose the folders you want to share with Myu \u2014 usually the one you journal in. Myu never reads anything outside them."
     });
     contentEl.createEl("p", {
       cls: "myu-prose myu-quiet",
-      text: "Only the folders you choose leave this device, encrypted with a key that stays on your devices. Everything else in your vault is never read. You can change this list or disconnect at any time, and any single note can opt out with `myu: false` in its frontmatter."
+      text: "Only notes in the folders you choose are sent, and they are encrypted with a key that stays on your devices. You can change this list or disconnect at any time. To keep a single note private, add `myu: false` to its frontmatter."
     });
-    contentEl.createEl("p", { cls: "myu-prose myu-quiet", text: `One server: ${serverHost(this.plugin.settings.base_url)}. No telemetry.` });
+    contentEl.createEl("p", { cls: "myu-prose myu-quiet", text: `Your notes go to one server only: ${serverHost(this.plugin.settings.base_url)}. No usage tracking.` });
     if (!this.loaded) {
       contentEl.createEl("p", { cls: "myu-prose myu-quiet", text: "Looking at your vault setup\u2026" });
       return;
@@ -1515,7 +1703,7 @@ var ConsentModal = class extends import_obsidian4.Modal {
         for (const path of splitList(v)) this.chosen.add(path);
       })
     );
-    new import_obsidian4.Setting(contentEl).setName("Or by tag").setDesc("Notes carrying any of these tags are shared wherever they live.").addText(
+    new import_obsidian4.Setting(contentEl).setName("Or by tag").setDesc("Notes with any of these tags are shared, whichever folder they are in.").addText(
       (t) => t.setPlaceholder("Myu, journal").setValue(this.tags).onChange((v) => {
         this.tags = v;
       })
@@ -1582,15 +1770,15 @@ var MeetingConsentModal = class extends import_obsidian5.Modal {
     contentEl.createEl("h2", { text: "Share meeting notes with Myu?" });
     contentEl.createEl("p", {
       cls: "myu-prose",
-      text: "Notes in the folders you choose become meetings Myu understands: decisions, who owns what, and the read on each person deepen from what you already write."
+      text: "Notes in the folders you choose are read as meetings. Myu picks up decisions and who owns what, and learns more about each person from what you already write."
     });
     contentEl.createEl("p", {
       cls: "myu-prose",
-      text: "This is a different kind of sharing than your journal. Meeting notes carry other people's words, and their content is processed on askMyu's servers like every meeting source \u2014 it is not end-to-end encrypted the way journal capture is. Say no and nothing changes."
+      text: "This is different from sharing your journal. Meeting notes contain other people's words, and they are processed on askMyu's servers like every other meeting source. They are not encrypted with your device key the way your journal is. If you say no, nothing changes."
     });
     contentEl.createEl("p", {
       cls: "myu-prose myu-quiet",
-      text: "A note outside these folders can opt in with `myu-meeting: true` in its frontmatter; clearing the list stops the watching entirely."
+      text: "To share a note outside these folders, add `myu-meeting: true` to its frontmatter. Clear the list to stop sharing meeting notes."
     });
     new import_obsidian5.Setting(contentEl).setName("Meeting-notes folders").setDesc("Comma-separated paths, e.g. Meetings, work/1-1s").addText(
       (t) => t.setPlaceholder("Meetings").setValue(this.folders).onChange((v) => {
@@ -1608,7 +1796,7 @@ var MeetingConsentModal = class extends import_obsidian5.Modal {
     this.plugin.restartCapture();
     void this.plugin.runMeetingBackfill();
     notifyStatus(
-      folders.length === 0 ? "No meeting folders shared. Myu reads none." : `Sharing meeting notes from: ${folders.join(", ")}`
+      folders.length === 0 ? "No meeting folders shared. Myu will not read any meeting notes." : `Sharing meeting notes from: ${folders.join(", ")}`
     );
     this.close();
     this.onFinished();
@@ -1646,30 +1834,30 @@ var MaterializeConsentModal = class extends import_obsidian6.Modal {
     const { contentEl } = this;
     contentEl.empty();
     contentEl.addClass("myu-power-down");
-    contentEl.createEl("h2", { text: "Let Myu keep a folder in your vault?" });
+    contentEl.createEl("h2", { text: "Let Myu create a folder in your vault?" });
     contentEl.createEl("p", {
       cls: "myu-prose",
-      text: "Myu keeps one folder in your vault, up to date: a page for each person and company, your journal, meetings, your calendar, today and the week, and any canvas you save. All plain markdown. Myu writes only in this folder \u2014 your own notes are never touched."
+      text: "Myu writes one folder in your vault and keeps it up to date: a page for each person and company, your journal, meetings, your calendar, today\u2019s brief, the weekly review, and any canvas you save. All plain markdown. Myu only writes in this folder. Your own notes are never touched."
     });
     contentEl.createEl("p", {
       cls: "myu-prose",
-      text: "Worth knowing: these files are plain text on your disk, and they sync wherever your vault syncs. Right now this content lives only on askMyu\u2019s servers, encrypted. If you\u2019d rather keep it that way, say no \u2014 nothing changes."
+      text: "Note: these files are plain text on your disk, and they sync wherever your vault syncs. Right now this content is stored only on askMyu\u2019s servers, encrypted. If you\u2019d rather keep it that way, choose Not now. Nothing changes."
     });
     contentEl.createEl("p", {
       cls: "myu-prose",
-      text: "You can tick a checkbox in these files to mark something done \u2014 Myu sees it. But don\u2019t write notes in them: Myu rewrites these files, and your edits would be lost."
+      text: "You can tick a checkbox in these files to mark something done, and Myu will see it. Don\u2019t write notes in them: Myu rewrites these files, so your edits would be lost."
     });
     contentEl.createEl("p", {
       cls: "myu-prose myu-quiet",
       text: "Every file is marked `myu-generated: true`. You can turn writing off in settings, and \u201CRemove everything Myu wrote\u201D (Settings \u2192 askMyu \u2192 Your data) moves it all to the trash."
     });
-    new import_obsidian6.Setting(contentEl).setName("Folder").setDesc("Everything Myu writes lives under this path.").addText(
+    new import_obsidian6.Setting(contentEl).setName("Folder").setDesc("Everything Myu writes goes in this folder.").addText(
       (t) => t.setPlaceholder("Myu").setValue(this.folder).onChange((v) => {
         this.folder = v;
       })
     );
-    new import_obsidian6.Setting(contentEl).setName("People").setDesc("A page per person \u2014 role, company, what Myu knows. A ready-made base makes it a table.").addToggle((t) => t.setValue(this.people).onChange((v) => this.people = v));
-    new import_obsidian6.Setting(contentEl).setName("Today and the week").setDesc("The brief and weekly review as files \u2014 embed `![[Myu/Today]]` in your daily template.").addToggle((t) => t.setValue(this.today).onChange((v) => this.today = v));
+    new import_obsidian6.Setting(contentEl).setName("People").setDesc("A page per person: role, company, and what Myu knows about them. A ready-made base shows them as a table.").addToggle((t) => t.setValue(this.people).onChange((v) => this.people = v));
+    new import_obsidian6.Setting(contentEl).setName("Today and the week").setDesc("Today\u2019s brief and the weekly review as files. You can embed `![[Myu/Today]]` in your daily note template.").addToggle((t) => t.setValue(this.today).onChange((v) => this.today = v));
     new import_obsidian6.Setting(contentEl).setName("Commitments").setDesc("Open commitments as real checkboxes your Tasks queries can see.").addToggle((t) => t.setValue(this.commitments).onChange((v) => this.commitments = v));
     new import_obsidian6.Setting(contentEl).addButton((b) => b.setButtonText("Not now").onClick(() => this.close())).addButton(
       (b) => b.setButtonText("Start writing").setCta().onClick(() => void this.confirm())
@@ -1684,7 +1872,7 @@ var MaterializeConsentModal = class extends import_obsidian6.Modal {
     s2.materialize_today = this.today;
     s2.materialize_commitments = this.commitments;
     await this.plugin.saveSettings();
-    notifyStatus(`Myu is filling ${s2.materialize_folder}/ \u2014 watch it build.`);
+    notifyStatus(`Myu is now writing ${s2.materialize_folder}/.`);
     this.accepted = true;
     this.close();
   }
@@ -1913,14 +2101,14 @@ var SignupModal = class extends import_obsidian7.Modal {
       contentEl.createEl("h2", { text: "Sign in to Myu" });
       contentEl.createEl("p", {
         cls: "myu-prose",
-        text: "Welcome back. Any door below reaches your existing account."
+        text: "Welcome back. Any of the options below signs you in to your existing account."
       });
     } else {
       appendBrand(contentEl);
       contentEl.createEl("h2", { text: "Start with Myu, right here" });
       contentEl.createEl("p", {
         cls: "myu-prose",
-        text: "Your account starts in the vault. Share a meeting-notes folder and Myu builds your people, decisions, and commitments from notes you already have \u2014 no calendar or email needed to begin."
+        text: "Your account starts here in your vault. Share a meeting-notes folder and Myu builds a picture of your people, decisions, and commitments from notes you already have. No calendar or email is needed to begin."
       });
     }
     const google = contentEl.createEl("button", { cls: "myu-google-door" });
@@ -1952,7 +2140,7 @@ var SignupModal = class extends import_obsidian7.Modal {
     }
     if (this.showPassword) {
       new import_obsidian7.Setting(contentEl).setName("Password").setDesc(
-        "For signing in to askMyu on the web or your phone later. It is not an encryption passphrase \u2014 your notes\u2019 key is created separately on this device and never comes from this password."
+        "For signing in to askMyu on the web or your phone later. It is not an encryption passphrase. Your notes\u2019 key is created separately on this device and never comes from this password."
       ).addText((t) => {
         t.setPlaceholder("\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022").onChange((v) => this.password = v);
         t.inputEl.type = "password";
@@ -2008,18 +2196,18 @@ var SignupModal = class extends import_obsidian7.Modal {
       contentEl.createEl("h2", { text: "Finish in your browser" });
       contentEl.createEl("p", {
         cls: "myu-prose",
-        text: "A browser tab is open with the Google sign-in. When it finishes, press \u201COpen in Obsidian\u201D on the page it lands on \u2014 you come right back here."
+        text: "A browser tab is open with the Google sign-in. When it finishes, press \u201COpen in Obsidian\u201D on the page that follows. You come right back here."
       });
     } else {
       contentEl.createEl("h2", { text: "Check your email" });
       contentEl.createEl("p", {
         cls: "myu-prose",
-        text: `A sign-in link is on its way to ${this.email}. It opens right back here \u2014 press \u201COpen in Obsidian\u201D on the page it lands on.`
+        text: `A sign-in link is on its way to ${this.email}. Click it, then press \u201COpen in Obsidian\u201D on the page that opens. You come right back here.`
       });
     }
     contentEl.createEl("p", {
       cls: "myu-prose myu-quiet",
-      text: "Nothing happening when you click? Paste the link from the page below."
+      text: "Nothing happens when you click the link? Paste the link into the box below."
     });
     new import_obsidian7.Setting(contentEl).setName("Paste the sign-in link").addText((t) => {
       t.setPlaceholder("https://\u2026token=\u2026").onChange((v) => this.pasted = v.trim());
@@ -2032,7 +2220,7 @@ var SignupModal = class extends import_obsidian7.Modal {
   async submitMagic(button) {
     if (this.working || !this.doorOpen()) return;
     if (!this.email) {
-      notifyError("Email first \u2014 the sign-in link needs somewhere to go.");
+      notifyError("Enter your email first.");
       return;
     }
     this.working = true;
@@ -2052,7 +2240,7 @@ var SignupModal = class extends import_obsidian7.Modal {
   async submitPasted(button) {
     const token = /[?&]token=([^&\s]+)/.exec(this.pasted)?.[1] ?? (/^[a-fA-F0-9]{32}$/.test(this.pasted) ? this.pasted : void 0);
     if (!token) {
-      notifyError("That doesn't look like the sign-in link \u2014 it carries a token= part.");
+      notifyError("That doesn't look like the sign-in link. The link contains a token= part.");
       return;
     }
     button.disabled = true;
@@ -2062,7 +2250,7 @@ var SignupModal = class extends import_obsidian7.Modal {
   async submitPassword(button) {
     if (this.working || !this.doorOpen()) return;
     if (!this.email || !this.name || this.password.length < 8) {
-      notifyError("Email, name, and a password of at least 8 characters.");
+      notifyError("Enter your email, your name, and a password of at least 8 characters.");
       return;
     }
     this.working = true;
@@ -2079,7 +2267,7 @@ var SignupModal = class extends import_obsidian7.Modal {
       this.close();
       new ApprovalModal(this.app, this.plugin.unlock, () => this.onFinished()).open();
     } else if (outcome === "email_not_allowed") {
-      notifyError("askMyu is in closed beta \u2014 this email isn\u2019t on the list yet. Ask for an invite.");
+      notifyError("askMyu is in closed beta. This email is not on the list yet. Ask for an invite.");
       button.disabled = false;
       button.textContent = "Create my account";
     } else {
@@ -5271,10 +5459,10 @@ var SetupRecoveryModal = class extends import_obsidian8.Modal {
     contentEl.empty();
     contentEl.addClass("myu-power-down");
     if (this.stage === "show") {
-      contentEl.createEl("h2", { text: this.mode === "genesis" ? "Your keys \u2014 and the twelve words that back them" : "Your recovery phrase" });
+      contentEl.createEl("h2", { text: this.mode === "genesis" ? "Your encryption key and its 12-word backup" : "Your recovery phrase" });
       contentEl.createEl("p", {
         cls: "myu-prose",
-        text: this.mode === "genesis" ? "Your notes get their own key, created on this device. These twelve words are its backup \u2014 the only way in if this device is lost. Write them down somewhere real; they are shown once and never leave this device." : "Twelve words that can unlock your notes if this device is lost. Write them down somewhere real \u2014 paper beats pixels. They are shown once and never leave this device."
+        text: this.mode === "genesis" ? "Your notes are encrypted with a key created on this device. These twelve words are the backup for that key, and the only way to get your notes back if this device is lost. Write them down somewhere safe. They are shown once and are never sent anywhere." : "These twelve words can unlock your notes if this device is lost. Write them down on paper and keep it somewhere safe. They are shown once and are never sent anywhere."
       });
       const grid = contentEl.createDiv({ cls: "myu-recovery-grid" });
       this.phrase.split(" ").forEach((word, i) => {
@@ -5289,7 +5477,7 @@ var SetupRecoveryModal = class extends import_obsidian8.Modal {
       copy.onclick = async () => {
         await navigator.clipboard.writeText(this.phrase);
         this.securedVia = "manager";
-        copy.textContent = "Copied \u2014 paste it into your manager now";
+        copy.textContent = "Copied. Paste it into your password manager now.";
         copy.disabled = true;
         const snapshot = this.phrase;
         window.setTimeout(() => {
@@ -5306,10 +5494,10 @@ var SetupRecoveryModal = class extends import_obsidian8.Modal {
       this.renderButtons();
       return;
     }
-    contentEl.createEl("h2", { text: "Prove the paper" });
+    contentEl.createEl("h2", { text: "Check what you wrote down" });
     contentEl.createEl("p", {
       cls: "myu-prose",
-      text: "Two of your twelve, from what you wrote \u2014 not from memory of the screen."
+      text: "Type two of the twelve words from what you wrote down."
     });
     const [a, b] = this.checkIndexes;
     new import_obsidian8.Setting(contentEl).setName(`Word ${a + 1}`).addText((t) => {
@@ -5335,7 +5523,7 @@ var SetupRecoveryModal = class extends import_obsidian8.Modal {
       const dialog = electron?.remote?.dialog;
       const fs = w.require?.("fs");
       if (!dialog || !fs) {
-        notifyError("Saving needs the desktop app \u2014 copy the phrase instead.");
+        notifyError("Saving to a file only works in the desktop app. Copy the phrase instead.");
         return;
       }
       const result = await dialog.showSaveDialog({
@@ -5346,7 +5534,7 @@ var SetupRecoveryModal = class extends import_obsidian8.Modal {
       const adapter = this.app.vault.adapter;
       const vaultBase = adapter instanceof import_obsidian8.FileSystemAdapter ? adapter.getBasePath() : null;
       if (vaultBase && result.filePath.startsWith(vaultBase)) {
-        notifyError("Not inside your vault \u2014 it syncs, and this phrase must never sync. Pick somewhere else.");
+        notifyError("Do not save it inside your vault. Your vault syncs, and this phrase must never sync. Choose another folder.");
         return;
       }
       const lines = [
@@ -5356,8 +5544,8 @@ var SetupRecoveryModal = class extends import_obsidian8.Modal {
         this.phrase,
         "",
         "These twelve words unlock your askMyu notes if every signed-in device is lost.",
-        "Anyone holding them can read your notes. Best homes: your password manager,",
-        "a printed page, an offline drive. Avoid cloud-synced folders.",
+        "Anyone who has them can read your notes. Keep them in your password manager,",
+        "on a printed page, or on an offline drive. Avoid cloud-synced folders.",
         ""
       ];
       fs.writeFileSync(result.filePath, lines.join("\n"));
@@ -5378,7 +5566,7 @@ var SetupRecoveryModal = class extends import_obsidian8.Modal {
     row.addButton((b) => b.setButtonText("Not now").onClick(() => this.close()));
     if (this.securedVia) {
       row.addButton(
-        (b) => b.setButtonText(this.securedVia === "manager" ? "It\u2019s in my password manager \u2014 finish" : "The file is safe \u2014 finish").setCta().onClick(() => void this.finish(b.buttonEl))
+        (b) => b.setButtonText(this.securedVia === "manager" ? "Saved in my password manager. Finish" : "File saved. Finish").setCta().onClick(() => void this.finish(b.buttonEl))
       );
     }
     row.addButton(
@@ -5394,7 +5582,7 @@ var SetupRecoveryModal = class extends import_obsidian8.Modal {
       const words = this.phrase.split(" ");
       const [a, b] = this.checkIndexes;
       if (this.answers[0] !== words[a] || this.answers[1] !== words[b]) {
-        notifyError("Those don't match \u2014 check the paper.");
+        notifyError("Those words don't match. Check what you wrote down.");
         return;
       }
     }
@@ -5407,7 +5595,7 @@ var SetupRecoveryModal = class extends import_obsidian8.Modal {
       this.plugin.settings.recovery_pending = false;
       await this.plugin.saveSettings();
       notifyStatus(
-        this.mode === "genesis" ? "Keys created. The phrase on paper is their only backup." : "Recovery is set. The phrase on paper is now the only copy."
+        this.mode === "genesis" ? "Encryption key created. Your written phrase is its only backup." : "Recovery phrase set. Your written copy is the only one."
       );
       this.close();
       this.onFinished();
@@ -5437,10 +5625,10 @@ var ApproveDeviceModal = class extends import_obsidian9.Modal {
   onOpen() {
     const { contentEl } = this;
     contentEl.addClass("myu-power-down");
-    contentEl.createEl("h2", { text: "Let this device in?" });
+    contentEl.createEl("h2", { text: "Approve this new device?" });
     contentEl.createEl("p", {
       cls: "myu-prose",
-      text: "The new device is showing a 4-digit code. Typing it here proves the same person is holding both screens \u2014 then it gets its own key custody, revocable from your device list any time."
+      text: "The new device is showing a 4-digit code. Type it here to prove you have both devices. The new device then gets its own copy of your key. You can remove it from your device list at any time."
     });
     new import_obsidian9.Setting(contentEl).setName("The code on the new device").addText((t) => {
       t.setPlaceholder("0000").onChange((v) => this.code = v.trim());
@@ -5454,7 +5642,7 @@ var ApproveDeviceModal = class extends import_obsidian9.Modal {
   }
   async approve(button) {
     if (this.working || this.code.length !== 4) {
-      if (this.code.length !== 4) notifyError("Four digits, from the new device\u2019s screen.");
+      if (this.code.length !== 4) notifyError("Enter the 4-digit code shown on the new device.");
       return;
     }
     this.working = true;
@@ -5466,7 +5654,7 @@ var ApproveDeviceModal = class extends import_obsidian9.Modal {
       this.close();
       this.onFinished();
     } else if (outcome === "bad_code") {
-      notifyError("That code doesn\u2019t match \u2014 read it again from the new device.");
+      notifyError("That code doesn\u2019t match. Check the code on the new device and try again.");
       button.disabled = false;
     } else {
       notifyError("Approval failed \u2014 check the connection and try again.");
@@ -5506,7 +5694,7 @@ var AddSourceModal = class extends import_obsidian10.Modal {
     contentEl.createEl("h2", { text: this.kind === "imap" ? "Add an email account (IMAP)" : "Add a calendar (CalDAV)" });
     contentEl.createEl("p", {
       cls: "myu-prose myu-quiet",
-      text: this.kind === "imap" ? "Any mailbox with IMAP \u2014 Fastmail, Proton via bridge, your own server. Myu reads it the way it reads Gmail." : "Any CalDAV calendar \u2014 Fastmail, iCloud, Nextcloud. Myu preps those meetings too."
+      text: this.kind === "imap" ? "Any mailbox with IMAP \u2014 Fastmail, Proton via bridge, your own server. Myu reads it the way it reads Gmail." : "Any CalDAV calendar \u2014 Fastmail, iCloud, Nextcloud. Myu prepares you for those meetings too."
     });
     new import_obsidian10.Setting(contentEl).setName("Email").addText((t) => {
       t.setPlaceholder("you@fastmail.com").setValue(this.email).onChange((v) => this.email = v.trim());
@@ -5584,11 +5772,11 @@ var DeleteAccountModal = class extends import_obsidian11.Modal {
     contentEl.createEl("h2", { text: "Delete your askMyu account?" });
     contentEl.createEl("p", {
       cls: "myu-prose",
-      text: "Everything askMyu holds about you is deleted: your entries, the people and companies it built, its reads, and the key that opens them. This cannot be undone and there is no grace period."
+      text: "Everything askMyu stores about you is deleted: your entries, the people and companies it knows, what it has written about them, and the encryption key. This cannot be undone."
     });
     contentEl.createEl("p", {
       cls: "myu-prose",
-      text: "Your vault is untouched. Every note you wrote stays exactly where it is, including the folder Myu has been keeping \u2014 that folder simply stops changing. Delete it whenever you like; everything in it is marked myu-generated: true."
+      text: "Your vault is not touched. Every note you wrote stays where it is, including the Myu folder. That folder just stops updating. You can delete it whenever you like; every file in it is marked myu-generated: true."
     });
     new import_obsidian11.Setting(contentEl).setName(`Type ${CONFIRMATION} to confirm`).addText((t) => t.setPlaceholder(CONFIRMATION).onChange((v) => this.typed = v.trim()));
     new import_obsidian11.Setting(contentEl).addButton((b) => b.setButtonText("Keep my account").setCta().onClick(() => this.close())).addButton(
@@ -5629,7 +5817,7 @@ var AddAccountEmailModal = class extends import_obsidian12.Modal {
     contentEl.createEl("h2", { text: "Add an email address" });
     contentEl.createEl("p", {
       cls: "myu-prose",
-      text: "Myu emails this address a link. Click it and the address can sign you in too \u2014 useful when work and personal mail both reach you."
+      text: "Myu will email a link to this address. Click the link and you can also sign in with this address. Useful if you use both a work and a personal email."
     });
     new import_obsidian12.Setting(contentEl).setName("Address").addText((t) => t.setPlaceholder("you@work.com").onChange((v) => this.email = v.trim()));
     new import_obsidian12.Setting(contentEl).addButton((b) => b.setButtonText("Cancel").onClick(() => this.close())).addButton(
@@ -5654,7 +5842,347 @@ var AddAccountEmailModal = class extends import_obsidian12.Modal {
   }
 };
 
+// src/pastedText.ts
+var CHAT_MESSAGE_MAX_CHARS = 1e4;
+var PASTE_CHIP_MIN_CHARS = 1e3;
+var PASTE_CHIP_MIN_LINES = 15;
+var PASTED_BLOCK_MAX_CHARS = 5e4;
+var PASTED_BLOCKS_MAX = 5;
+var PASTED_TEXT_TOO_LONG = "pasted_text_too_long";
+var PASTED_BLOCKS_RECEIVED = "pasted_blocks_received";
+var PASTED_SOURCES = ["paste", "drop", "burst", "vault_note", "vault_selection"];
+function formatCount(n) {
+  return String(Math.max(0, Math.round(n))).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
+function dropControls(text) {
+  let out = "";
+  for (let i = 0; i < text.length; i++) {
+    const code = text.charCodeAt(i);
+    if (code === 127 || code < 32 && code !== 9 && code !== 10 && code !== 13) continue;
+    out += text[i];
+  }
+  return out;
+}
+var LEADING_BLANK_LINES = /^(?:[^\S\n]*\n)+/;
+function pastedText(raw) {
+  if (typeof raw !== "string") return "";
+  return dropControls(raw.replace(/\r\n?/g, "\n")).replace(LEADING_BLANK_LINES, "").trimEnd();
+}
+function countLines(text) {
+  if (!text) return 0;
+  let lines = 1;
+  for (let i = text.indexOf("\n"); i >= 0; i = text.indexOf("\n", i + 1)) lines++;
+  return lines;
+}
+function shouldChip(raw) {
+  const text = pastedText(raw);
+  return text.length >= PASTE_CHIP_MIN_CHARS || countLines(text) >= PASTE_CHIP_MIN_LINES;
+}
+function makePastedBlock(raw, source, id, ref) {
+  const text = pastedText(raw);
+  return { id, text, chars: text.length, lines: countLines(text), source, ...ref ? { ref } : {} };
+}
+function nextPastedBlockId(blocks) {
+  let max = 0;
+  for (const block of blocks) {
+    const m = /(\d+)$/.exec(block.id);
+    const n = m ? Number(m[1]) : 0;
+    if (Number.isSafeInteger(n) && n > max) max = n;
+  }
+  return `p${max + 1}`;
+}
+var PREVIEW_MAX = 40;
+function pastedPreview(text, max = PREVIEW_MAX) {
+  const line = (typeof text === "string" ? text.split("\n") : []).find((l) => l.trim()) ?? "";
+  const flat = line.replace(/\s+/g, " ").trim();
+  if (flat.length <= max) return flat;
+  let cut = flat.slice(0, max);
+  if (/[\uD800-\uDBFF]$/.test(cut)) cut = cut.slice(0, -1);
+  return `${cut.trimEnd()}\u2026`;
+}
+function putBackText(typed, block) {
+  const before = typeof typed === "string" ? typed.trimEnd() : "";
+  return before.trim() ? `${before}
+
+${block.text}` : block.text;
+}
+function canPutBack(typed, block) {
+  const length = putBackText(typed, block).trim().length;
+  return { ok: !(length > CHAT_MESSAGE_MAX_CHARS), length };
+}
+function pastedBlocksProblem(blocks) {
+  if (blocks.length > PASTED_BLOCKS_MAX) {
+    return { problem: { code: "too_many", count: blocks.length }, words: PASTE_WORDS.tooMany(blocks.length) };
+  }
+  for (let i = 0; i < blocks.length; i++) {
+    const chars = blocks[i].text.length;
+    if (chars > PASTED_BLOCK_MAX_CHARS) {
+      const n = blocks.length > 1 ? i + 1 : void 0;
+      return { problem: { code: "too_long", ...n ? { n } : {}, chars }, words: PASTE_WORDS.blockTooLong(chars, n) };
+    }
+  }
+  return null;
+}
+function pastedTextLost(sent, body) {
+  const received = body && typeof body === "object" && !Array.isArray(body) ? body[PASTED_BLOCKS_RECEIVED] : void 0;
+  return sent > 0 && received !== sent;
+}
+var VAULT_SOURCES = ["vault_note", "vault_selection"];
+function pastedRefOf(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const { path, line_from, line_to } = raw;
+  if (typeof path !== "string" || typeof line_from !== "number" || typeof line_to !== "number") return null;
+  return { path, line_from, line_to };
+}
+function readPastedBlocks(raw) {
+  if (!Array.isArray(raw)) return [];
+  const blocks = [];
+  raw.forEach((row, i) => {
+    if (!row || typeof row !== "object" || Array.isArray(row)) return;
+    const r = row;
+    const text = r.text;
+    if (typeof text !== "string" || !text.trim()) return;
+    const source = PASTED_SOURCES.includes(r.source) ? r.source : "paste";
+    const ref = VAULT_SOURCES.includes(source) ? pastedRefOf(r.ref) : null;
+    blocks.push({
+      id: typeof r.id === "string" && r.id ? r.id : `p${i + 1}`,
+      text,
+      chars: text.length,
+      lines: countLines(text),
+      source,
+      ...ref ? { ref } : {}
+    });
+  });
+  return blocks;
+}
+var pastedLabel = (n) => n === void 0 ? "Pasted text" : `Pasted text ${n}`;
+var PASTE_WORDS = {
+  /** A chip: "Pasted text 2 · 1,240 chars · 18 lines" ("1 line"). */
+  chip: (chars, lines, n) => `${pastedLabel(n)} \xB7 ${formatCount(chars)} chars \xB7 ${formatCount(lines)} ${lines === 1 ? "line" : "lines"}`,
+  /** A sent turn's collapsed card: "Pasted text · 1,240 chars". */
+  card: (chars, n) => `${pastedLabel(n)} \xB7 ${formatCount(chars)} chars`,
+  /** Under the box after a paste became a chip, followed by an Undo button. */
+  hint: "Added as pasted text",
+  undo: "Undo",
+  remove: "Remove",
+  putBack: "Put back in message",
+  /** Read out once when a paste becomes a chip. */
+  announce: (chars) => `Pasted text added as an attachment, ${formatCount(chars)} characters. Undo available.`,
+  /** The × on a chip: "Remove pasted text 2". */
+  removeLabel: (n) => n === void 0 ? "Remove pasted text" : `Remove pasted text ${n}`,
+  /** Why Put back is held: the typed text would go over the message limit. */
+  putBackTooLong: (length, max = CHAT_MESSAGE_MAX_CHARS) => `Putting this back would make the message ${formatCount(length)} characters, and a message can be up to ${formatCount(max)}.`,
+  /** One block over the limit: the server's words for the same refusal. */
+  blockTooLong: (chars, n, max = PASTED_BLOCK_MAX_CHARS) => `${pastedLabel(n)} is ${formatCount(chars)} characters, and pasted text can be up to ${formatCount(max)} characters.`,
+  /** Too many blocks: the server's words for the same refusal. */
+  tooMany: (count2, max = PASTED_BLOCKS_MAX) => `This message has ${formatCount(count2)} pasted texts, and a message can carry up to ${formatCount(max)}.`,
+  /** pastedTextLost: the chips are back in the box. */
+  lost: "The pasted text didn't reach Myu. It's back in the box; send it again."
+};
+function noteName(path) {
+  const last = path.split("/").pop() ?? path;
+  return last.replace(/\.md$/i, "");
+}
+function vaultLabel(block) {
+  const ref = block.ref;
+  if (!ref?.path) return null;
+  if (block.source === "vault_note") {
+    return `Note: ${noteName(ref.path)} \xB7 ${formatCount(block.chars)} chars \xB7 ${formatCount(block.lines)} ${block.lines === 1 ? "line" : "lines"}`;
+  }
+  if (block.source === "vault_selection") {
+    return `Selection from ${noteName(ref.path)} \xB7 lines ${ref.line_from}\u2013${ref.line_to} \xB7 ${formatCount(block.chars)} chars`;
+  }
+  return null;
+}
+function chipLabel(block, n) {
+  return vaultLabel(block) ?? PASTE_WORDS.chip(block.chars, block.lines, n);
+}
+function cardLabel(block, n) {
+  return vaultLabel(block) ?? PASTE_WORDS.card(block.chars, n);
+}
+function chipAdded(chips, text, source, at) {
+  const chip = makePastedBlock(text, source, nextPastedBlockId(chips));
+  return { chips: [...chips, chip], chip, undo: { id: chip.id, at } };
+}
+function undoChip(value, chips, undo) {
+  const chip = chips.find((c) => c.id === undo.id);
+  if (!chip) return null;
+  const at = Math.min(Math.max(0, undo.at), value.length);
+  return { value: value.slice(0, at) + chip.text + value.slice(at), caret: at + chip.text.length, chips: chips.filter((c) => c !== chip) };
+}
+function chipsBack(back, current) {
+  return [...back, ...current].map((chip, i) => ({ ...chip, id: `p${i + 1}` }));
+}
+function noteBlock(raw, path) {
+  const lineTo = Math.max(1, countLines(raw.replace(/\r\n?/g, "\n").trimEnd()));
+  const block = makePastedBlock(raw, "vault_note", "p1", { path, line_from: 1, line_to: lineTo });
+  return block.text ? block : null;
+}
+function selectionBlock(selection, path, from, to) {
+  return makePastedBlock(selection, "vault_selection", "p1", path ? { path, line_from: from.line + 1, line_to: to.line + 1 } : void 0);
+}
+
+// src/cardDays.ts
+var MONTH_WORDS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+function cardStampMs(raw) {
+  if (raw == null || raw === "") return null;
+  if (typeof raw === "number") return Number.isFinite(raw) && raw > 0 ? raw < 1e11 ? raw * 1e3 : raw : null;
+  const s2 = String(raw).trim();
+  const ms = /^\d{11,}$/.test(s2) ? Number(s2) : /^\d{9,10}$/.test(s2) ? Number(s2) * 1e3 : /^\d{4}-\d{2}-\d{2}$/.test(s2) ? Date.parse(`${s2}T00:00:00Z`) : /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/.test(s2) ? Date.parse(`${s2.replace(" ", "T")}Z`) : Date.parse(s2.replace(/^(\d{4}-\d{2}-\d{2}) /, "$1T"));
+  return Number.isFinite(ms) && ms > 0 ? ms : null;
+}
+function cardDayWords(raw, opts = {}) {
+  const ms = cardStampMs(raw);
+  if (ms == null) return null;
+  const d = new Date(ms);
+  const now = opts.now ?? /* @__PURE__ */ new Date();
+  const utc = opts.utc || typeof raw === "string" && /^\d{4}-\d{2}-\d{2}$/.test(raw.trim());
+  const day = utc ? d.getUTCDate() : d.getDate();
+  const month = utc ? d.getUTCMonth() : d.getMonth();
+  const year = utc ? d.getUTCFullYear() : d.getFullYear();
+  const thisYear = now.getFullYear();
+  return `${day} ${MONTH_WORDS[month]}${year === thisYear ? "" : ` ${year}`}`;
+}
+function cardMonthWords(raw) {
+  const ms = cardStampMs(raw);
+  if (ms == null) return null;
+  const d = new Date(ms);
+  return `${MONTH_WORDS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+}
+
+// src/cardTimeline.ts
+function timelineWhen(event, now = /* @__PURE__ */ new Date()) {
+  const raw = typeof event.date === "string" ? event.date.trim() : "";
+  const at = /^\d{4}-\d{2}-\d{2}$/.test(raw) || typeof event.date_ms !== "number" ? raw : event.date_ms;
+  if (event.event_type === "role_started") return cardMonthWords(at) ?? "";
+  return cardDayWords(at, { now }) ?? "";
+}
+var TIMELINE_SOURCE_WORDS = {
+  journal_entry: "from your journal",
+  journal: "from your journal",
+  journal_chat: "from a conversation with Myu",
+  career: "from your career",
+  goals: "a goal you reached",
+  email: "from email",
+  calendar: "from your calendar",
+  meeting: "from a meeting"
+};
+function timelineSourceWords(source) {
+  return source ? TIMELINE_SOURCE_WORDS[source] ?? null : null;
+}
+
+// src/selfCard.ts
+var KNOWN_FACT_WORDS = {
+  title: "What I know so far \xB7 correct me",
+  guess: "Myu\u2019s guess, not confirmed",
+  correct: "correct me \u25B8"
+};
+function knownFactText(f, full) {
+  return full && f.full?.trim() || f.value;
+}
+var FACT_SOURCE_WORDS = {
+  linkedin: "from LinkedIn",
+  you: "you said",
+  calendar: "from your calendar",
+  mail: "from your email"
+};
+function knownFactSource(f) {
+  if (f.kind === "not_yet") return null;
+  if (f.kind === "read" || f.source === "read") return KNOWN_FACT_WORDS.guess;
+  return FACT_SOURCE_WORDS[f.source ?? ""] ?? null;
+}
+var FACT_LABELS = {
+  you: "you",
+  read: "Myu\u2019s read",
+  week: "this week",
+  mail: "your email",
+  not_yet: "not yet"
+};
+function knownFactLabel(f) {
+  if (f.kind === "not_yet") return FACT_LABELS.not_yet;
+  return FACT_LABELS[f.key ?? ""] ?? String(f.key ?? "").replace(/_/g, " ");
+}
+function energyTrendWord(trend) {
+  const t = (trend ?? "").trim().toLowerCase();
+  if (t === "draining" || t === "depleting") return "draining";
+  if (t === "sustaining") return "sustaining";
+  if (t === "energizing") return "energizing";
+  return null;
+}
+function energyRows(entries) {
+  const rows = [];
+  const byKey = /* @__PURE__ */ new Map();
+  for (const e of entries ?? []) {
+    const name = (e.display_name ?? e.entity_name ?? "").trim();
+    if (!name && !e.entity_id) continue;
+    const nameKey = `name:${name.toLowerCase()}`;
+    const byName = name ? byKey.get(nameKey) : void 0;
+    const row = e.entity_id && byKey.get(`id:${e.entity_id}`) || (byName && (!e.entity_id || !byName.entity_id) ? byName : void 0);
+    const trend = energyTrendWord(e.overall_trend);
+    const mentions = typeof e.mention_count === "number" && e.mention_count > 0 ? e.mention_count : null;
+    if (row) {
+      if (mentions != null) row.mentions = (row.mentions ?? 0) + mentions;
+      row.trend = row.trend ?? trend;
+      row.depletion = row.depletion || !!e.depletion_risk;
+      row.entity_id = row.entity_id ?? e.entity_id;
+      row.entity_type = row.entity_type ?? e.entity_type;
+      if (row.name === "Someone" && name) row.name = name;
+      if (e.entity_id) byKey.set(`id:${e.entity_id}`, row);
+      continue;
+    }
+    const next = { key: e.entity_id ? `id:${e.entity_id}` : nameKey, name: name || "Someone", entity_id: e.entity_id, entity_type: e.entity_type, mentions, trend, depletion: !!e.depletion_risk };
+    rows.push(next);
+    if (e.entity_id) byKey.set(`id:${e.entity_id}`, next);
+    if (name && !byKey.has(nameKey)) byKey.set(nameKey, next);
+  }
+  for (const r of rows) r.depletion = r.depletion && r.trend !== "draining";
+  return rows;
+}
+function energyMentionsWords(n) {
+  return `came up ${n} ${n === 1 ? "time" : "times"}`;
+}
+var WEATHER_NAMES = { external_pressure: "outside pressure" };
+function weatherName(name) {
+  const n = String(name ?? "").trim();
+  return WEATHER_NAMES[n] ?? n.replace(/_/g, " ");
+}
+function withReadExtras(deep, read) {
+  if (!read) return deep;
+  return {
+    ...deep,
+    tiles: deep.tiles && deep.tiles.length ? deep.tiles : read.tiles ?? deep.tiles,
+    hot_item: deep.hot_item ?? read.hot_item ?? deep.hot_item
+  };
+}
+function predictionScoreShown(p) {
+  return !!p.basis?.trim();
+}
+var dayWords = (iso, now) => {
+  const m = /^\d{4}-\d{2}-\d{2}/.exec(iso.trim());
+  return m ? cardDayWords(m[0], { now }) : null;
+};
+function patternInstanceWhen(i, now) {
+  const raw = i.date_range?.trim();
+  if (!raw) return null;
+  const [a, b] = raw.split(/\s+to\s+/);
+  const from = dayWords(a ?? "", now);
+  if (!from) return raw;
+  const to = b ? dayWords(b, now) : null;
+  return to && to !== from ? `${from} to ${to}` : from;
+}
+function patternInstanceText(i) {
+  return [i.context?.trim(), i.detail?.trim()].filter(Boolean).join(" \xB7 ");
+}
+
 // src/views/cardSections.ts
+function rowDay(it) {
+  const overdue = it?.overdue === true || it?.status === "overdue" ? "overdue" : null;
+  const due = it?.due_date != null && it.due_date !== "" ? cardDayWords(it.due_date, { utc: true }) : null;
+  if (due || overdue) return [overdue, due ? `due ${due}` : null].filter(Boolean).join(" \xB7 ");
+  const day = cardDayWords(it?.date ?? it?.memory_date);
+  if (day) return day;
+  return typeof it?.date === "string" && it.date.trim() && !/\d{4}-\d{2}-\d{2}|^\d{9,}$/.test(it.date) ? it.date : void 0;
+}
 var DISCUSSABLE_SECTION_TYPES = /* @__PURE__ */ new Set(["patterns", "predictions", "threads", "weather"]);
 function isDiscussable(section) {
   return section.actionable === true && DISCUSSABLE_SECTION_TYPES.has(section.section_type ?? "");
@@ -5682,7 +6210,7 @@ function normalizeSection(raw) {
         ...typeof it?.title === "string" ? { title: it.title } : {},
         ...typeof it?.subtitle === "string" ? { subtitle: it.subtitle } : {}
       };
-      if (typeof t === "string" && t.trim()) rows.push({ text: t, date: it?.date, ...extra });
+      if (typeof t === "string" && t.trim()) rows.push({ text: t, date: rowDay(it), ...extra });
       else if (raw.section_type === "sources" && typeof it?.title === "string" && it.title.trim()) rows.push({ ...extra, date: it?.date });
     }
   }
@@ -5692,7 +6220,7 @@ function normalizeSection(raw) {
     }
   }
   if (rows.length > 0) out.items = rows;
-  for (const key of ["dimensions", "entries", "events", "voiced_narrative"]) {
+  for (const key of ["dimensions", "entries", "events", "voiced_narrative", "patterns", "predictions", "top_prediction", "placeholder_text"]) {
     if (data[key] !== void 0) out[key] = data[key];
   }
   return out;
@@ -5711,25 +6239,57 @@ function sectionBlocks(rawSection) {
   const dimensions = section.dimensions;
   if (Array.isArray(dimensions)) {
     for (const d of dimensions) {
-      if (!d?.name) continue;
-      blocks.push({ kind: "row", text: d.evidence?.trim() || d.name, meta: `${d.name} \xB7 ${d.intensity ?? "\u2014"}` });
+      const reading = d?.evidence?.trim();
+      if (!d?.name || !reading) continue;
+      const name = weatherName(d.name);
+      blocks.push({ kind: "row", text: reading, meta: name.charAt(0).toUpperCase() + name.slice(1) });
     }
   }
   const entries = section.entries;
   if (Array.isArray(entries)) {
-    for (const e of entries) {
-      const name = e?.display_name || e?.entity_name;
-      if (!name) continue;
-      const meta = [e.mention_count != null ? `\xD7${e.mention_count}` : null, e.overall_trend ?? null].filter(Boolean).join(" \xB7 ");
-      blocks.push({ kind: "row", text: name, meta: meta || void 0 });
+    for (const r of energyRows(entries)) {
+      const meta = [r.mentions != null ? energyMentionsWords(r.mentions) : null, r.trend, r.depletion ? "may be draining you" : null].filter(Boolean).join(" \xB7 ");
+      blocks.push({ kind: "row", text: r.name, meta: meta || void 0 });
     }
   }
+  const patterns = section.patterns;
+  const placeholder = typeof section.placeholder_text === "string" ? section.placeholder_text.trim() : "";
+  if (Array.isArray(patterns) && !patterns.length && placeholder && !blocks.length) blocks.push({ kind: "narrative", text: placeholder });
+  if (Array.isArray(patterns)) {
+    for (const p of patterns) {
+      const head = [p?.pattern_name?.trim(), p?.description?.trim()].filter(Boolean).join(": ");
+      if (!head) continue;
+      blocks.push({ kind: "row", text: head });
+      for (const i of p.instances ?? []) {
+        const words = patternInstanceText(i);
+        const when = patternInstanceWhen(i);
+        if (words) blocks.push({ kind: "row", text: `\u21B3 ${words}`, meta: when ?? void 0 });
+        else if (when) blocks.push({ kind: "row", text: `\u21B3 ${when}` });
+      }
+    }
+  }
+  const predictions = section.predictions;
+  if (Array.isArray(predictions)) {
+    for (const p of predictions) {
+      const text = p?.prediction?.trim() || p?.label?.trim();
+      if (!text) continue;
+      const shown2 = predictionScoreShown(p);
+      const meta = [shown2 && typeof p.score === "number" ? `${Math.round(p.score * 100)}%` : null, shown2 ? p.basis?.trim() : null].filter(Boolean).join(" \xB7 ");
+      blocks.push({ kind: "row", text, meta: meta || void 0 });
+    }
+  }
+  const next = section.top_prediction?.next_phase_name?.trim();
+  if (next) blocks.push({ kind: "row", text: `Next: ${next}` });
   const events = section.events;
   if (Array.isArray(events)) {
     for (const e of events) {
-      const text = e?.description || e?.summary || e?.label || e?.change_type;
-      if (!text) continue;
-      blocks.push({ kind: "row", text, meta: e.date });
+      if (!e) continue;
+      const what = e.title || e.text || e.description || e.summary || e.label;
+      if (!what) continue;
+      const more = e.title && e.description ? ` \u2014 ${e.description}` : "";
+      const from = e.kind === "structure" ? null : timelineSourceWords(e.source);
+      const text = `${what}${more}${e.current ? " (now)" : ""}${from ? ` \xB7 ${from}` : ""}`;
+      blocks.push({ kind: "row", text, meta: timelineWhen(e) || void 0 });
     }
   }
   const voiced = section.voiced_narrative;
@@ -5739,6 +6299,122 @@ function sectionBlocks(rawSection) {
     }
   }
   return blocks;
+}
+
+// src/standing.ts
+var BY_TIER = {
+  strong: "going_well",
+  thriving: "going_well",
+  good: "going_well",
+  stable: "steady",
+  fair: "steady",
+  needs_attention: "check_in",
+  at_risk: "care",
+  declining: "care",
+  deteriorating: "care",
+  dormant: "quiet"
+};
+var STANDING_WORDS = {
+  going_well: "going well",
+  steady: "steady",
+  check_in: "worth a check-in",
+  care: "needs some care",
+  quiet: "quiet lately"
+};
+function standingOf(tier) {
+  if (!tier) return null;
+  return BY_TIER[tier.trim().toLowerCase()] ?? null;
+}
+function standingWords(tier) {
+  const s2 = standingOf(tier);
+  return s2 ? STANDING_WORDS[s2] : null;
+}
+
+// src/todayLines.ts
+var FOR_YOU_ROWS = 5;
+function isWaitingLine(line) {
+  return line.ask_kind === "wait";
+}
+function lineNeedsYou(line) {
+  return !!line.needs_you && (line.state ?? "released") === "released";
+}
+function dedupeLines(lines) {
+  const seen = /* @__PURE__ */ new Set();
+  const out = [];
+  for (const l of lines) {
+    const text = (l.text ?? "").trim();
+    if (!text) continue;
+    const key = `${l.ask_kind ?? ""}|${text}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(l);
+  }
+  return out;
+}
+function topLine(lines) {
+  return lines.find((l) => !isWaitingLine(l)) ?? lines[0];
+}
+function stackOf(lines) {
+  const all = dedupeLines(lines);
+  const first = topLine(all);
+  if (!first) return { top: null, rest: [], count: null };
+  const top = isWaitingLine(first) ? null : first;
+  const others = all.filter((l) => l !== top);
+  const waits = others.filter(isWaitingLine);
+  const speaking = others.filter((l) => !isWaitingLine(l));
+  const parts = [
+    speaking.length > 0 ? `${speaking.length} more` : null,
+    waits.length > 0 ? `${waits.length} saved for tomorrow` : null
+  ].filter((p) => p !== null);
+  return { top, rest: [...speaking, ...waits], count: parts.length ? parts.join(" \xB7 ") : null };
+}
+var ROLE_SUBJECT = "debrief_role";
+var NOT_AN_INTERVIEW = "not_interview";
+function isDraftLine(line) {
+  return (line.choices ?? []).some((c) => c?.id === NOT_AN_INTERVIEW);
+}
+function fallbackLabel(type) {
+  return type === "space" ? "A space" : type === "company" ? "A company" : type === ROLE_SUBJECT ? "Interview debrief" : "Someone";
+}
+function rowOpensConversation(g) {
+  return !!g.id && g.type !== ROLE_SUBJECT;
+}
+function groupBySubject(lines) {
+  const groups = /* @__PURE__ */ new Map();
+  const other = [];
+  for (const l of lines) {
+    if (!(l.text ?? "").trim()) continue;
+    const s2 = l.subjects?.[0];
+    const type = l.conversation?.subject_type ?? s2?.type ?? "person";
+    const id = l.conversation?.subject_id ?? s2?.id ?? "";
+    if (isDraftLine(l) && (!id || type === ROLE_SUBJECT)) {
+      const key2 = `draft:${l.line_id}`;
+      groups.set(key2, { key: key2, type: ROLE_SUBJECT, id, label: s2?.label?.trim() || fallbackLabel(ROLE_SUBJECT), lines: [l], needsYou: lineNeedsYou(l) });
+      continue;
+    }
+    if (!id) {
+      other.push(l);
+      continue;
+    }
+    const key = `${type}:${id}`;
+    const g = groups.get(key);
+    if (g) {
+      g.lines.push(l);
+      g.needsYou = g.needsYou || lineNeedsYou(l);
+      if (g.label === fallbackLabel(type) && s2?.label) g.label = s2.label;
+    } else {
+      groups.set(key, { key, type, id, label: s2?.label?.trim() || fallbackLabel(type), lines: [l], needsYou: lineNeedsYou(l) });
+    }
+  }
+  const out = [...groups.values()];
+  if (other.length) out.push({ key: "other", type: "", id: "", label: "Other", lines: other, needsYou: other.some(lineNeedsYou) });
+  for (const g of out) g.lines = dedupeLines(g.lines);
+  return out;
+}
+function foldRows(groups, limit = FOR_YOU_ROWS) {
+  const ordered = [...groups.filter((g) => g.needsYou), ...groups.filter((g) => !g.needsYou)];
+  const keep = Math.max(limit, ordered.filter((g) => g.needsYou).length);
+  return { shown: ordered.slice(0, keep), folded: ordered.slice(keep) };
 }
 
 // src/vault/myuFiles.ts
@@ -5898,9 +6574,14 @@ function buildMeetingHistoryMarkdown(meeting) {
   if (notes && notes !== summary) parts.push("", "## Notes", "", notes);
   const transcript = text(meeting.transcript);
   if (transcript) parts.push("", "## Transcript", "", transcript);
-  parts.push("", "*Maintained by Myu \u2014 meeting history from your account. Edits here are replaced.*", "");
+  parts.push("", "*Written by Myu from your meeting history. Any edits here will be overwritten.*", "");
   return parts.join("\n");
 }
+function pastedCallout(block, n, depth = 1) {
+  const quote2 = Array(depth).fill(">").join(" ");
+  return [`[!quote]- ${cardLabel(block, n)}`, ...block.text.split("\n")].map((line) => line ? `${quote2} ${line}` : quote2).join("\n");
+}
+var pastedNumber = (blocks, i) => blocks.length > 1 ? i + 1 : void 0;
 function buildJournalDayMarkdown(date, entries) {
   const head = frontmatter([
     ["type", "myu-journal"],
@@ -5910,7 +6591,10 @@ function buildJournalDayMarkdown(date, entries) {
   ]);
   const parts = [head, "", `# Journal \u2014 ${date}`];
   for (const entry of entries) {
-    parts.push("", `## ${entry.time}`, "", entry.text.trim());
+    parts.push("", `## ${entry.time}`);
+    if (entry.text.trim()) parts.push("", entry.text.trim());
+    const pasted = entry.pasted ?? [];
+    pasted.forEach((block, i) => parts.push("", pastedCallout(block, pastedNumber(pasted, i))));
     if (entry.turns && entry.turns.length > 0) {
       parts.push("");
       for (const turn of entry.turns) {
@@ -5918,6 +6602,8 @@ function buildJournalDayMarkdown(date, entries) {
         for (const line of turn.text.trim().split("\n")) {
           parts.push(`> **${speaker}:** ${line}`.trimEnd());
         }
+        const turnPasted = turn.pasted ?? [];
+        turnPasted.forEach((block, i) => parts.push(">", pastedCallout(block, pastedNumber(turnPasted, i), 2)));
         parts.push(">");
       }
       parts.pop();
@@ -5926,7 +6612,7 @@ function buildJournalDayMarkdown(date, entries) {
       parts.push("", `[continue this conversation \u25B8](obsidian://myu-chat?journal=${entry.journalId})`);
     }
   }
-  parts.push("", "*Maintained by Myu \u2014 your journal, decrypted into your vault. Edits here are replaced.*", "");
+  parts.push("", "*Written by Myu \u2014 your journal, decrypted into your vault. Any edits here will be overwritten.*", "");
   return parts.join("\n");
 }
 function buildDayMarkdown(date, events, meetingLinks, hasJournal, memoryPeople = []) {
@@ -5941,7 +6627,7 @@ function buildDayMarkdown(date, events, meetingLinks, hasJournal, memoryPeople =
     parts.push("", "## Schedule");
     for (const e of events) {
       const time = e.all_day ? "all day" : (e.start_time ?? "").slice(11, 16) || "\u2014";
-      const door = e.event_id ? ` [prep \u25B8](obsidian://myu-prep?event=${e.event_id})` : "";
+      const door = e.event_id ? ` [prepare \u25B8](obsidian://myu-prep?event=${e.event_id})` : "";
       parts.push(`- **${time}** ${e.title ?? "Busy"}${door}`);
     }
   }
@@ -5953,7 +6639,7 @@ function buildDayMarkdown(date, events, meetingLinks, hasJournal, memoryPeople =
     parts.push("", `## Journal`, "", `![[Journal/${date}]]`);
   }
   if (memoryPeople.length > 0) {
-    parts.push("", "## Relationship notes", "", `Memories minted this day about ${memoryPeople.map((n) => `[[${n}]]`).join(", ")}.`);
+    parts.push("", "## Relationship notes", "", `Memories recorded this day about ${memoryPeople.map((n) => `[[${n}]]`).join(", ")}.`);
   }
   if (events.length === 0 && meetingLinks.length === 0 && !hasJournal && memoryPeople.length === 0) {
     parts.push("", "*Nothing on file for this day.*");
@@ -5973,8 +6659,8 @@ function buildMonthCalendarMarkdown(months, busy) {
     let row = new Array(startOffset).fill(" ");
     for (let d = 1; d <= daysInMonth; d++) {
       const iso = `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-      const count = busy.get(iso) ?? 0;
-      row.push(`[[Days/${iso}\\|${d}]]${count > 0 ? ` \xB7${count}` : ""}`);
+      const count2 = busy.get(iso) ?? 0;
+      row.push(`[[Days/${iso}\\|${d}]]${count2 > 0 ? ` \xB7${count2}` : ""}`);
       if (row.length === 7) {
         parts.push(`| ${row.join(" | ")} |`);
         row = [];
@@ -5985,7 +6671,7 @@ function buildMonthCalendarMarkdown(months, busy) {
       parts.push(`| ${row.join(" | ")} |`);
     }
   }
-  parts.push("", "*Maintained by Myu \u2014 the number after a day is how much is on file for it.*", "");
+  parts.push("", "*Written by Myu. The number after a day is how many items there are for it.*", "");
   return parts.join("\n");
 }
 function flattenMemoryPayload(raw) {
@@ -6073,7 +6759,7 @@ function buildExportManifest(s2) {
     "",
     "# Everything Myu knows, as files",
     "",
-    `*Exported ${s2.date}. Every file Myu wrote carries \`myu-generated: true\` \u2014 this whole export is one search away, and one delete away.*`,
+    `*Exported ${s2.date}. Every file Myu wrote has \`myu-generated: true\` in its frontmatter, so you can find or delete all of them with one search.*`,
     "",
     "## What is here",
     "",
@@ -6085,13 +6771,13 @@ function buildExportManifest(s2) {
     "## What is not here",
     "",
     "- Your **account** itself \u2014 email addresses, devices, keys, consents. Those are not vault material. For a complete archive of what the server holds, use **Request my data archive** (Settings \u2192 askMyu \u2192 Advanced): an encrypted zip, link by email, passphrase shown once.",
-    "- Your **own notes** \u2014 they were never Myu\u2019s to export. They are already yours.",
+    "- Your **own notes**. They are already yours; Myu does not export them.",
     "",
     "## If you uninstall",
     "",
     "- Everything under `Myu/` stays exactly as it is. Nothing here needs the plugin to open: markdown, `.canvas` (an open standard), `.base` (an Obsidian core feature).",
-    "- Notes stop refreshing; nothing breaks. Links, properties and tables keep working.",
-    "- The plugin\u2019s own `data.json` (your plugin token and wrapped key) goes with it \u2014 no custody is left on this device.",
+    "- Notes stop updating; nothing breaks. Links, properties and tables keep working.",
+    "- The plugin\u2019s own `data.json` (your plugin token and encrypted key) is removed with it, so no key is left on this device.",
     "- Your account is untouched. Delete it from Settings \u2192 askMyu, or on the web.",
     ""
   ].join("\n");
@@ -6262,6 +6948,11 @@ ${body}` : body;
 function textOf(value) {
   return typeof value === "string" ? value.trim() : "";
 }
+function dayOf(value) {
+  if (typeof value === "string") return value.trim().slice(0, 10);
+  if (typeof value === "number" && Number.isFinite(value)) return new Date(value).toISOString().slice(0, 10);
+  return "";
+}
 function listOf(value) {
   if (!Array.isArray(value)) return [];
   return value.map(
@@ -6318,7 +7009,7 @@ ${line}` : ""].join("\n").trimEnd();
       const link = personLink(name, resolvePersonName);
       const stakeholder = component.variant === "stakeholder" || data.mode === "stakeholder" || !!data.stance;
       const role = textOf(data.subject_role) || [textOf(data.role), textOf(data.company)].filter(Boolean).join(", ");
-      const health = [textOf(data.health_tier).toLowerCase().replace(/_/g, " "), textOf(data.trajectory)].filter(Boolean).join(", ");
+      const health = [standingWords(textOf(data.health_tier)), textOf(data.trajectory)].filter(Boolean).join(", ");
       const insight = textOf(data.key_insight) || textOf(data.summary) || textOf(data.text) || textOf(data.tone_summary);
       const tags = Array.isArray(data.tags) ? bulletsOf(data.tags).map((t) => `\`${t.slice(2)}\``).join(" ") : "";
       const tail = [role, health && `*${health}*`, insight].filter(Boolean).join(" \u2014 ");
@@ -6346,8 +7037,8 @@ ${line}` : ""].join("\n").trimEnd();
     case "team_grid": {
       const people = Array.isArray(data.people) ? data.people : [];
       const lines = people.map((p) => componentMarkdown({ ...p, type: "person_card" }, depth + 1, resolvePersonName, siblings)).filter(Boolean);
-      const count = typeof data.total_count === "number" && data.total_count > people.length ? `*${people.length} of ${data.total_count}*` : "";
-      return joinBlock(heading, count, lines, false);
+      const count2 = typeof data.total_count === "number" && data.total_count > people.length ? `*${people.length} of ${data.total_count}*` : "";
+      return joinBlock(heading, count2, lines, false);
     }
     case "person_disambiguation": {
       const q = textOf(data.query_name);
@@ -6692,7 +7383,8 @@ ${textOf(data.summary)}`.trim() : textOf(data.summary), []);
     }
     case "hierarchy": {
       const walk = (node, indent) => {
-        const line = `${"  ".repeat(indent)}- ${textOf(node.label)}${textOf(node.health_tier) ? ` *(${textOf(node.health_tier).replace(/_/g, " ")})*` : ""}`;
+        const standing = standingWords(textOf(node.health_tier));
+        const line = `${"  ".repeat(indent)}- ${textOf(node.label)}${standing ? ` *(${standing})*` : ""}`;
         const kids = Array.isArray(node.children) ? node.children : [];
         return [line, ...kids.flatMap((k) => walk(k, indent + 1))];
       };
@@ -6753,6 +7445,17 @@ ${textOf(data.summary)}`.trim() : textOf(data.summary), []);
       return generic();
   }
 }
+function sectionMarkdown(rawSection) {
+  const blocks = sectionBlocks(rawSection);
+  if (!blocks.length) return null;
+  const title = normalizeSection(rawSection).title?.trim();
+  const out = ["", `## ${title || "Notes"}`];
+  for (const b of blocks) {
+    if (b.kind === "narrative") out.push("", b.text);
+    else out.push(`- ${b.text}${b.meta ? ` *(${b.meta})*` : ""}`);
+  }
+  return out;
+}
 function buildSelfMarkdown(card) {
   const head = frontmatter([["type", "myu-self"], [MYU_GENERATED_KEY, true]]);
   const parts = [head, "", "# Me"];
@@ -6762,30 +7465,41 @@ function buildSelfMarkdown(card) {
     rendered++;
     parts.push("", "## What Myu knows so far", "", "*Correct any of it under Settings \u2192 askMyu \u2192 Account.*", "");
     for (const f of facts) {
-      const key = (f.key ?? "").replace(/_/g, " ");
-      const src = f.source ? ` \xB7 ${f.source}` : "";
-      if (f.kind === "read") parts.push(`- **${key}** \u2014 *${f.value}* (a read, worth testing${src})`);
-      else if (f.kind === "not_yet") parts.push(`- **not yet** \u2014 ${f.value}${src}`);
-      else parts.push(`- **${key}** \u2014 ${f.value}${src}`);
+      const label = knownFactLabel({ key: f.key ?? "", kind: f.kind });
+      const text = knownFactText({ value: f.value ?? "", full: f.full }, true);
+      const from = knownFactSource({ source: f.source, kind: f.kind });
+      if (f.kind === "read") parts.push(`- **${label}** \u2014 *${text}* (${from})`);
+      else parts.push(`- **${label}** \u2014 ${text}${from ? ` \xB7 ${from}` : ""}`);
     }
   }
-  for (const rawSection of card?.sections ?? []) {
-    const section = normalizeSection(rawSection);
-    const title = section.title?.trim();
-    const narrative = section.narrative?.trim();
-    const items = (section.items ?? []).filter((i) => i.text?.trim());
-    if (!narrative && items.length === 0) continue;
+  const sectionNotes = (card?.sections ?? []).map((raw) => ({ type: raw.section_type, lines: sectionMarkdown(raw) }));
+  const headingOf = (type) => {
+    const heading = type ? sectionNotes.find((n) => n.type === type && n.lines)?.lines?.[1]?.replace(/^## /, "") : void 0;
+    return heading && !/[[\]|#^]/.test(heading) ? heading : null;
+  };
+  const tiles = (card?.tiles ?? []).filter((t) => t?.label?.trim() && t?.value?.trim());
+  if (tiles.length > 0) {
     rendered++;
-    parts.push("", `## ${title || "Notes"}`);
-    if (narrative) parts.push("", narrative);
-    for (const item of items) {
-      parts.push(`- ${item.text}${item.date ? ` *(${item.date})*` : ""}`);
+    parts.push("", "## At a glance", "");
+    for (const t of tiles) {
+      const heading = headingOf(t.tap_section_type);
+      const value = heading ? `[[#${heading}|${t.value}]]` : t.value;
+      parts.push(`- **${t.label}** \u2014 ${value}${t.sub_value ? ` (${t.sub_value})` : ""}`);
     }
+  }
+  if (card?.hot_item?.text?.trim()) {
+    rendered++;
+    parts.push("", "## Now", "", `- ${card.hot_item.text.trim()}`);
+  }
+  for (const { lines } of sectionNotes) {
+    if (!lines) continue;
+    rendered++;
+    parts.push(...lines);
   }
   if (rendered === 0) {
-    parts.push("", "*Myu is still forming its picture of you \u2014 this page fills in as it learns.*");
+    parts.push("", "*Myu is still learning about you. This page fills in over time.*");
   }
-  parts.push("", "*Maintained by Myu \u2014 how Myu currently sees you. Edits here are replaced.*", "");
+  parts.push("", "*Written by Myu: how Myu currently sees you. Any edits here will be overwritten.*", "");
   return parts.join("\n");
 }
 function buildCompanyMarkdown(entity, card, peopleNames, memories = [], peopleFolder = "Myu/People") {
@@ -6802,33 +7516,97 @@ function buildCompanyMarkdown(entity, card, peopleNames, memories = [], peopleFo
     parts.push("", "## People", "", ...companyPeopleBase(peopleFolder));
   }
   for (const rawSection of card?.sections ?? []) {
-    const section = normalizeSection(rawSection);
-    const title = section.title?.trim();
-    const narrative = section.narrative?.trim();
-    const items = (section.items ?? []).filter((i) => i.text?.trim());
-    if (!narrative && items.length === 0) continue;
-    parts.push("", `## ${title || "Notes"}`);
-    if (narrative) parts.push("", narrative);
-    for (const item of items) {
-      parts.push(`- ${item.text}${item.date ? ` *(${item.date})*` : ""}`);
-    }
+    const lines = sectionMarkdown(rawSection);
+    if (lines) parts.push(...lines);
   }
   const memoryLines = (Array.isArray(memories) ? memories : []).map((m) => (m.memory_text ?? m.text ?? "").trim()).filter(Boolean);
   if (memoryLines.length > 0) {
     parts.push("", "## Memories");
     for (let i = 0; i < memoryLines.length; i++) {
-      const when = memories[i]?.created_at ? ` *(${String(memories[i].created_at).slice(0, 10)})*` : "";
+      const when = cardDayWords(memories[i]?.created_at) ? ` *(${cardDayWords(memories[i]?.created_at)})*` : "";
       parts.push(`- ${memoryLines[i]}${when}`);
     }
   }
   parts.push(
     "",
-    "*Maintained by Myu \u2014 regenerated as things change. Edits here are replaced.*",
+    "*Written by Myu and updated as things change. Any edits here will be overwritten.*",
     ""
   );
   return parts.join("\n");
 }
-function buildPersonMarkdown(entity, card, openCommitments, checkedState, theirPageName, memories = [], aliases = []) {
+var AGENTIC_SECTIONS = /* @__PURE__ */ new Set([
+  "spaces_shared",
+  "commitments_between",
+  "partner_readings",
+  "emissions",
+  "log"
+]);
+function renderAgenticSection(section, webUrl) {
+  const out = [];
+  const title = section.title?.trim() || section.section_type || "Notes";
+  const data = section.data ?? {};
+  const items = Array.isArray(data.items) ? data.items : [];
+  if (section.section_type === "spaces_shared") {
+    if (items.length === 0) return out;
+    out.push("", `## ${title}`);
+    for (const it of items) {
+      const name = textOf(it.name) || "a space";
+      const line = textOf(it.line);
+      const spaceId = textOf(it.space_id);
+      const link = spaceId ? `obsidian://myu-chat?about=${encodeURIComponent(`space:${spaceId}`)}` : webUrl;
+      out.push(`- **[${name}](${link})**${line ? ` \u2014 ${line}` : ""}`);
+    }
+    return out;
+  }
+  if (section.section_type === "commitments_between") {
+    if (items.length === 0) return out;
+    out.push("", `## ${title}`);
+    for (const it of items) {
+      const what = textOf(it.what) || "a commitment";
+      const status = textOf(it.status);
+      const how = textOf(it.how_myu_knows);
+      const executor = textOf(it.executor);
+      const done = status === "done" || status === "kept";
+      const meta = [status, executor && executor !== "person" ? `handled by ${executor === "coding_tool" ? "Claude Code" : "Myu"}` : "", how].filter(Boolean).join(" \xB7 ");
+      out.push(`- [${done ? "x" : " "}] ${what}${meta ? ` %%${meta}%%` : ""}${meta ? ` *(${meta})*` : ""}`);
+    }
+    return out;
+  }
+  if (section.section_type === "partner_readings") {
+    const rows = Array.isArray(data.rows) ? data.rows : [];
+    if (rows.length === 0) return out;
+    out.push("", `## ${title}${section.is_experiment ? " \xB7 experiment" : ""}`);
+    out.push("", "| | |", "|---|---|");
+    for (const r of rows) {
+      const dim = textOf(r.dimension);
+      const words = r.words === "alike" ? "You read this alike" : r.words === "differently" ? "You see this differently. Worth a conversation" : "Not shared";
+      out.push(`| ${dim} | ${words} |`);
+    }
+    out.push("", "*Words only. The numbers are an experiment, and both of you need to turn them on.*");
+    return out;
+  }
+  if (section.section_type === "emissions") {
+    if (items.length === 0) {
+      out.push("", `## ${title}`, "", `*${section.note || "Nothing yet."}*`);
+      return out;
+    }
+    out.push("", `## ${title}`);
+    for (const it of items) out.push(`- ${textOf(it.text)}${dayOf(it.at) ? ` *(${dayOf(it.at)})*` : ""}`);
+    return out;
+  }
+  if (section.section_type === "log") {
+    if (items.length === 0) return out;
+    out.push("", `## What Myu did about them`);
+    for (const it of items) {
+      const kind = textOf(it.kind);
+      const text = textOf(it.text);
+      out.push(`- ${kind ? `**${kind}** ` : ""}${text}${dayOf(it.at) ? ` *(${dayOf(it.at)})*` : ""}`);
+    }
+    return out;
+  }
+  return out;
+}
+function buildPersonMarkdown(entity, card, openCommitments, checkedState, theirPageName, memories = [], aliases = [], webUrl = "https://myu.askmyu.com") {
   const head = frontmatter([
     ["type", "myu-person"],
     ["myu-id", entity.entity_id],
@@ -6869,16 +7647,13 @@ function buildPersonMarkdown(entity, card, openCommitments, checkedState, theirP
     parts.push("", `Their page: [[${theirPageName}]]`);
   }
   for (const rawSection of card?.sections ?? []) {
-    const section = normalizeSection(rawSection);
-    const title = section.title?.trim();
-    const narrative = section.narrative?.trim();
-    const items = (section.items ?? []).filter((i) => i.text?.trim());
-    if (!narrative && items.length === 0) continue;
-    parts.push("", `## ${title || "Notes"}`);
-    if (narrative) parts.push("", narrative);
-    for (const item of items) {
-      parts.push(`- ${item.text}${item.date ? ` *(${item.date})*` : ""}`);
+    const agentic = rawSection;
+    if (AGENTIC_SECTIONS.has(agentic.section_type ?? "")) {
+      parts.push(...renderAgenticSection(agentic, webUrl));
+      continue;
     }
+    const lines = sectionMarkdown(rawSection);
+    if (lines) parts.push(...lines);
   }
   if (openCommitments.length > 0) {
     parts.push("", "## Commitments");
@@ -6890,16 +7665,16 @@ function buildPersonMarkdown(entity, card, openCommitments, checkedState, theirP
   if (memoryLines.length > 0) {
     parts.push("", "## Memories");
     for (let i = 0; i < memoryLines.length; i++) {
-      const when = memories[i]?.created_at ? ` *(${String(memories[i].created_at).slice(0, 10)})*` : "";
+      const when = cardDayWords(memories[i]?.created_at) ? ` *(${cardDayWords(memories[i]?.created_at)})*` : "";
       parts.push(`- ${memoryLines[i]}${when}`);
     }
   }
   if (!parts.some((p) => p.startsWith("## "))) {
-    parts.push("", "*Nothing here yet \u2014 Myu fills this in as things happen.*");
+    parts.push("", "*Nothing here yet. Myu fills this in as things happen.*");
   }
   parts.push(
     "",
-    "*Maintained by Myu \u2014 regenerated as things change. Ticking a checkbox marks it done in Myu; other edits here are replaced.*",
+    "*Written by Myu and updated as things change. Ticking a checkbox marks it done in Myu; other edits here will be overwritten.*",
     ""
   );
   return parts.join("\n");
@@ -6917,7 +7692,50 @@ function buildTodayMarkdown(briefDate, sections) {
     for (const item of section.items) parts.push(`- ${item}`);
   }
   if (sections.every((s2) => s2.items.length === 0)) {
-    parts.push("", "Nothing needs you yet today.");
+    parts.push("", "Nothing needs your attention yet today.");
+  }
+  parts.push("");
+  return parts.join("\n");
+}
+function buildTodayLinesSection(lines) {
+  const items = [];
+  const shown2 = lines.filter((l) => !l.state || l.state === "queued" || l.state === "released");
+  const groups = groupBySubject(shown2.filter((l) => !isWaitingLine(l)));
+  for (const g of [...groups.filter((x) => x.needsYou), ...groups.filter((x) => !x.needsYou)]) {
+    const stack = stackOf(g.lines);
+    const text = textOf(stack.top?.text);
+    if (!text) continue;
+    const dot = g.needsYou ? "\u25CF " : "";
+    const named = g.lines.some((l) => textOf(l.subjects?.[0]?.label));
+    const name = !g.id ? "" : g.type === "person" && named ? `[[${sanitizeName(g.label)}]] \u2014 ` : `**${g.label}** \u2014 `;
+    const more = stack.rest.length > 0 ? ` (and ${stack.rest.length} more)` : "";
+    const talk = rowOpensConversation(g) ? ` \u2014 [talk \u25B8](obsidian://myu-chat?about=${encodeURIComponent(`${g.type}:${g.id}`)})` : "";
+    if (g.id) {
+      items.push(`${dot}${name}*${text}*${more}${talk}`);
+      continue;
+    }
+    for (const l of g.lines) items.push(`${lineNeedsYou(l) ? "\u25CF " : ""}*${textOf(l.text)}*`);
+  }
+  return { title: "What needs your attention today", items };
+}
+function buildMyuLogMarkdown(day, items) {
+  const head = frontmatter([
+    ["type", "myu-log"],
+    [MYU_GENERATED_KEY, true],
+    ["date", day]
+  ]);
+  const parts = [head, "", `# What Myu did \u2014 ${day}`];
+  if (items.length === 0) {
+    parts.push("", "*Nothing yet today.*", "");
+    return parts.join("\n");
+  }
+  for (const it of items) {
+    const kind = textOf(it.kind);
+    const text = textOf(it.text);
+    const when = it.at ? String(it.at).slice(11, 16) : "";
+    const p = it.provenance;
+    const via = p?.agent === "claude_code" ? " \xB7 via your Claude Code session" : p?.surface === "cli" ? " \xB7 via terminal" : "";
+    parts.push(`- ${when ? `\`${when}\` ` : ""}${kind ? `**${kind}** ` : ""}${text}${via}`);
   }
   parts.push("");
   return parts.join("\n");
@@ -6953,7 +7771,7 @@ function buildCommitmentsMarkdown(commitments, checkedState) {
   }
   parts.push(
     "",
-    "*Maintained by Myu from your meetings. Tick a box to mark it done in Myu.*",
+    "*Written by Myu from your meetings. Tick a box to mark it done in Myu.*",
     ""
   );
   return parts.join("\n");
@@ -7059,7 +7877,114 @@ function buildPeopleBase(peopleFolder) {
 }
 
 // src/buildStamp.ts
-var BUILD_STAMP = true ? "0.1.2" : "dev";
+var BUILD_STAMP = true ? "0.1.3" : "dev";
+
+// src/calendarMyu.ts
+function isMyuCalendarEntry(e) {
+  return !!e && typeof e === "object" && e.source === "myu";
+}
+function toCalendarWireTime(iso) {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? iso : d.toISOString().replace("T", " ").replace("Z", "");
+}
+function normalizeCalendarEvents(raw) {
+  return (raw ?? []).map((e) => {
+    if (!isMyuCalendarEntry(e)) return e;
+    return {
+      event_id: e.event_id,
+      account_id: "",
+      calendar_id: "myu",
+      summary: e.title,
+      start_time: toCalendarWireTime(e.start),
+      end_time: toCalendarWireTime(e.end || e.start),
+      all_day: false,
+      status: "confirmed",
+      last_synced_at: "",
+      created_at: "",
+      source: "myu",
+      kind: e.kind,
+      space_id: e.space_id
+    };
+  });
+}
+
+// src/menuMarks.ts
+var MENU_ITEM_KEYS = ["home", "people", "calendar", "spaces", "conversations", "canvas"];
+var KIND_KEYS = ["spaces:retro", "spaces:debrief"];
+var count = (v) => typeof v === "number" && Number.isFinite(v) && v > 0 ? Math.floor(v) : 0;
+function readMenuMarks(raw) {
+  let body = raw;
+  if (typeof body === "string") {
+    try {
+      body = JSON.parse(body);
+    } catch {
+      return null;
+    }
+  }
+  if (!body || typeof body !== "object") return null;
+  const b = body;
+  if (!b.marks && b.content !== void 0) return readMenuMarks(b.content);
+  if (!b.marks || typeof b.marks !== "object") return null;
+  const marks = {};
+  for (const key of MENU_ITEM_KEYS) {
+    const m = b.marks[key];
+    if (m && typeof m === "object") marks[key] = { new: count(m.new), waiting: count(m.waiting) };
+  }
+  const opened = {};
+  if (b.opened && typeof b.opened === "object") {
+    for (const key of [...MENU_ITEM_KEYS, ...KIND_KEYS]) {
+      const at = b.opened[key];
+      if (typeof at === "number" && Number.isFinite(at)) opened[key] = at;
+    }
+  }
+  return { day: typeof b.day === "string" ? b.day : void 0, marks, opened };
+}
+function withOpened(marks, item, at = Date.now()) {
+  const m = marks.marks[item];
+  return {
+    ...marks,
+    marks: { ...marks.marks, [item]: { new: 0, waiting: m?.waiting ?? 0 } },
+    opened: { ...marks.opened ?? {}, [item]: at }
+  };
+}
+function menuMarkWords(mark) {
+  if (!mark) return "";
+  return [mark.new > 0 ? `${mark.new} new` : "", mark.waiting > 0 ? `${mark.waiting} waiting for your answer` : ""].filter(Boolean).join(", ");
+}
+var ENTRY_DOT_WORDS = { new: "New", waiting: "Waiting for your answer" };
+function cameInAt(entry) {
+  for (const raw of [entry.released_at, entry.created_at]) {
+    const at = typeof raw === "number" ? raw : raw ? Date.parse(raw) : NaN;
+    if (Number.isFinite(at) && at > 0) return at;
+  }
+  return 0;
+}
+function newSince(item, openedBefore, now = /* @__PURE__ */ new Date()) {
+  const opened = typeof openedBefore === "number" && Number.isFinite(openedBefore) && openedBefore > 0 ? openedBefore : 0;
+  if (item !== "home") return opened;
+  return Math.max(opened, new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime());
+}
+function entryDot(lines, since) {
+  const all = !lines ? [] : Array.isArray(lines) ? lines : [lines];
+  const open = all.filter((l) => (l.state ?? "released") === "released");
+  if (typeof since === "number" && open.some((l) => cameInAt(l) > since)) return "new";
+  return open.some((l) => l.needs_you) ? "waiting" : null;
+}
+function createVisitSince() {
+  const before = /* @__PURE__ */ new Map();
+  return {
+    opening(item, marks) {
+      if (marks) before.set(item, marks.opened?.[item] ?? 0);
+    },
+    since(item, marks, now) {
+      if (!marks) return null;
+      return newSince(item, before.has(item) ? before.get(item) : marks.opened?.[item], now);
+    },
+    reset() {
+      before.clear();
+    }
+  };
+}
 
 // src/transport/api.ts
 var COLD_START_OFF = { split_consent: false, onboarding_payback: false, offer_block: false, week_state: false, per_card_offer: false, self_card_legible: false };
@@ -7073,6 +7998,22 @@ function parseBackendFlags(data) {
   const d = data && typeof data === "object" ? data : null;
   const on = (k) => d?.[k] === true;
   return { today_bundle: on("today_bundle"), vault_changes: on("vault_changes"), entities_changed_ids: on("entities_changed_ids"), entity_changed_at: on("entity_changed_at"), retry_after_header: on("retry_after_header") };
+}
+function chatSendAnswer(res) {
+  if (res.ok) return { ...res, data: parseChatTurn(res.data) };
+  const message = res.data && typeof res.data.message === "string" ? res.data.message.trim() : "";
+  return { ...res, data: null, ...message ? { message } : {} };
+}
+function menuMarksOf(res, what) {
+  if (res.status === 404) return null;
+  const marks = res.ok ? readMenuMarks(res.data) : null;
+  if (!marks) throw new Error(`${what}: ${res.error ?? `http_${res.status}`}`);
+  return marks;
+}
+function linesSeenOf(res) {
+  if (res.status === 404 || res.error === "scope_required") return null;
+  if (!res.ok) throw new Error(`lines seen: ${res.error ?? `http_${res.status}`}`);
+  return res.data ?? {};
 }
 function oauthQuery(opts) {
   return (opts.scopeSet ? `&scope_set=${encodeURIComponent(opts.scopeSet)}` : "") + (opts.returnTo ? `&return_to=${encodeURIComponent(opts.returnTo)}` : "");
@@ -7122,6 +8063,7 @@ function parseChatTurn(data) {
   let record = data;
   const canvas = parseCanvasSide(record.canvas);
   const offer = record.offer && typeof record.offer === "object" ? record.offer : void 0;
+  const received = typeof record.pasted_blocks_received === "number" ? record.pasted_blocks_received : void 0;
   if (record.journal && typeof record.journal === "object") record = record.journal;
   const journalId = typeof record.journal_id === "string" ? record.journal_id : void 0;
   let blocks = [];
@@ -7145,6 +8087,7 @@ function parseChatTurn(data) {
   if (canvas) out.canvas = canvas;
   if (references.length) out.references = references;
   if (similar.length) out.similar_entries = similar;
+  if (received !== void 0) out.pasted_blocks_received = received;
   return out;
 }
 function normalizePreferences(data) {
@@ -7210,20 +8153,32 @@ var Api = class {
   fetchRecoveryWrappedMDEK() {
     return this.transport.get("/account/recovery/wrapped-key");
   }
+  fetchPasswordWrappedMDEK() {
+    return this.transport.get("/account/password/wrapped-key");
+  }
   upsertJournal(payload) {
     return this.transport.postJournal("/journal/add", payload);
   }
   getBrief() {
     return this.transport.get("/feed/brief");
   }
-  getCalendarEvents(start, end) {
-    return this.transport.post("/calendar/events", { start_date: start, end_date: end });
+  async getCalendarEvents(start, end) {
+    const res = await this.transport.post("/calendar/events", { start_date: start, end_date: end });
+    const data = res.data;
+    if (data && Array.isArray(data.events)) data.events = normalizeCalendarEvents(data.events);
+    return res;
   }
   listEntities(tab, opts = {}) {
     const since = opts.changedSince && opts.changedSince > 0 ? `&changed_since=${opts.changedSince}` : "";
     return this.transport.get(
       `/feed/entities?tab=${tab === "company" ? "companies" : "people"}${since}`
     );
+  }
+  listMapPeople(limit, offset) {
+    return this.transport.get(`/v2/relationships?map=only&limit=${Math.max(1, Math.floor(limit))}&offset=${Math.max(0, Math.floor(offset))}`);
+  }
+  keepRelationship(relationshipId) {
+    return this.transport.post("/v2/relationships/keep", { relationship_id: relationshipId });
   }
   getTodayBundle(start, end, timezone) {
     return this.transport.get(
@@ -7239,11 +8194,60 @@ var Api = class {
       `/card/${entityType}?entity_id=${encodeURIComponent(entityId)}&level=read`
     );
   }
+  // ─── One list, two lenses (slice 15) ───
+  getCardDeep(entityType, entityId) {
+    return this.transport.get(
+      `/card/${entityType}?entity_id=${encodeURIComponent(entityId)}&level=deep_dive`
+    );
+  }
+  getMyuLines(scope) {
+    return this.transport.get(`/myu/lines?scope=${scope}`);
+  }
+  async getMenuMarks() {
+    return menuMarksOf(await this.transport.get("/myu/menu-marks"), "menu marks");
+  }
+  async markMenuOpened(item) {
+    return menuMarksOf(await this.transport.post("/myu/menu-marks/opened", { item }), "menu marks opened");
+  }
+  async markLinesSeen(lineIds) {
+    if (!lineIds.length) return null;
+    return linesSeenOf(await this.transport.post("/myu/lines/seen", { line_ids: lineIds }));
+  }
+  getCommitments() {
+    return this.transport.get("/commitments");
+  }
+  getMyuLog(opts) {
+    const q = [];
+    if (opts?.since) q.push(`since=${encodeURIComponent(opts.since)}`);
+    if (opts?.kind) q.push(`kind=${encodeURIComponent(opts.kind)}`);
+    if (opts?.subjectType) q.push(`subject_type=${encodeURIComponent(opts.subjectType)}`);
+    if (opts?.subjectId) q.push(`subject_id=${encodeURIComponent(opts.subjectId)}`);
+    if (opts?.limit) q.push(`limit=${opts.limit}`);
+    return this.transport.get(`/myu/log${q.length ? `?${q.join("&")}` : ""}`);
+  }
+  getRetro(spaceId) {
+    return this.transport.get(`/retro?space_id=${encodeURIComponent(spaceId)}`);
+  }
+  listSpaces() {
+    return this.transport.post("/gattai/spaces", { include_archived: false });
+  }
+  getSubjectConversation(subjectType, subjectId, opts) {
+    const q = [`subject_type=${encodeURIComponent(subjectType)}`, `subject_id=${encodeURIComponent(subjectId)}`];
+    if (opts?.occurrenceKey) q.push(`occurrence_key=${encodeURIComponent(opts.occurrenceKey)}`);
+    if (opts?.earlier) q.push("earlier=true");
+    return this.transport.get(`/myu/conversation?${q.join("&")}`);
+  }
+  addSubjectTurn(conversationId, content, pasted) {
+    return this.transport.post("/journal_chats/add", { conversation_id: conversationId, content, ...pasted?.length ? { pasted_blocks: pasted } : {} });
+  }
+  answerMyuLine(lineId, answer) {
+    return this.transport.post("/myu/lines/answer", { line_id: lineId, answer });
+  }
+  getRetroPrepMine(spaceId) {
+    return this.transport.get(`/retro/prep/mine?space_id=${encodeURIComponent(spaceId)}`);
+  }
   getMeetingPrep(eventId) {
     return this.transport.get(`/prep/meeting?event_id=${encodeURIComponent(eventId)}`);
-  }
-  linkPrepSubject(eventId, relationshipId) {
-    return this.transport.post("/prep/subject/link", { event_id: eventId, relationship_id: relationshipId });
   }
   searchEntities(query) {
     return this.transport.get(
@@ -7281,8 +8285,23 @@ var Api = class {
   postCompositionInteraction(events, generateResponse) {
     return this.transport.post("/composition/interaction", { events, timing: {}, generate_response: generateResponse });
   }
-  getHelpMyuQueue() {
-    return this.transport.get("/feed/help-myu");
+  async getHelpMyuQueue() {
+    const res = await this.getMyuLines("people");
+    if (!res.ok) return res;
+    const lines = res.data?.lines ?? [];
+    const queue = [];
+    for (const l of lines) {
+      if (l.ask_kind !== "yes_no" && l.ask_kind !== "choice" && l.ask_kind !== "assume") continue;
+      const subj = (l.subjects ?? []).find((s2) => s2.type === "person");
+      if (!subj?.id) continue;
+      queue.push({
+        item_type: "linkedin_disambiguation",
+        relationship_id: subj.id,
+        display_name: subj.label ?? "someone",
+        suggestion_count: l.choices?.length
+      });
+    }
+    return { ...res, data: { queue, total_count: queue.length } };
   }
   getRelatedPersons(relationshipId, limit = 5) {
     return this.transport.get(`/feed/related-persons?relationship_id=${encodeURIComponent(relationshipId)}&limit=${limit}`);
@@ -7381,7 +8400,7 @@ var Api = class {
       `/composition/for-journal?journal_id=${encodeURIComponent(journalId)}&all=true`
     );
   }
-  async createChatEntry(accountId, content, context, templateType, canvas) {
+  async createChatEntry(accountId, content, context, templateType, canvas, pasted) {
     const body = { account_id: accountId, content, surface_mode: canvas?.surfaceMode ?? "journal" };
     if (canvas?.continuesCompositionId) body.continues_composition_id = canvas.continuesCompositionId;
     if (templateType) body.template_type = templateType;
@@ -7389,10 +8408,10 @@ var Api = class {
       body.feed_context = context;
       body.context_injection = context;
     }
-    const res = await this.transport.post("/journal/add", body);
-    return { ...res, data: res.ok ? parseChatTurn(res.data) : null };
+    if (pasted?.length) body.pasted_blocks = pasted;
+    return chatSendAnswer(await this.transport.post("/journal/add", body));
   }
-  async addChatTurn(accountId, journalId, content, context, canvas) {
+  async addChatTurn(accountId, journalId, content, context, canvas, pasted) {
     const body = {
       account_id: accountId,
       chatter_id: accountId,
@@ -7407,8 +8426,8 @@ var Api = class {
       body.feed_context = context;
       body.context_injection = context;
     }
-    const res = await this.transport.post("/journal_chats/add", body);
-    return { ...res, data: res.ok ? parseChatTurn(res.data) : null };
+    if (pasted?.length) body.pasted_blocks = pasted;
+    return chatSendAnswer(await this.transport.post("/journal_chats/add", body));
   }
   getMirrorEdition() {
     return this.transport.get("/initiative/mirror");
@@ -7507,8 +8526,8 @@ var Api = class {
       `/memories/relationship/${encodeURIComponent(relationshipId)}?source_type=all&limit=${limit}`
     );
   }
-  getSelfCard() {
-    return this.transport.get("/card/self");
+  getSelfCard(level) {
+    return this.transport.get(level ? `/card/self?level=${level}` : "/card/self");
   }
   getMeetingDetail(meetingId) {
     return this.transport.get(`/meetings/get?meeting_id=${encodeURIComponent(meetingId)}`);
@@ -7640,8 +8659,13 @@ var Api = class {
     const qs = `?account_id=${encodeURIComponent(accountId)}&summarize=true&regenerate=false&linkedin_url=${encodeURIComponent(linkedinUrl)}`;
     return this.transport.get(`/linkedin/seek${qs}`);
   }
-  saveLinkedinId(accountId, linkedinId) {
-    return this.transport.post("/account/career/update", { account_id: accountId, linkedin_id: linkedinId });
+  /** `identityConfirmed`: the person said a profile in another name is theirs (2026-10-15); the server refuses a mismatch without it. */
+  saveLinkedinId(accountId, linkedinId, identityConfirmed = false) {
+    return this.transport.post("/account/career/update", {
+      account_id: accountId,
+      linkedin_id: linkedinId,
+      ...identityConfirmed ? { identity_confirmed: true } : {}
+    });
   }
   queryCurrentEmployment(accountId, source) {
     return this.transport.get(`/onboard/current_employment?account_id=${encodeURIComponent(accountId)}&source=${source}`);
@@ -7683,8 +8707,8 @@ ${value}\r
   saveResumeId(accountId, resumeId) {
     return this.transport.post("/account/career/update", { account_id: accountId, resume_id: resumeId });
   }
-  classifyCareerMoment(accountId, content) {
-    return this.transport.post("/onboard/classify_career_moment", { account_id: accountId, content });
+  classifyCareerMoment(accountId, content, pasted) {
+    return this.transport.post("/onboard/classify_career_moment", { account_id: accountId, content, ...pasted?.length ? { pasted_blocks: pasted } : {} });
   }
 };
 
@@ -7744,11 +8768,11 @@ var MYU_LOOK_URL = "https://github.com/AskMyu/askmyu-obsidian-plugin/raw/main/sn
 var INTEGRATION_CARDS = {
   google: {
     name: "Google Calendar & Gmail",
-    desc: "Connect and Myu preps your meetings and reads the room from your threads. One browser tab for Google\u2019s consent screen; it sends you right back."
+    desc: "Connect it and Myu prepares you for meetings and learns from your email threads. Google\u2019s consent screen opens in one browser tab and sends you right back."
   },
   microsoft: {
     name: "Microsoft Outlook & calendar",
-    desc: "Same idea for the Microsoft side of your life. One browser tab for the consent screen; it sends you right back."
+    desc: "The same for your Microsoft accounts. The consent screen opens in one browser tab and sends you right back."
   }
 };
 var AskMyuSettingTab = class extends import_obsidian14.PluginSettingTab {
@@ -7797,7 +8821,7 @@ var AskMyuSettingTab = class extends import_obsidian14.PluginSettingTab {
       section("What Myu can read", ["consent", "folders", "tags", "journal", "sharing"], (r) => this.renderSharing(r)),
       section("Meeting notes", ["meetings", "transcripts", "capture"], (r) => this.renderMeetingNotes(r)),
       section("Myu's folder", ["materialize", "people", "companies", "calendar", "commitments", "bases", "sync", "sync on open"], (r) => this.renderMaterialization(r)),
-      section("Weave Myu in", ["integrations", "recipes", "snippets", "bases embed", "tasks", "dataview", "daily notes", "template"], (r) => this.renderIntegrations(r)),
+      section("Add Myu to your notes", ["integrations", "recipes", "snippets", "bases embed", "tasks", "dataview", "daily notes", "template"], (r) => this.renderIntegrations(r)),
       section("Weekly review", ["review", "week"], (r) => this.renderWeeklyReview(r)),
       section("Account", ["delete account", "email", "aliases", "sign out", "export", "archive", "uninstall"], (r) => this.renderAccount(r), () => this.plugin.unlock.current === "unlocked"),
       section("Advanced", ["backend url", "debug", "snippet", "styling"], (r) => this.renderAdvanced(r))
@@ -7809,7 +8833,7 @@ var AskMyuSettingTab = class extends import_obsidian14.PluginSettingTab {
     if (!s2.materialize_consented) {
       root.createEl("p", {
         cls: "myu-prose myu-quiet",
-        text: "Myu can keep a folder in your vault \u2014 a page per person, today, the week, and your commitments as real checkboxes. Off until you say so."
+        text: "Myu can write a folder in your vault: a page per person, today, the week, and your commitments as real checkboxes. Off until you turn it on."
       });
       new import_obsidian14.Setting(root).addButton(
         (b) => b.setButtonText("Let Myu write\u2026").onClick(() => {
@@ -7823,7 +8847,7 @@ var AskMyuSettingTab = class extends import_obsidian14.PluginSettingTab {
       );
       return;
     }
-    new import_obsidian14.Setting(root).setName("Writing on").setDesc(`Myu maintains ${s2.materialize_folder}/ \u2014 ticking a checkbox there marks it done in Myu.`).addToggle(
+    new import_obsidian14.Setting(root).setName("Writing on").setDesc(`Myu keeps ${s2.materialize_folder}/ up to date. Ticking a checkbox there marks it done in Myu.`).addToggle(
       (t) => t.setValue(s2.materialize_enabled).onChange(async (v) => {
         s2.materialize_enabled = v;
         await this.plugin.saveSettings();
@@ -7833,7 +8857,7 @@ var AskMyuSettingTab = class extends import_obsidian14.PluginSettingTab {
       (b) => b.setButtonText("Sync now").onClick(async () => {
         b.setButtonText("Syncing\u2026").setDisabled(true);
         await this.plugin.materializer.materializeAll();
-        notifyStatus("Synced \u2014 Myu\u2019s folder is current.");
+        notifyStatus("Synced. Myu\u2019s folder is up to date.");
         this.rerender();
       })
     );
@@ -7867,11 +8891,11 @@ var AskMyuSettingTab = class extends import_obsidian14.PluginSettingTab {
         await this.plugin.saveSettings();
       })
     );
-    new import_obsidian14.Setting(root).setName("Sync when the vault opens").setDesc("A full pass in the background every time you open the vault, so Today is current. Off: nothing runs until you press the sync button (Today pane, or the command).").addToggle((tg) => tg.setValue(this.plugin.settings.sync_on_open).onChange(async (v) => {
+    new import_obsidian14.Setting(root).setName("Sync when the vault opens").setDesc("A full sync in the background every time you open the vault, so Today is up to date. Off: nothing runs until you press the sync button (in the Today pane, or the command).").addToggle((tg) => tg.setValue(this.plugin.settings.sync_on_open).onChange(async (v) => {
       this.plugin.settings.sync_on_open = v;
       await this.plugin.saveSettings();
     }));
-    new import_obsidian14.Setting(root).setName("Journal history").setDesc("Your journal from every surface, decrypted into Myu/Journal/ \u2014 one note per day.").addToggle(
+    new import_obsidian14.Setting(root).setName("Journal history").setDesc("Your journal from every device and app, decrypted into Myu/Journal/, one note per day.").addToggle(
       (t) => t.setValue(s2.materialize_journal_history).onChange(async (v) => {
         s2.materialize_journal_history = v;
         await this.plugin.saveSettings();
@@ -7880,9 +8904,9 @@ var AskMyuSettingTab = class extends import_obsidian14.PluginSettingTab {
   }
   // ── P8.5: weave Myu in — copyable snippets, pasted by THEIR hand ───────────
   renderIntegrations(root) {
-    new import_obsidian14.Setting(root).setName("Recipes").setDesc(
-      'Your day inside every daily note, the brief, the week, a Tasks query for your commitments, the people table, a Dataview table, a button to Today. Myu never edits your files: you paste them, or put one at the cursor with the command "Insert a Myu snippet\u2026".'
-    ).addButton((b) => b.setButtonText("Open the recipes").onClick(() => void this.plugin.openWeave()));
+    new import_obsidian14.Setting(root).setName("Snippets").setDesc(
+      'Snippets you can paste into your own notes: your day in every daily note, the brief, the week, a Tasks query for your commitments, the people table, a Dataview table, a button to Today. Myu never edits your files. You paste them yourself, or insert one at the cursor with the command "Insert a Myu snippet\u2026".'
+    ).addButton((b) => b.setButtonText("Open the snippets").onClick(() => void this.plugin.openWeave()));
   }
   /**
    * The account itself — devices, login aliases, how Myu addresses you, and
@@ -7906,7 +8930,7 @@ var AskMyuSettingTab = class extends import_obsidian14.PluginSettingTab {
     void this.renderAccountEmails(emailsHost);
     void this.renderProfile(nameHost, careerHost);
     void this.renderPreferences(addressHost);
-    new import_obsidian14.Setting(containerEl).setName("Delete my account").setDesc("Irreversible. Everything Myu holds about you is deleted, immediately. Your vault is untouched.").addButton(
+    new import_obsidian14.Setting(containerEl).setName("Delete my account").setDesc("Cannot be undone. Everything Myu stores about you is deleted immediately. Your vault is not touched.").addButton(
       (b) => b.setButtonText("Delete\u2026").setDestructive().onClick(() => {
         new DeleteAccountModal(this.app, this.plugin, () => this.rerender()).open();
       })
@@ -7914,7 +8938,7 @@ var AskMyuSettingTab = class extends import_obsidian14.PluginSettingTab {
   }
   /** A section that could not load says so — and offers the one thing that helps. */
   renderLoadFailure(host, what, why, retry) {
-    new import_obsidian14.Setting(host).setName(what).setDesc(`Couldn't load \u2014 ${why}`).addButton((b) => b.setButtonText("Retry").onClick(retry));
+    new import_obsidian14.Setting(host).setName(what).setDesc(`Couldn't load. ${why}`).addButton((b) => b.setButtonText("Retry").onClick(retry));
   }
   /** The web's General → Profile: your name (account/update) and what Myu knows of your career (account/career). */
   async renderProfile(nameHost, careerHost) {
@@ -7936,7 +8960,7 @@ var AskMyuSettingTab = class extends import_obsidian14.PluginSettingTab {
     }
     const current = self2?.data?.card?.header?.display_name ?? "";
     let name = current;
-    new import_obsidian14.Setting(nameHost).setName("Your name").setDesc("How Myu writes you into your own notes.").addText((t) => t.setPlaceholder("Your name").setValue(current).onChange((v) => {
+    new import_obsidian14.Setting(nameHost).setName("Your name").setDesc("The name Myu uses for you in your notes.").addText((t) => t.setPlaceholder("Your name").setValue(current).onChange((v) => {
       name = v;
     })).addButton((b) => b.setButtonText("Save").onClick(async () => {
       const trimmed = name.trim();
@@ -8081,7 +9105,7 @@ var AskMyuSettingTab = class extends import_obsidian14.PluginSettingTab {
         await this.plugin.backend.updateAccountPreferences({ preferred_address: value.trim() });
       })
     );
-    new import_obsidian14.Setting(host).setName("How directly Myu speaks").setDesc("Auto follows the moment. The rest hold Myu to one register.").addDropdown(
+    new import_obsidian14.Setting(host).setName("How directly Myu speaks").setDesc("Auto lets Myu choose based on the situation. The other options fix one style.").addDropdown(
       (d) => d.addOptions({
         auto: "Auto",
         socratic: "Ask, don't tell",
@@ -8163,33 +9187,33 @@ var AskMyuSettingTab = class extends import_obsidian14.PluginSettingTab {
       );
     }
     let icalUrl = "";
-    new import_obsidian14.Setting(host).setName("Calendar link").setDesc("A private iCal address \u2014 Google Calendar: Settings \u2192 your calendar \u2192 secret address in iCal format; Outlook: Publish calendar. Read-only by construction.").addText((t) => t.setPlaceholder("https://\u2026/basic.ics").onChange((v) => {
+    new import_obsidian14.Setting(host).setName("Calendar link").setDesc("A private iCal address. Google Calendar: Settings \u2192 your calendar \u2192 secret address in iCal format. Outlook: Publish calendar. Myu can only read it, never change it.").addText((t) => t.setPlaceholder("https://\u2026/basic.ics").onChange((v) => {
       icalUrl = v.trim();
-    })).addButton((b) => b.setButtonText("Read my week").onClick(async () => {
+    })).addButton((b) => b.setButtonText("Add calendar").onClick(async () => {
       if (!/^(https:\/\/|webcal:\/\/)/i.test(icalUrl)) {
-        notifyError("Paste the full address \u2014 it starts with https://");
+        notifyError("Paste the full address. It starts with https://");
         return;
       }
       const r = await this.plugin.backend.addIcalUrl(icalUrl).catch(() => null);
       if (r?.ok && r.data?.success !== false) {
-        notifyStatus(`Calendar added \u2014 ${r.data?.events_stored ?? 0} events. Your week starts painting in Today.`);
+        notifyStatus(`Calendar added: ${r.data?.events_stored ?? 0} events. Your meetings will show in Today.`);
         void this.plugin.refreshTodayNow();
-      } else notifyError(r?.data?.error || "That address did not read as a calendar. Check it ends with .ics and try again.");
+      } else notifyError(r?.data?.error || "That link is not a calendar. Check it ends with .ics and try again.");
     }));
-    new import_obsidian14.Setting(host).setName("Calendar file").setDesc("An .ics export from any calendar. Read once; nothing to revoke.").addButton((b) => b.setButtonText("Upload an .ics\u2026").onClick(async () => {
+    new import_obsidian14.Setting(host).setName("Calendar file").setDesc("An .ics export from any calendar. Read once; there is nothing to disconnect later.").addButton((b) => b.setButtonText("Upload an .ics\u2026").onClick(async () => {
       const picked = await pickFile(".ics,text/calendar");
       if (!picked) return;
       const r = await this.plugin.backend.uploadIcs(picked.bytes).catch(() => null);
       if (r?.ok && r.data?.success !== false) {
-        notifyStatus(`Calendar file read \u2014 ${r.data?.events_stored ?? 0} events. Your week starts painting in Today.`);
+        notifyStatus(`Calendar file read: ${r.data?.events_stored ?? 0} events. Your meetings will show in Today.`);
         void this.plugin.refreshTodayNow();
-      } else notifyError(r?.data?.error || "That file did not read as a calendar export. Export an .ics and try again.");
+      } else notifyError(r?.data?.error || "That file is not a calendar export. Export an .ics file and try again.");
     }));
     const slackWhy = loadFailure(slack);
     if (slackWhy) this.renderLoadFailure(host, "Slack", slackWhy, retry);
     else {
       const slackRows = (slack?.data?.connections ?? []).filter((c) => c.status !== "disconnected");
-      const slackRow = new import_obsidian14.Setting(host).setName("Slack").setDesc(slackRows.length > 0 ? `${slackRows.length} workspace${slackRows.length === 1 ? "" : "s"} connected.` : "Myu reads the DMs and channels you choose. Consent happens on Slack\u2019s own screen.");
+      const slackRow = new import_obsidian14.Setting(host).setName("Slack").setDesc(slackRows.length > 0 ? `${slackRows.length} workspace${slackRows.length === 1 ? "" : "s"} connected.` : "Myu reads the DMs and channels you choose. You give permission on Slack\u2019s own screen.");
       for (const c of slackRows) {
         const id = String(c.connection_id ?? "");
         if (!id) continue;
@@ -8198,7 +9222,7 @@ var AskMyuSettingTab = class extends import_obsidian14.PluginSettingTab {
           b.setButtonText("Disconnect").onClick(async () => {
             if (!armed) {
               armed = true;
-              b.setButtonText("Disconnect \u2014 sure?").setDestructive();
+              b.setButtonText("Disconnect? Click again to confirm").setDestructive();
               return;
             }
             const r = await this.plugin.backend.slackDisconnect(id);
@@ -8214,8 +9238,8 @@ var AskMyuSettingTab = class extends import_obsidian14.PluginSettingTab {
         const url = r?.data?.authorization_url;
         if (r?.ok && url) {
           window.open(url, "_blank");
-          notifyStatus("Finish on Slack\u2019s screen; the workspace shows here when you reopen settings.");
-        } else notifyError("Could not start the Slack connect.");
+          notifyStatus("Finish on Slack\u2019s screen. The workspace appears here when you reopen settings.");
+        } else notifyError("Could not start connecting to Slack.");
       }));
     }
     const zulipWhy = loadFailure(zulip);
@@ -8231,7 +9255,7 @@ var AskMyuSettingTab = class extends import_obsidian14.PluginSettingTab {
           b.setButtonText("Disconnect").onClick(async () => {
             if (!armed) {
               armed = true;
-              b.setButtonText("Disconnect \u2014 sure?").setDestructive();
+              b.setButtonText("Disconnect? Click again to confirm").setDestructive();
               return;
             }
             const r = await this.plugin.backend.zulipDisconnect(id);
@@ -8255,7 +9279,7 @@ var AskMyuSettingTab = class extends import_obsidian14.PluginSettingTab {
     const res = provider === "google" ? await this.plugin.backend.googleOAuthStatus().catch(() => null) : await this.plugin.backend.microsoftOAuthStatus().catch(() => null);
     const why = loadFailure(res);
     if (why) {
-      row.setDesc(`Couldn't check whether it is connected \u2014 ${why}`);
+      row.setDesc(`Couldn't check whether it is connected. ${why}`);
       row.addButton(
         (b) => b.setButtonText("Retry").onClick(() => {
           row.controlEl.empty();
@@ -8272,7 +9296,7 @@ var AskMyuSettingTab = class extends import_obsidian14.PluginSettingTab {
     if (connected) {
       const who = creds.length === 1 ? `as ${creds[0]?.email ?? "one account"}` : `\u2014 ${creds.length} accounts`;
       row.setDesc(
-        split2 ? `Connected ${who}. Read-only \u2014 Myu prepares and never sends. Each piece below is its own permission.` : `Connected ${who}. Myu is reading calendar and mail from it.`
+        split2 ? `Connected ${who}. Read-only: Myu never sends anything. Each item below has its own permission.` : `Connected ${who}. Myu is reading calendar and mail from it.`
       );
       for (const c of creds) {
         if (!c.credential_id) continue;
@@ -8291,7 +9315,7 @@ var AskMyuSettingTab = class extends import_obsidian14.PluginSettingTab {
           b.setButtonText("Disconnect").onClick(async () => {
             if (!armed) {
               armed = true;
-              b.setButtonText("Disconnect \u2014 sure?").setDestructive();
+              b.setButtonText("Disconnect? Click again to confirm").setDestructive();
               return;
             }
             const r = provider === "google" ? await this.plugin.backend.googleOAuthDisconnect(id) : await this.plugin.backend.microsoftOAuthDisconnect(id);
@@ -8313,15 +9337,15 @@ var AskMyuSettingTab = class extends import_obsidian14.PluginSettingTab {
   }
   renderServiceRows(host, provider, services, split2, credentialId) {
     const rows = [
-      ["Calendar", "calendar", "calendar", "Not yet \u2014 who you are meeting, and the homework before each one"],
-      ["Mail", "mail", "history", "Not yet \u2014 where you left off with people, what you owe and are owed"],
-      [provider === "google" ? "Meeting notes (Drive)" : "Meeting notes", "meeting_notes", "history", "Not yet \u2014 decisions and commitments from your meeting notes, automatically"]
+      ["Calendar", "calendar", "calendar", "Not connected. Connect it to see who you are meeting and get prepared before each meeting"],
+      ["Mail", "mail", "history", "Not connected. Connect it so Myu knows where you left off with people and what is still outstanding"],
+      [provider === "google" ? "Meeting notes (Drive)" : "Meeting notes", "meeting_notes", "history", "Not connected. Connect it to pull decisions and commitments from your meeting notes"]
     ];
     let anyNot = false;
     for (const [name, key, scope, notYet] of rows) {
       const svc = services[key];
       const state = svc?.state ?? "not_yet";
-      const sub = state === "connected" ? [svc?.last_sync_at ? `synced ${ago(svc.last_sync_at)}` : "connected", key === "calendar" && svc?.events_synced != null ? `${svc.events_synced} events` : "", key === "mail" && svc?.understood_back_to ? `understood back to ${svc.understood_back_to}${svc.still_reading ? " \xB7 still reading" : ""}` : ""].filter(Boolean).join(" \xB7 ") : state === "needs_reconnect" ? "Stopped syncing \u2014 the permission expired" : notYet;
+      const sub = state === "connected" ? [svc?.last_sync_at ? `synced ${ago(svc.last_sync_at)}` : "connected", key === "calendar" && svc?.events_synced != null ? `${svc.events_synced} events` : "", key === "mail" && svc?.understood_back_to ? `read back to ${svc.understood_back_to}${svc.still_reading ? " \xB7 still reading" : ""}` : ""].filter(Boolean).join(" \xB7 ") : state === "needs_reconnect" ? "Stopped syncing. The permission expired" : notYet;
       const r = new import_obsidian14.Setting(host).setName(name).setDesc(sub);
       if (state === "connected" && key === "mail" && credentialId) {
         const current = svc?.oldest_date_limit ?? "";
@@ -8343,13 +9367,13 @@ var AskMyuSettingTab = class extends import_obsidian14.PluginSettingTab {
         if (split2) r.addButton((b) => b.setButtonText(key === "calendar" ? "Connect calendar" : key === "mail" ? "Connect mail" : "Connect notes").onClick(() => void this.startOAuth(provider, { scopeSet: scope })));
       }
     }
-    if (anyNot && split2) new import_obsidian14.Setting(host).setName("Connect everything").setDesc("One consent for calendar, mail and meeting notes.").addButton((b) => b.setButtonText("Connect everything\u2026").onClick(() => void this.startOAuth(provider, { scopeSet: "all" })));
+    if (anyNot && split2) new import_obsidian14.Setting(host).setName("Connect everything").setDesc("One permission for calendar, mail and meeting notes.").addButton((b) => b.setButtonText("Connect everything\u2026").onClick(() => void this.startOAuth(provider, { scopeSet: "all" })));
   }
   async startOAuth(provider, opts = {}) {
     const init = provider === "google" ? await this.plugin.backend.googleOAuthInit(opts) : await this.plugin.backend.microsoftOAuthInit(opts);
     const url = init.data?.auth_url;
     if (init.ok && url) window.open(url, "_blank");
-    else notifyStatus("Could not start the connect \u2014 check the connection.");
+    else notifyStatus("Could not start connecting. Check your connection.");
   }
   /** Async section: fetch pending transfer requests, render approve/deny rows. */
   async renderPendingApprovals(root) {
@@ -8358,7 +9382,7 @@ var AskMyuSettingTab = class extends import_obsidian14.PluginSettingTab {
     const pending = res?.data?.pending_requests ?? [];
     if (pending.length === 0) return;
     for (const request of pending) {
-      const row = new import_obsidian14.Setting(host).setName(`\u201C${request.device_name ?? "A device"}\u201D wants to join`).setDesc("Type the 4-digit code shown on that device to let it in \u2014 its own key custody, revocable any time.");
+      const row = new import_obsidian14.Setting(host).setName(`\u201C${request.device_name ?? "A device"}\u201D wants to join`).setDesc("Type the 4-digit code shown on that device to approve it. You can remove it from your devices at any time.");
       row.addButton(
         (b) => b.setButtonText("Deny").onClick(async () => {
           await this.plugin.backend.denyDeviceTransfer(request.request_id);
@@ -8369,7 +9393,7 @@ var AskMyuSettingTab = class extends import_obsidian14.PluginSettingTab {
       row.addButton(
         (b) => b.setButtonText("Approve\u2026").setCta().onClick(() => {
           if (!request.public_key) {
-            notifyStatus("This request is from an older app version \u2014 approve it from the web instead.");
+            notifyStatus("This request is from an older app version. Approve it from the web instead.");
             return;
           }
           new ApproveDeviceModal(
@@ -8417,7 +9441,7 @@ var AskMyuSettingTab = class extends import_obsidian14.PluginSettingTab {
       again();
     };
     if (standing.state === "absent") {
-      row.setDesc(`Myu\u2019s own look on Myu\u2019s panes only \u2014 cyan and amber, a serif voice. Optional: your theme stays yours. Installs as a CSS snippet at ${path}, yours to edit, turn off, or remove.`);
+      row.setDesc(`An optional style for Myu\u2019s panes only: cyan and amber, with a serif font for Myu\u2019s words. Your theme is not changed. Installs as a CSS snippet at ${path}, which you can edit, turn off, or remove.`);
       linkToFile();
       row.addButton((b) => b.setButtonText("Install the look").setCta().onClick(() => void install()));
       return;
@@ -8433,7 +9457,7 @@ var AskMyuSettingTab = class extends import_obsidian14.PluginSettingTab {
       row.addButton(
         (b) => b.setButtonText("Remove").setDestructive().onClick(async () => {
           await installer.remove().catch(() => void 0);
-          notifyStatus("The Myu look is gone. Install it again any time.");
+          notifyStatus("The Myu look is removed. Install it again any time.");
           again();
         })
       );
@@ -8455,11 +9479,11 @@ var AskMyuSettingTab = class extends import_obsidian14.PluginSettingTab {
       (b) => b.setButtonText("Remove").setDestructive().onClick(
         () => new PersonActionConfirmModal(
           this.app,
-          { title: "Remove the look?", body: `${path} is deleted. It may carry edits of yours.`, cta: "Remove it" },
+          { title: "Remove the look?", body: `${path} is deleted. It may contain edits you made.`, cta: "Remove it" },
           async (yes) => {
             if (!yes) return;
             await installer.remove().catch(() => void 0);
-            notifyStatus("The Myu look is gone.");
+            notifyStatus("The Myu look is removed.");
             again();
           }
         ).open()
@@ -8476,18 +9500,18 @@ var AskMyuSettingTab = class extends import_obsidian14.PluginSettingTab {
     build.createSpan({ cls: "myu-status-label", text: "build" });
     build.createSpan({ cls: "myu-status-value", text: BUILD_STAMP });
     if (this.plugin.unlock.genesisPending) {
-      new import_obsidian14.Setting(root).setName("Finish creating your keys").setDesc("Your account is waiting on the twelve-word step \u2014 two minutes, then everything works.").addButton(
+      new import_obsidian14.Setting(root).setName("Finish creating your keys").setDesc("Your account still needs the twelve-word recovery step. It takes two minutes, then everything works.").addButton(
         (b) => b.setButtonText("Finish setup\u2026").setCta().onClick(() => this.plugin.openGenesisCeremony())
       );
     }
     if (state === "unlocked" && this.plugin.onboardingComplete === false) {
       new import_obsidian14.Setting(root).setName("Tell Myu who you are").setDesc(
-        "Your notes teach Myu what you did \u2014 not where you are right now. Two minutes: your arc and your current moment. Briefs get sharper the same day."
+        "Your notes tell Myu what you did, not where you are right now. Two minutes: your career so far and your current situation. Briefs get better the same day."
       ).addButton((b) => b.setButtonText("Start\u2026").setCta().onClick(() => this.plugin.openOnboarding(() => this.rerender())));
     }
     if (state !== "disconnected" && this.plugin.settings.recovery_pending) {
       new import_obsidian14.Setting(root).setName("Add a recovery method").setDesc(
-        "Your key lives on this device. Until a recovery method exists, losing it means bringing your vault in again. Twelve words, two minutes, right here \u2014 or a passkey on the web."
+        "Your key is stored on this device only. Without a recovery method, losing this device means starting over. Set up a twelve-word phrase here in two minutes, or a passkey on the web."
       ).addButton(
         (b) => b.setButtonText("Set up recovery phrase\u2026").setCta().onClick(() => new SetupRecoveryModal(this.app, this.plugin, () => this.rerender()).open())
       ).addButton(
@@ -8512,7 +9536,7 @@ var AskMyuSettingTab = class extends import_obsidian14.PluginSettingTab {
       void this.renderOtherSources(sourcesHost);
     }
     if (state !== "disconnected") {
-      new import_obsidian14.Setting(root).setName("Offers in conversation").setDesc("Myu occasionally offers to connect a calendar, mail or notes right in the conversation. Off: it stops asking; everything stays connectable here.").addToggle(
+      new import_obsidian14.Setting(root).setName("Offers in conversation").setDesc("Myu sometimes offers to connect a calendar, mail or notes in the conversation. Off: it stops asking. You can still connect everything here.").addToggle(
         (t) => t.setValue(this.plugin.onboardingScripts?.offer_all_stopped !== true).onChange(async (v) => {
           const accountId = this.plugin.settings.account_id;
           if (!accountId) return;
@@ -8522,7 +9546,7 @@ var AskMyuSettingTab = class extends import_obsidian14.PluginSettingTab {
       );
       const consented = this.plugin.settings.background_work_consented;
       new import_obsidian14.Setting(root).setName("Work between visits").setDesc(
-        consented === true ? "On \u2014 Myu can keep working on your notes while you are away (compositions, extraction, cards). Turning off stops it immediately." : "Off \u2014 Myu works on your notes only while you are here. Turn on and Myu can prepare things between visits."
+        consented === true ? "On. Myu can keep working on your notes while you are away (canvases, reading notes, cards). Turning this off stops it immediately." : "Off. Myu works on your notes only while you are here. Turn on and Myu can prepare things between visits."
       ).addToggle(
         (tg) => tg.setValue(consented === true).onChange(async (v) => {
           const res = await this.plugin.backend.setBackgroundWorkConsent(v);
@@ -8531,14 +9555,14 @@ var AskMyuSettingTab = class extends import_obsidian14.PluginSettingTab {
             await this.plugin.saveSettings();
             this.rerender();
           } else {
-            notifyStatus("Could not change it \u2014 check the connection.");
+            notifyStatus("Could not change it. Check your connection.");
             tg.setValue(consented === true);
           }
         })
       );
     }
     if (state === "disconnected") {
-      new import_obsidian14.Setting(root).setName("New to Myu?").setDesc("Create your account right here \u2014 no website first. Vault-only start is fine.").addButton(
+      new import_obsidian14.Setting(root).setName("New to Myu?").setDesc("Create your account right here. No website needed.").addButton(
         (b) => b.setButtonText("Create my account\u2026").setCta().onClick(() => new SignupModal(this.app, this.plugin, () => this.rerender()).open())
       );
       let pasted = "";
@@ -8560,7 +9584,7 @@ var AskMyuSettingTab = class extends import_obsidian14.PluginSettingTab {
     if (state === "blocked" && !this.plugin.unlock.genesisPending) {
       const inFlight = this.plugin.unlock.approval;
       new import_obsidian14.Setting(root).setName("Approve this device").setDesc(
-        inFlight?.status === "pending" ? `Waiting for approval \u2014 enter ${inFlight.code} on a device that is already signed in. It finishes on its own; the Today pane shows the same code.` : "Your notes are encrypted with a key only your devices hold. Approve this one from a device you are already signed in on, or use your recovery phrase."
+        inFlight?.status === "pending" ? `Waiting for approval. Enter ${inFlight.code} on a device that is already signed in. It finishes on its own; the Today pane shows the same code.` : "Your notes are encrypted with a key that only your devices have. Approve this device from one where you are already signed in, or use your recovery phrase."
       ).addButton(
         (b) => b.setButtonText("Approve").setCta().onClick(() => {
           new ApprovalModal(this.app, this.plugin.unlock, () => this.rerender()).open();
@@ -8569,7 +9593,7 @@ var AskMyuSettingTab = class extends import_obsidian14.PluginSettingTab {
     }
     if (state === "relocked") {
       new import_obsidian14.Setting(root).setName("Locked until this device reaches askMyu").setDesc(
-        "This vault holds your notes encrypted; the key that opens them is on the server, fetched fresh each time Obsidian starts. Capture is paused until then."
+        "Your notes here are encrypted. The key that opens them is fetched from the server each time Obsidian starts. Sharing notes is paused until then."
       ).addButton(
         (b) => b.setButtonText("Try now").onClick(async () => {
           await this.plugin.unlock.unlockFromServerKEK();
@@ -8577,10 +9601,10 @@ var AskMyuSettingTab = class extends import_obsidian14.PluginSettingTab {
         })
       );
     }
-    new import_obsidian14.Setting(root).setName("Disconnect").setDesc("Clears this vault's token and its encrypted key material. Your notes are untouched.").addButton(
+    new import_obsidian14.Setting(root).setName("Disconnect").setDesc("Removes this vault's sign-in token and its encrypted key. Your notes are not touched.").addButton(
       (b) => b.setDestructive().setButtonText("Disconnect").onClick(async () => {
         await this.plugin.unlock.disconnect();
-        notifyStatus("askMyu disconnected. Nothing further leaves this vault.");
+        notifyStatus("askMyu disconnected. Nothing more is sent from this vault.");
         this.rerender();
       })
     );
@@ -8592,7 +9616,7 @@ var AskMyuSettingTab = class extends import_obsidian14.PluginSettingTab {
     if (nothingShared) {
       root.createEl("p", {
         cls: "myu-prose myu-quiet",
-        text: "Nothing. No folder or tag is shared, so the vault watcher is not running and no note has been read."
+        text: "Nothing is shared. No folder or tag is selected, so Myu is not watching this vault and has not read any note."
       });
     } else {
       const list2 = root.createDiv({ cls: "myu-list" });
@@ -8604,7 +9628,7 @@ var AskMyuSettingTab = class extends import_obsidian14.PluginSettingTab {
       }
       root.createEl("p", {
         cls: "myu-prose myu-quiet",
-        text: "Any note with `myu: false` in its frontmatter is skipped, wherever it lives."
+        text: "Any note with `myu: false` in its frontmatter is skipped, whichever folder it is in."
       });
     }
     new import_obsidian14.Setting(root).setName("Choose what to share").setDesc("Pick the folders and tags Myu may read. Nothing outside them is ever opened.").addButton(
@@ -8618,9 +9642,9 @@ var AskMyuSettingTab = class extends import_obsidian14.PluginSettingTab {
     const folders = this.plugin.settings.meeting_folders;
     root.createEl("p", {
       cls: "myu-prose myu-quiet",
-      text: folders.length === 0 ? "Off. No meeting-notes folder is shared; notes can still opt in one at a time with `myu-meeting: true`." : `Sharing: ${folders.map((f) => `${f}/`).join(", ")} \u2014 processed server-side like every meeting source.`
+      text: folders.length === 0 ? "Off. No meeting-notes folder is shared. A single note can still be shared by adding `myu-meeting: true` to it." : `Sharing: ${folders.map((f) => `${f}/`).join(", ")}. Processed on the server like every other meeting source.`
     });
-    new import_obsidian14.Setting(root).setName("Choose meeting-notes folders").setDesc("A separate consent from journal capture \u2014 meeting notes are a different kind of data.").addButton(
+    new import_obsidian14.Setting(root).setName("Choose meeting-notes folders").setDesc("A separate choice from your journal. Meeting notes are a different kind of data.").addButton(
       (b) => b.setButtonText(folders.length === 0 ? "Choose folders" : "Change").onClick(() => {
         new MeetingConsentModal(this.app, this.plugin, () => this.rerender()).open();
       })
@@ -8631,9 +9655,9 @@ var AskMyuSettingTab = class extends import_obsidian14.PluginSettingTab {
     const enabled = this.plugin.settings.weekly_review_enabled;
     root.createEl("p", {
       cls: "myu-prose myu-quiet",
-      text: enabled ? "Myu adds a short section to your weekly note when you ask it to. It is the only thing Myu writes into your vault." : "Off. Myu writes nothing into your vault \u2014 its reads live in panes that close."
+      text: enabled ? "Myu adds a short section to your weekly note when you ask it to." : "Off. Myu does not write a weekly review to your vault."
     });
-    new import_obsidian14.Setting(root).setName("Write a weekly review into my weekly note").setDesc("Movement across your relationships, as counts. Opt-in, and never automatic.").addToggle(
+    new import_obsidian14.Setting(root).setName("Write a weekly review into my weekly note").setDesc("What changed across your relationships, as counts. Only when you turn it on, and never automatic.").addToggle(
       (t) => t.setValue(enabled).onChange((wanted) => {
         if (!wanted) {
           void (async () => {
@@ -8647,24 +9671,24 @@ var AskMyuSettingTab = class extends import_obsidian14.PluginSettingTab {
       })
     );
     if (enabled) {
-      new import_obsidian14.Setting(root).setName("Write this week's now").addButton((b) => b.setButtonText("Write it").onClick(() => void this.plugin.writeWeeklyReview()));
+      new import_obsidian14.Setting(root).setName("Write this week's review now").addButton((b) => b.setButtonText("Write it").onClick(() => void this.plugin.writeWeeklyReview()));
     }
   }
   // ── advanced ──────────────────────────────────────────────────────────────
   renderAdvanced(root) {
     new import_obsidian14.Setting(root).setName("Your data").setHeading();
-    new import_obsidian14.Setting(root).setName("Export everything into the vault").setDesc("Every surface, every conversation, every canvas that still exists \u2014 as files under Myu/, with a receipt (Myu/Export.md) that says what landed and what did not.").addButton((b) => b.setButtonText("Export now").onClick(() => void this.plugin.exportEverything()));
-    new import_obsidian14.Setting(root).setName("Request my data archive").setDesc("Everything the server holds, as one encrypted zip: link by email, passphrase shown once. The part no vault file can carry \u2014 account, devices, keys.").addButton((b) => b.setButtonText("Request\u2026").onClick(() => this.plugin.openDataExport()));
-    new import_obsidian14.Setting(root).setName("Remove everything Myu wrote").setDesc("Every page, note, table and canvas Myu wrote goes to the trash (recoverable). Your own notes are untouched. Turn writing off above first if you want it to stay gone.").addButton((b) => b.setButtonText("Remove\u2026").setDestructive().onClick(() => this.plugin.removeEverythingMyuWrote()));
-    new import_obsidian14.Setting(root).setName("If you uninstall").setDesc("Everything under Myu/ stays exactly as it is and needs no plugin to open. Notes stop refreshing; nothing breaks. The plugin\u2019s own data.json (your token and wrapped key) goes with it, so no custody is left on this device. Your account is untouched \u2014 delete it above, or on the web.");
+    new import_obsidian14.Setting(root).setName("Export everything into the vault").setDesc("Everything Myu knows, every conversation, and every canvas that still exists, as files under Myu/, with a summary (Myu/Export.md) that says what was saved and what was not.").addButton((b) => b.setButtonText("Export now").onClick(() => void this.plugin.exportEverything()));
+    new import_obsidian14.Setting(root).setName("Request my data archive").setDesc("Everything the server stores about you, as one encrypted zip: a link by email, with a passphrase shown once. Includes what vault files cannot hold: account, devices, keys.").addButton((b) => b.setButtonText("Request\u2026").onClick(() => this.plugin.openDataExport()));
+    new import_obsidian14.Setting(root).setName("Remove everything Myu wrote").setDesc("Every page, note, table and canvas Myu wrote goes to the trash (you can recover them). Your own notes are not touched. Turn writing off above first if you want it to stay gone.").addButton((b) => b.setButtonText("Remove\u2026").setDestructive().onClick(() => this.plugin.removeEverythingMyuWrote()));
+    new import_obsidian14.Setting(root).setName("If you uninstall").setDesc("Everything under Myu/ stays exactly as it is and opens without the plugin. Notes stop updating; nothing breaks. The plugin\u2019s own data.json (your sign-in token and encrypted key) is removed with it, so no key is left on this device. Your account is not touched. Delete it above, or on the web.");
     const lookHost = root.createDiv();
     void this.renderLook(lookHost);
-    new import_obsidian14.Setting(root).setName("Subscription").setDesc("Billing lives with the payment provider \u2014 one door, on the web.").addButton(
+    new import_obsidian14.Setting(root).setName("Subscription").setDesc("Billing is managed on the web.").addButton(
       (b) => b.setButtonText("Manage on the web").onClick(() => {
         window.open(`${this.webOrigin()}/settings/subscription`, "_blank");
       })
     );
-    new import_obsidian14.Setting(root).setName("Quiet period before capture").setDesc("Seconds of no editing before a note is sent. Notes are living documents; short values capture half-sentences.").addText(
+    new import_obsidian14.Setting(root).setName("Quiet period before capture").setDesc("How many seconds without edits before a note is sent. Short values can send half-finished sentences.").addText(
       (t) => t.setValue(String(this.plugin.settings.quiescence_seconds)).onChange(async (v) => {
         const parsed = Number.parseInt(v, 10);
         if (Number.isFinite(parsed) && parsed >= 10) {
@@ -8675,7 +9699,7 @@ var AskMyuSettingTab = class extends import_obsidian14.PluginSettingTab {
     );
     const queued = this.plugin.settings.queue.length;
     if (queued > 0) {
-      new import_obsidian14.Setting(root).setName("Waiting to send").setDesc(`${queued} encrypted ${queued === 1 ? "note is" : "notes are"} queued \u2014 they go out when this device reconnects.`).addButton(
+      new import_obsidian14.Setting(root).setName("Waiting to send").setDesc(`${queued} encrypted ${queued === 1 ? "note is" : "notes are"} queued. They are sent when this device reconnects.`).addButton(
         (b) => b.setButtonText("Send now").onClick(async () => {
           await this.plugin.capture.flushQueue();
           this.rerender();
@@ -8707,12 +9731,12 @@ function describeState(state, detail) {
     case "unlocked":
       return "connected";
     case "relocked":
-      return "locked \u2014 needs the network to reopen";
+      return "locked. Needs a network connection to reopen";
     case "blocked":
-      if (detail === "genesis_pending") return "one step left \u2014 the twelve words";
-      if (detail === "genesis_failed") return "key setup didn\u2019t finish \u2014 try again";
-      if (detail === "existing_account") return "welcome back \u2014 approve this device or use your phrase";
-      return detail === "device_revoked" ? "this device was removed \u2014 approve it again" : "needs approval";
+      if (detail === "genesis_pending") return "one step left: the twelve-word recovery phrase";
+      if (detail === "genesis_failed") return "key setup did not finish. Try again";
+      if (detail === "existing_account") return "welcome back. Approve this device or use your recovery phrase";
+      return detail === "device_revoked" ? "this device was removed. Approve it again" : "needs approval";
     default:
       return "not connected";
   }
@@ -8754,8 +9778,8 @@ function surveyLine(people) {
   const most = top.length === 1 ? top[0] : `${top.slice(0, -1).join(", ")} and ${top[top.length - 1]}`;
   return `Your links already name ${people.length} ${people.length === 1 ? "person" : "people"}; you write most about ${most}.`;
 }
-function backfillEstimate(count) {
-  const seconds = Math.ceil(count * 0.25);
+function backfillEstimate(count2) {
+  const seconds = Math.ceil(count2 * 0.25);
   if (seconds < 60) return "under a minute";
   const minutes = Math.ceil(seconds / 60);
   return `about ${minutes} ${minutes === 1 ? "minute" : "minutes"}`;
@@ -8881,11 +9905,1551 @@ function replaceSection(contents, section) {
 `;
 }
 
+// src/pickMany.ts
+var SINGLE_CHOICE_IDS = ["no_one", "not_sure"];
+var PICK_MANY_WORDS = {
+  typedPlaceholder: "Type their name",
+  typedHint: "Type their name, then send.",
+  pickFirst: "Pick someone first, or type a name."
+};
+function isPickMany(line) {
+  return line?.select === "many";
+}
+function typedChoiceOf(line) {
+  if (!line?.typed) return null;
+  return (line.choices ?? []).find((c) => c.id === line.typed) ?? null;
+}
+function typedHint(line) {
+  return line?.typed_hint?.trim() || PICK_MANY_WORDS.typedPlaceholder;
+}
+function pickManyParts(line) {
+  const choices = line?.choices ?? [];
+  const typed = typedChoiceOf(line);
+  const rest = choices.filter((c) => c.id !== typed?.id);
+  if (!isPickMany(line)) return { picks: [], send: null, typed, singles: rest };
+  const sendId = line?.send ?? "done";
+  const send = rest.find((c) => c.id === sendId) ?? null;
+  const singles = rest.filter((c) => c.id !== sendId && (SINGLE_CHOICE_IDS.includes(c.id) || !!c.readback?.trim()));
+  const picks = rest.filter((c) => c.id !== sendId && !singles.includes(c));
+  return { picks, send, typed, singles };
+}
+function canSendPicks(picked, typedText) {
+  return picked.length > 0 || !!typedText?.trim();
+}
+function pickManyAnswer(line, picked, typedText) {
+  const parts = pickManyParts(line);
+  const ids = parts.picks.map((c) => c.id).filter((id) => picked.includes(id));
+  const text = typedText?.trim();
+  return { choice_id: parts.send?.id ?? line.send ?? "done", choice_ids: ids, ...text ? { text } : {} };
+}
+function typedAnswer(line, text) {
+  const typed = typedChoiceOf(line);
+  const t = text.trim();
+  return typed && t ? { choice_id: typed.id, text: t } : null;
+}
+function togglePick(picked, id) {
+  return picked.includes(id) ? picked.filter((x) => x !== id) : [...picked, id];
+}
+
+// src/spaceModeLogic.ts
+var SPACE_MODE_WORDS = {
+  /** From the moment a typed message leaves until Myu's answer lands. */
+  reading: "Myu is reading\u2026",
+  /** The quiet lead over the hints under the box. */
+  hintsLead: "If it helps:",
+  /** The quiet line above the history that loads what came before this retro. */
+  earlier: "Earlier \u25B8",
+  /** Said in its place once there is nothing before it. */
+  nothingEarlier: "Nothing earlier.",
+  /** The box when the backend sends no placeholder. */
+  placeholder: "Write to Myu\u2026",
+  /** A team post written by the team's Myu. */
+  teamMyu: "Myu, for the team",
+  unlock: "Unlock this space",
+  unlocking: "Unlocking\u2026",
+  unlockFailed: "This space could not be unlocked here. Sign out and sign in again, then come back.",
+  /** A session that may only read (403 `scope_required`). */
+  agentRefused: "This session can read the retro's state, not act in it."
+};
+var LOCKED_TEXT = "[Encrypted content - unlock required]";
+function isLockedText(text) {
+  return text === LOCKED_TEXT || text === "locked";
+}
+function readbackText(res) {
+  if (!res) return null;
+  const eff = res.effects?.find((e) => e.type === "readback" && typeof e.text === "string");
+  const effText = typeof eff?.text === "string" ? eff.text : void 0;
+  const text = effText ?? res.readback?.text ?? null;
+  const filled = (t) => !!t && !/\{[a-z_]+\}/.test(t);
+  return filled(text) ? text : filled(res.readback?.text) ? res.readback?.text ?? null : text;
+}
+function isSpaceMode(conv) {
+  return conv?.mode === "space";
+}
+function layoutChoices(choices) {
+  const all = choices ?? [];
+  if (all.length >= 4) {
+    const leave = all.find((c) => c.id === "leave");
+    if (leave) return { choices: all.filter((c) => c !== leave), quiet: leave };
+  }
+  return { choices: all, quiet: null };
+}
+function isAsk(line) {
+  return !!line && line.ask_kind !== "tell" && line.ask_kind !== "wait";
+}
+function spaceModeView(conv, focusLineId) {
+  const history = conv.history ?? [];
+  const waiting = (l) => l?.state === "held";
+  const candidates = (conv.open_lines ?? []).filter((l) => isAsk(l) && !waiting(l));
+  const backendOpen = isAsk(conv.open_line) && !waiting(conv.open_line) ? conv.open_line : void 0;
+  if (backendOpen && !candidates.some((l) => l.line_id === backendOpen.line_id)) candidates.push(backendOpen);
+  let open = focusLineId ? candidates.find((l) => l.line_id === focusLineId) : void 0;
+  if (!open && candidates.length > 0) {
+    const made = (l) => {
+      const at = new Date(l.created_at ?? "").getTime();
+      return Number.isNaN(at) ? 0 : at;
+    };
+    open = candidates.reduce((best, l) => made(l) > made(best) ? l : best, backendOpen ?? candidates[0]);
+  }
+  let askTurnIndex = -1;
+  if (open) {
+    for (let i = history.length - 1; i >= 0; i--) {
+      const t = history[i];
+      if (t && t.from === "myu" && !t.readback && !t.answered && t.line_id === open.line_id) {
+        askTurnIndex = i;
+        break;
+      }
+    }
+  }
+  const turns = askTurnIndex >= 0 ? history.filter((_, i) => i !== askTurnIndex) : history.slice();
+  const laid = layoutChoices(open?.choices);
+  const ask = open ? { line_id: open.line_id, line: open, text: open.text, choices: laid.choices, quiet: laid.quiet } : null;
+  const stage = conv.stage?.first_line?.trim() || null;
+  const status = stage && !(ask && ask.text.trim() === stage) ? stage : null;
+  return {
+    box: {
+      placeholder: conv.input?.placeholder?.trim() || SPACE_MODE_WORDS.placeholder,
+      hints: (conv.input?.hints ?? []).filter((h) => typeof h === "string" && h.trim().length > 0),
+      hintsLead: SPACE_MODE_WORDS.hintsLead
+    },
+    status,
+    turns,
+    ask,
+    earlier: !!conv.history_from && conv.has_earlier !== false
+  };
+}
+function readbackParts(text) {
+  if (!text) return null;
+  const lines = text.split("\n").map((l) => l.trim()).filter((l) => l.length > 0);
+  const isBullet = (l) => l.startsWith("\u2022");
+  const firstBullet = lines.findIndex(isBullet);
+  if (firstBullet < 0) return null;
+  let lastBullet = firstBullet;
+  for (let i = firstBullet; i < lines.length; i++) if (isBullet(lines[i] ?? "")) lastBullet = i;
+  const after = lines.slice(lastBullet + 1);
+  return {
+    lead: lines.slice(0, firstBullet),
+    bullets: lines.slice(firstBullet, lastBullet + 1).filter(isBullet).map((l) => l.replace(/^•\s*/, "")),
+    closing: after.slice(0, 1),
+    warning: after.slice(1)
+  };
+}
+function effectSteps(effects) {
+  const out = [];
+  for (const e of effects ?? []) {
+    if (e.type === "open_journal") out.push({ do: "open_journal", text: typeof e.text === "string" ? e.text : "" });
+    else if (e.type === "consent_needed" && e.provider === "space") out.push({ do: "unlock_space" });
+    else if (e.type === "open_onboarding" && (e.step === "linkedin" || e.step === "resume")) out.push({ do: "open_onboarding", step: e.step });
+  }
+  return out;
+}
+function afterTyped(res) {
+  if (!res) return [{ do: "reload" }];
+  if (res.error === "scope_required" || res.scope_required) return [{ do: "refused_scope", text: SPACE_MODE_WORDS.agentRefused }];
+  const steps = [];
+  const handled = res.space_mode?.handled;
+  const content = typeof res.content === "string" ? res.content.trim() : "";
+  if (handled === "confirm" || handled === "clarify") {
+    steps.push({ do: "reload", focus_line_id: res.space_mode?.line_id });
+  } else {
+    if (content) steps.push({ do: "say", text: content });
+    steps.push({ do: "reload" });
+  }
+  steps.push(...effectSteps(res.effects));
+  return steps;
+}
+function afterChoice(choiceId, effects) {
+  const steps = [...effectSteps(effects)];
+  if (choiceId === "change") steps.push({ do: "focus_box" });
+  return steps;
+}
+function spaceDoorWords(mine) {
+  const asking = { kind: "asking", text: "Myu is asking what you want to bring up \u25B8", door: true };
+  const share = { kind: "share", text: "Ready to share with the team \u25B8", door: true };
+  const shared = { kind: "shared", text: "Shared. Myu will tell you when the questions are up.", door: false };
+  const ask = { kind: "ask", text: "Ask Myu about this space \u25B8", door: true };
+  if (!mine) return ask;
+  switch (mine.step) {
+    case "open":
+    case "words":
+    case "suggestions":
+    case "capacity":
+      return asking;
+    case "readback":
+      return share;
+    case "shared":
+      return shared;
+    case "list":
+      return ask;
+    default:
+      break;
+  }
+  if (mine.share_line_open) return share;
+  if (mine.shared) return shared;
+  if ((mine.open_asks ?? 0) > 0) return asking;
+  return ask;
+}
+
+// src/lineAnswers.ts
+var LINE_ANSWER_WORDS = {
+  yes: "Yes",
+  no: "No",
+  /** The two quiet ways out (mirror of shared `WAY_OUT_WORDS`). */
+  later: "Not now",
+  never: "Don't ask again",
+  change: "Change",
+  /** A calendar provider's consent opened in the browser (the hold). */
+  consentOpened: "Allow calendar access once, then choose Hold again.",
+  /** invite_ready with a file beside the provider's compose. */
+  inviteReady: "The calendar invite is ready. Using Apple Calendar or another app?",
+  inviteFile: "Download the invite file",
+  /** invite_ready with no file: the compose opened in the browser. */
+  inviteReadyNoFile: "The invite is ready in your calendar. Send it from there and Myu will record the commitment.",
+  /** invite_sent: Myu sent it; the event's own page. */
+  openEvent: "Open it in your calendar",
+  failed: "Could not send this to Myu. Try again in a moment.",
+  offline: "You're offline. Try again when you're back online.",
+  /** R19: a message Myu wrote for the person to send themselves (mirror of shared `DRAFT_WORDS`). */
+  copy: "Copy",
+  copied: "Copied",
+  copyFailed: "It did not copy. Select the message and copy it yourself.",
+  draftLink: "Open the link"
+};
+var known = (choices) => (choices ?? []).filter((c) => typeof c?.id === "string" && c.id.length > 0).map((c) => ({ id: c.id, label: c.label?.trim() || c.id, ...c.readback?.trim() ? { readback: c.readback } : {} }));
+function answersInConversation(line) {
+  if (!isAsk(line)) return false;
+  return isPickMany(line) || typedChoiceOf({ typed: line.typed, choices: known(line.choices) }) !== null;
+}
+function carriesWayOut(line) {
+  return (line.choices ?? []).some((c) => {
+    const label = (c?.label ?? "").trim().toLowerCase();
+    return c?.id === "not_now" || c?.id === "later" || c?.id === "leave" || label === "not now" || label === "leave it";
+  });
+}
+function quietWaysOut(line) {
+  if (carriesWayOut(line)) return [];
+  return [
+    { id: "later", label: LINE_ANSWER_WORDS.later, answer: { later: true }, quiet: true },
+    { id: "dismiss", label: LINE_ANSWER_WORDS.never, answer: { dismiss: true }, quiet: true }
+  ];
+}
+function lineButtons(line) {
+  switch (line.ask_kind) {
+    case "tell":
+    case "wait":
+      return [];
+    case "assume":
+      return line.assumed?.changeable ? [{ id: "change", label: LINE_ANSWER_WORDS.change, answer: { change: true }, quiet: false }] : [];
+    case "yes_no": {
+      const offered = known(line.choices);
+      const base = offered.length ? offered : [{ id: "yes", label: LINE_ANSWER_WORDS.yes }, { id: "no", label: LINE_ANSWER_WORDS.no }];
+      return [
+        ...base.map(
+          (c) => c.id === "yes" || c.id === "no" ? { id: c.id, label: c.label, answer: { yes: c.id === "yes" }, quiet: false } : { id: c.id, label: c.label, answer: { choice_id: c.id }, quiet: false }
+        ),
+        ...quietWaysOut(line)
+      ];
+    }
+    default: {
+      if (!isAsk(line)) return [];
+      if (answersInConversation(line)) return [];
+      const laid = layoutChoices(known(line.choices));
+      if (laid.choices.length === 0 && !laid.quiet) return [];
+      const out = laid.choices.map((c) => ({ id: c.id, label: c.label, answer: { choice_id: c.id }, quiet: false }));
+      if (laid.quiet) out.push({ id: laid.quiet.id, label: laid.quiet.label, answer: { choice_id: laid.quiet.id }, quiet: true });
+      out.push(...quietWaysOut(line));
+      return out;
+    }
+  }
+}
+function tapAnswers(line) {
+  return lineButtons(line).some((b) => !b.quiet);
+}
+function showEstimate(line) {
+  if (!line.est?.trim() || !isAsk(line)) return false;
+  return tapAnswers(line) || !/\btap\b/i.test(line.est);
+}
+function meetingQuestionAt(line, rowOccurrence) {
+  if (!line || !isAsk(line)) return null;
+  const meeting = (line.subjects ?? []).find((s2) => s2.type === "meeting");
+  const onMeeting = line.conversation?.subject_type === "meeting" || !line.conversation?.subject_type && !!meeting;
+  if (!onMeeting) return null;
+  const occurrenceKey = line.conversation?.occurrence_key || meeting?.occurrence_key || rowOccurrence;
+  return occurrenceKey ? { occurrenceKey } : {};
+}
+var trimBase = (apiBase) => apiBase.replace(/\/+$/, "");
+function lineEffectActions(effects, apiBase) {
+  const base = trimBase(apiBase);
+  const out = [];
+  for (const e of effects ?? []) {
+    if (e.type === "consent_needed") {
+      if (e.provider !== "google" && e.provider !== "microsoft" || typeof e.init_path !== "string" || !e.init_path.startsWith("/")) continue;
+      const scope = typeof e.scope_set === "string" ? e.scope_set : "";
+      const back = typeof e.return_to === "string" ? e.return_to : "";
+      out.push({ kind: "open", url: `${base}${e.init_path}?scope_set=${encodeURIComponent(scope)}&return_to=${encodeURIComponent(back)}` });
+      out.push({ kind: "note", text: LINE_ANSWER_WORDS.consentOpened });
+    } else if (e.type === "invite_ready") {
+      if (typeof e.handoff_url === "string" && /^https?:\/\//.test(e.handoff_url)) out.push({ kind: "open", url: e.handoff_url });
+      if (typeof e.ics_url === "string" && e.ics_url.startsWith("/")) {
+        out.push({ kind: "link", link: { text: LINE_ANSWER_WORDS.inviteReady, label: LINE_ANSWER_WORDS.inviteFile, url: `${base}${e.ics_url}` } });
+      } else {
+        out.push({ kind: "note", text: LINE_ANSWER_WORDS.inviteReadyNoFile });
+      }
+    } else if (e.type === "invite_sent") {
+      if (typeof e.event_link === "string" && /^https?:\/\//.test(e.event_link)) out.push({ kind: "link", link: { label: LINE_ANSWER_WORDS.openEvent, url: e.event_link } });
+    } else if (e.type === "draft_ready") {
+      if (typeof e.text !== "string" || !e.text.trim()) continue;
+      const url = typeof e.url === "string" && /^https?:\/\//.test(e.url) ? e.url : void 0;
+      const label = typeof e.url_label === "string" && e.url_label.trim() ? e.url_label.trim() : LINE_ANSWER_WORDS.draftLink;
+      out.push({ kind: "draft", draft: { text: e.text, url, label, to_name: typeof e.to_name === "string" ? e.to_name : void 0 } });
+    } else if (e.type === "open_conversation") {
+      if (typeof e.subject_type !== "string" || !e.subject_type || typeof e.subject_id !== "string" || !e.subject_id) continue;
+      const occurrence = typeof e.occurrence_key === "string" && e.occurrence_key ? { occurrence_key: e.occurrence_key } : {};
+      out.push({ kind: "conversation", conversation: { subject_type: e.subject_type, subject_id: e.subject_id, ...occurrence } });
+    }
+  }
+  return out;
+}
+function lineClosed(res) {
+  return res?.status === 409 && res.error === "line_closed";
+}
+async function pressLineButton(deps, line, button) {
+  const res = await deps.answer(line.line_id, button.answer).catch(() => null);
+  if (lineClosed(res)) return { ui: {}, settled: false, closed: true, open: [] };
+  if (!res?.ok || !res.data) {
+    return { ui: { note: res?.error === "offline" ? LINE_ANSWER_WORDS.offline : LINE_ANSWER_WORDS.failed }, settled: false, open: [] };
+  }
+  const actions = lineEffectActions(res.data.effects, deps.apiBase);
+  const open = actions.flatMap((a) => a.kind === "open" ? [a.url] : []);
+  const notes = actions.flatMap((a) => a.kind === "note" ? [a.text] : []);
+  const links = actions.flatMap((a) => a.kind === "link" ? [a.link] : []);
+  const draft = actions.find((a) => a.kind === "draft")?.draft;
+  const conversation = actions.find((a) => a.kind === "conversation")?.conversation;
+  const also = conversation ? { conversation } : {};
+  const said = readbackText(res.data);
+  if (res.data.line_open) return { ui: { note: said, notes, links }, settled: false, open, ...also };
+  return { ui: { said: said ?? "", good: !button.answer.dismiss && !button.answer.later, notes, links, ...draft ? { draft } : {} }, settled: true, open, ...also };
+}
+
+// src/debriefPane.ts
+var DEBRIEF_PANE_WORDS = {
+  /** The kind, as a person reads it (shared `DEBRIEF_WORDS.nameCap`). */
+  nameCap: "Interview debrief",
+  /** The door on Today, into the space's conversation. */
+  door: "Ask Myu about this interview debrief \u25B8",
+  /** "Add a CV": the file goes on the candidate's page on the web, or through the terminal. */
+  cvWhere: (name, link) => `To add ${name.trim() || "the candidate"}'s CV, open this interview debrief on the web: ${link} Or, in the terminal: myu debrief "${name.trim() || "name"}" --cv <file>`,
+  /** "Paste a LinkedIn link", when the backend says nothing back. */
+  linkedinHere: "Paste the LinkedIn link in the box below, and send it.",
+  /** A session that may only read (403 `scope_required`). */
+  agentRefused: "This session can read this interview debrief, not act in it."
+};
+function isDebriefConversation(conv) {
+  return conv?.stage?.work === "debrief";
+}
+function isDebriefSpace(space) {
+  return space?.work === "debrief";
+}
+function debriefSmall(memberCount) {
+  const members = typeof memberCount === "number" && memberCount > 0 ? `${memberCount} ${memberCount === 1 ? "member" : "members"}` : "";
+  return [DEBRIEF_PANE_WORDS.nameCap, members].filter(Boolean).join(" \xB7 ");
+}
+function debriefEffectSteps(effects) {
+  const out = [];
+  for (const e of effects ?? []) {
+    if (e.type === "attach_cv") out.push({ do: "attach_cv" });
+    else if (e.type === "paste_linkedin") out.push({ do: "paste_linkedin" });
+  }
+  return out;
+}
+
+// src/spaceConversation.ts
+function spaceDoorLabel(mine) {
+  return spaceDoorWords(mine ?? null).text;
+}
+function spaceIdsOf(lines) {
+  const ids = /* @__PURE__ */ new Set();
+  for (const l of lines) {
+    const type = l.conversation?.subject_type ?? l.subjects?.[0]?.type;
+    const id = l.conversation?.subject_id ?? l.subjects?.[0]?.id;
+    if (type === "space" && id) ids.add(id);
+  }
+  return [...ids];
+}
+var LOCKED_TURN_WORDS = "Unlock to read this.";
+var MEETING_CONVERSATION_WORDS = {
+  title: "This meeting",
+  unlock: "Unlock this conversation",
+  unlockFailed: "This conversation could not be unlocked here. Sign out and sign in again, then come back.",
+  agentRefused: "This session can read this conversation, not write in it."
+};
+function hasConversationDoor(_type) {
+  return true;
+}
+function conversationSubjectType(type) {
+  return type === "space" || type === "meeting" || type === "account" || type === "person" || type === "company" ? type : null;
+}
+var LINE_CONVERSATION_WORDS = {
+  nothingOpen: "Nothing to answer here right now.",
+  removeName: "Remove this name"
+};
+var WEB_POINTER_WORDS = {
+  /** "Add my LinkedIn" / "Upload a resume" (`open_onboarding`): that step is on the web's Home page. */
+  profileOnWeb: "To add your LinkedIn profile or a resume, open your Home page on the web:",
+  /** "Connect my calendar" (the calendar's consent): a browser page, where the person is signed in. */
+  calendarOnWeb: "To let Myu see your calendar, open this link in a browser where you are signed in:"
+};
+var PRODUCTION_API_BASE = "https://myu.askmyu.com/api";
+function webOrigin(apiBase) {
+  const base = apiBase ?? PRODUCTION_API_BASE;
+  try {
+    return new URL(base).origin;
+  } catch {
+    return base.replace(/\/api\/?$/, "");
+  }
+}
+function lineAsAsk(l) {
+  const choices = (l.choices ?? []).filter((c) => typeof c?.id === "string" && c.id.length > 0).map((c) => ({ id: c.id, label: c.label?.trim() || c.id, ...c.readback?.trim() ? { readback: c.readback } : {} }));
+  return {
+    line_id: l.line_id,
+    text: l.text ?? "",
+    choices,
+    ...l.select ? { select: l.select } : {},
+    ...l.send ? { send: l.send } : {},
+    ...l.typed ? { typed: l.typed } : {},
+    subjects: l.subjects,
+    needs_you: l.needs_you,
+    ask_kind: l.ask_kind,
+    state: l.state,
+    conversation: l.conversation,
+    provenance: l.provenance,
+    created_at: l.created_at
+  };
+}
+function lineAbout(l, type, id) {
+  const open = !l.state || l.state === "released" || l.state === "queued";
+  if (!open) return false;
+  const c = l.conversation;
+  if (c?.subject_type && c.subject_id) return c.subject_type === type && c.subject_id === id;
+  const s2 = l.subjects?.[0];
+  return s2?.type === type && s2?.id === id;
+}
+function shown(text) {
+  return isLockedText(text) ? LOCKED_TURN_WORDS : text;
+}
+function screenTurn(t) {
+  const text = shown(t.text);
+  const pasted = t.from === "you" ? readPastedBlocks(t.pasted_blocks) : [];
+  return { key: t.turn_id, from: t.from, text, parts: readbackParts(text), ...pasted.length ? { pasted } : {} };
+}
+var pastedChars = (t) => (t.pasted_blocks ?? []).reduce((sum, b) => sum + (typeof b?.text === "string" ? b.text.length : 0), 0);
+function carries(t, l) {
+  if (t.from !== l.from) return false;
+  const text = t.text.trim();
+  if (text === l.text.trim() && pastedChars(t) === pastedChars(l)) return true;
+  if (!l.pasted_blocks?.length || t.pasted_blocks?.length) return false;
+  return text === l.text.trim() || text === [l.text, ...l.pasted_blocks.map((b) => b.text)].filter((s2) => s2.trim()).join("\n\n").trim();
+}
+var SpaceConversation = class {
+  /**
+   * `spaceId` is the subject's id: the space's, for a meeting the calendar event's, for the account's own
+   * question the account's.
+   */
+  constructor(spaceId, label, deps, subject = { type: "space" }) {
+    this.spaceId = spaceId;
+    this.label = label;
+    this.deps = deps;
+    this.subject = subject;
+    this.conv = null;
+    this.loading = true;
+    this.failed = null;
+    /** Turns shown at once and replaced by the next read: the person's own, and Myu's reply. */
+    this.local = [];
+    this.reading = false;
+    this.answering = false;
+    this.note = null;
+    this.needsUnlock = false;
+    this.unlocking = false;
+    this.unlockFailed = false;
+    this.earlier = "idle";
+    /** The ask a typed message came back with: shown while it is open, even when an older ask is open too. */
+    this.focusLineId = null;
+    this.seq = 0;
+    /** The pane focuses the box after the next paint, then clears this. */
+    this.wantsFocus = false;
+    this.draft = "";
+    /**
+     * Pasted text in the box, as chips (2026-10-06), and the last paste that became one while Undo can put it back.
+     * Changing these does not repaint the pane (`deps.onChange`): the pane redraws its chip row in place, so the box
+     * keeps its caret and focus.
+     */
+    this.pasted = [];
+    this.undo = null;
+    /** Words under the chips until the next change: the lost words after a send. */
+    this.pastedNote = null;
+    /**
+     * Picking several, and a typed name (2026-10-03): the picks on a `select: "many"` ask, the typed choice the box is
+     * answering ("Someone else"), and — on a pick-many ask — the typed name waiting to go with the picks. All three
+     * belong to the ask they were made on (`pickLineId`); a new ask starts clean.
+     */
+    this.picked = [];
+    this.typedMode = null;
+    this.typedKept = null;
+    this.pickLineId = null;
+    this.withEarlier = false;
+    /** The account's own conversation was refused at the door (a server from before 2026-10-03): the lines list is read. */
+    this.noDoor = false;
+    /** The last answer's status from the door (0 when nothing came back). */
+    this.doorStatus = 0;
+    this.showNothingEarlier = false;
+  }
+  /** A meeting's own conversation (not a space's). */
+  get isMeeting() {
+    return this.subject.type === "meeting";
+  }
+  /** A space's own conversation (not a meeting's, not a line's), whether or not the server has said space mode yet. */
+  get isSpaceSubject() {
+    return this.subject.type === "space";
+  }
+  /** The conversation has a door (`GET /myu/conversation`) behind it — unless the server refused the account's own. */
+  get hasDoor() {
+    return hasConversationDoor(this.subject.type) && !this.noDoor;
+  }
+  /** A line's own conversation (the account's, a person's, a company's): not a space's, not a meeting's. */
+  get isLineConversation() {
+    return this.subject.type !== "space" && this.subject.type !== "meeting";
+  }
+  /** True once the conversation was read at all (so "not space mode" is known, not assumed). */
+  get opened() {
+    return this.conv !== null;
+  }
+  /** True when the backend says this conversation is space mode (an older stack may not). */
+  get isSpace() {
+    return isSpaceMode(this.conv);
+  }
+  /** An interview debrief's conversation (2026-09-29): no retro page beside it, and its CV and LinkedIn asks say where. */
+  get isDebrief() {
+    return isDebriefConversation(this.conv);
+  }
+  /** Read the conversation. False when it could not be read, or a space's is not space mode. */
+  async open() {
+    this.loading = true;
+    this.deps.onChange();
+    const ok2 = await this.read();
+    this.loading = false;
+    this.wantsFocus = true;
+    this.deps.onChange();
+    return ok2 && (this.isSpace || this.subject.type !== "space");
+  }
+  async read() {
+    let ok2 = this.hasDoor ? await this.readDoor() : await this.readLines();
+    if (!ok2 && this.subject.type === "account" && !this.noDoor && this.doorStatus === 400) {
+      this.noDoor = true;
+      ok2 = await this.readLines();
+    }
+    const askId = this.conv ? spaceModeView(this.conv, this.focusLineId).ask?.line_id ?? null : null;
+    if (askId !== this.pickLineId) {
+      this.pickLineId = askId;
+      this.picked = [];
+      this.typedMode = null;
+      this.typedKept = null;
+    }
+    return ok2;
+  }
+  async readDoor() {
+    const occurrence = this.subject.occurrenceKey ? { occurrenceKey: this.subject.occurrenceKey } : null;
+    const opts = occurrence || this.withEarlier ? { ...occurrence, ...this.withEarlier ? { earlier: true } : {} } : void 0;
+    const res = await this.deps.backend.getSubjectConversation(this.subject.type, this.spaceId, opts).catch(() => null);
+    this.doorStatus = res?.status ?? 0;
+    if (!res?.ok || !res.data) {
+      this.failed = res?.error === "offline" ? "You're offline. Try again when you're back online." : "Could not open this conversation. Try again in a moment.";
+      return false;
+    }
+    this.failed = null;
+    this.conv = res.data;
+    const recent = res.data.history.slice(-8);
+    this.local = this.local.filter((l) => !recent.some((t) => carries(t, l)));
+    return true;
+  }
+  /**
+   * No door (the account's own question on a server from before 2026-10-03): the asks are the open lines about this
+   * subject on the lines list, in its order. There is no history; what Myu said back is said here, in place (`say`).
+   */
+  async readLines() {
+    const res = await this.deps.backend.getMyuLines("today").catch(() => null);
+    if (!res?.ok || !res.data) {
+      this.failed = res?.error === "offline" ? "You're offline. Try again when you're back online." : "Could not open this conversation. Try again in a moment.";
+      return false;
+    }
+    this.failed = null;
+    const mine = (res.data.lines ?? []).filter((l) => lineAbout(l, this.subject.type, this.spaceId) && isAsk(l)).map(lineAsAsk);
+    const label = mine[0]?.subjects?.[0]?.label ?? this.conv?.subject?.label;
+    this.conv = {
+      success: true,
+      conversation_id: mine[0]?.conversation?.conversation_id ?? this.conv?.conversation_id ?? "",
+      subject: { type: this.subject.type, id: this.spaceId, ...label ? { label } : {} },
+      history: [],
+      open_line: mine[0],
+      open_lines: mine
+    };
+    return true;
+  }
+  /** A line changed on the server (a new ask, a readback): read again, quietly. */
+  async refresh() {
+    if (this.reading || this.answering || this.loading) return;
+    await this.read();
+    this.deps.onChange();
+  }
+  /** "Earlier ▸": what came before this retro. When the same turns come back, say so. */
+  async loadEarlier() {
+    if (this.earlier !== "idle" || !this.conv) return;
+    const before = this.conv.history.length;
+    this.earlier = "loading";
+    this.withEarlier = true;
+    this.deps.onChange();
+    const ok2 = await this.read();
+    const grew = ok2 && (this.conv?.history.length ?? 0) > before;
+    this.earlier = "none";
+    this.showNothingEarlier = !grew;
+    this.deps.onChange();
+  }
+  /** The ask that is SHOWN (the backend's `open_line` may be an older one underneath). */
+  currentAsk() {
+    return this.conv ? spaceModeView(this.conv, this.focusLineId).ask : null;
+  }
+  /** True while the box takes a typed name ("Someone else"): a paste there stays inline. */
+  get typing() {
+    return !!this.typedMode;
+  }
+  /** A paste or a drop became a chip; `value` is the box's text without the selection the paste replaced. */
+  addPasted(text, source, at, value) {
+    const out = chipAdded(this.pasted, text, source, at);
+    this.pasted = out.chips;
+    this.undo = out.undo;
+    this.pastedNote = null;
+    this.draft = value;
+    return out.chip;
+  }
+  /** Undo: the last conversion back inline in the box's text. The new text and the caret, or null when there is none. */
+  undoPasted(value) {
+    const undo = this.undo;
+    this.undo = null;
+    const out = undo ? undoChip(value, this.pasted, undo) : null;
+    if (!out) return null;
+    this.pasted = out.chips;
+    this.draft = out.value;
+    return { value: out.value, caret: out.caret };
+  }
+  removePasted(id) {
+    this.pasted = this.pasted.filter((c) => c.id !== id);
+    this.undo = null;
+    this.pastedNote = null;
+  }
+  /** Put back: the chip's text at the end of the typed words. The new text, or null when it would go over the limit. */
+  putBackPasted(id) {
+    const chip = this.pasted.find((c) => c.id === id);
+    if (!chip || !canPutBack(this.draft, chip).ok) return null;
+    this.draft = putBackText(this.draft, chip);
+    this.pasted = this.pasted.filter((c) => c !== chip);
+    this.undo = null;
+    this.pastedNote = null;
+    return this.draft;
+  }
+  /** The box was typed in: the hint (and the words after a send) go. True when there was one to take away. */
+  typedInBox() {
+    if (!this.undo && !this.pastedNote) return false;
+    this.undo = null;
+    this.pastedNote = null;
+    return true;
+  }
+  /** Typed words: the person's turn shows at once; "Myu is reading…" until the answer lands. */
+  async send(text) {
+    const content = text.trim();
+    if (this.typedMode) {
+      const ask = this.currentAsk();
+      const parts = pickManyParts(ask?.line);
+      if (!content || !ask || !parts.typed || this.answering || this.reading) return;
+      this.draft = "";
+      if (isPickMany(ask.line)) {
+        this.typedKept = content;
+        this.typedMode = null;
+        this.deps.onChange();
+        return;
+      }
+      const body = typedAnswer(ask.line, content);
+      if (!body) return;
+      this.typedMode = null;
+      await this.answer(ask, parts.typed.id, body);
+      return;
+    }
+    const pasted = [...this.pasted];
+    if (!content && pasted.length === 0 || this.reading || !this.conv?.conversation_id) return;
+    if (pastedBlocksProblem(pasted)) return;
+    this.draft = "";
+    this.pasted = [];
+    this.undo = null;
+    this.pastedNote = null;
+    this.note = null;
+    const mine = { turn_id: `local-${++this.seq}`, from: "you", at: new Date((this.deps.now ?? Date.now)()).toISOString(), text: content, ...pasted.length ? { pasted_blocks: pasted } : {} };
+    this.local.push(mine);
+    this.reading = true;
+    this.deps.onChange();
+    const res = await this.deps.backend.addSubjectTurn(this.conv.conversation_id, content, pasted).catch(() => null);
+    this.reading = false;
+    if (!res) {
+      this.giveBack(text, pasted, mine);
+      this.say("Could not send this to Myu. Try again in a moment.");
+      this.deps.onChange();
+      return;
+    }
+    if (!res.ok) this.giveBack(text, pasted, mine);
+    if (!res.ok && res.error !== "scope_required" && res.data?.error !== "scope_required") {
+      this.say(res.error === "offline" ? "You're offline. This message was not sent. Try again when you're back online." : "Could not send this to Myu. Try again in a moment.");
+      this.deps.onChange();
+      return;
+    }
+    if (res.ok && pastedTextLost(pasted.length, res.data)) {
+      delete mine.pasted_blocks;
+      this.pasted = chipsBack(pasted, this.pasted);
+      this.undo = null;
+      this.pastedNote = PASTE_WORDS.lost;
+    }
+    await this.run(afterTyped(res.data ?? { error: res.error ?? void 0 }));
+    this.deps.onChange();
+  }
+  /**
+   * A send that did not go: the box gets its words and chips back, and the turn shown for it goes (it would show
+   * twice), unless something new is in the box already; then the turn stays, so nothing is lost.
+   */
+  giveBack(text, pasted, mine) {
+    if (this.draft.trim() || this.pasted.length > 0) return;
+    this.local = this.local.filter((t) => t !== mine);
+    this.draft = text;
+    this.pasted = pasted;
+    this.wantsFocus = true;
+  }
+  /**
+   * A button on the ask that is up. On a pick-many ask (2026-10-03) the send choice ("That's everyone") sends the
+   * picks together with the kept name, and does nothing until there is something to send; the typed choice
+   * ("Someone else") turns the box into the name's box instead of answering. The two quiet ways out a line's own
+   * conversation adds (Not now, Don't ask again) answer as on a row.
+   */
+  async choose(choiceId) {
+    const ask = this.currentAsk();
+    if (!ask || this.answering || this.reading) return;
+    const parts = pickManyParts(ask.line);
+    if (parts.typed && choiceId === parts.typed.id) {
+      this.typedMode = this.typedMode === choiceId ? null : choiceId;
+      if (this.typedMode) this.wantsFocus = true;
+      this.deps.onChange();
+      return;
+    }
+    if (parts.send && choiceId === parts.send.id) {
+      if (!canSendPicks(this.picked, this.typedKept)) return;
+      await this.answer(ask, choiceId, pickManyAnswer(ask.line, this.picked, this.typedKept));
+      return;
+    }
+    const own = (ask.line.choices ?? []).some((c) => c.id === choiceId);
+    const body = own ? { choice_id: choiceId } : choiceId === "later" ? { later: true } : choiceId === "dismiss" ? { dismiss: true } : { choice_id: choiceId };
+    await this.answer(ask, choiceId, body);
+  }
+  /** Toggle one pick on a pick-many ask. */
+  pick(choiceId) {
+    const ask = this.currentAsk();
+    if (!ask || this.answering || this.reading || !pickManyParts(ask.line).picks.some((c) => c.id === choiceId)) return;
+    this.picked = togglePick(this.picked, choiceId);
+    this.deps.onChange();
+  }
+  /** The typed name kept beside the picks: let it go. */
+  dropTyped() {
+    if (!this.typedKept) return;
+    this.typedKept = null;
+    this.deps.onChange();
+  }
+  async answer(ask, choiceId, body) {
+    this.answering = true;
+    this.note = null;
+    this.deps.onChange();
+    const res = await this.deps.backend.answerMyuLine(ask.line_id, body).catch(() => null);
+    this.answering = false;
+    if (lineClosed(res)) {
+      await this.read();
+      this.deps.onChange();
+      return;
+    }
+    if (!res?.ok || !res.data) {
+      this.note = res?.error === "offline" ? "You're offline. Try again when you're back online." : "Could not send this to Myu. Try again in a moment.";
+      this.deps.onChange();
+      return;
+    }
+    const said = readbackText(res.data);
+    if (res.data.line_open) this.note = said;
+    else if (!this.hasDoor && said?.trim()) this.say(said);
+    await this.read();
+    if (!res.data.line_open) this.deps.onAnswered?.();
+    await this.run(afterChoice(choiceId, res.data.effects));
+    for (const e of res.data.effects ?? []) {
+      if (e.type !== "consent_needed" || e.provider !== "google" && e.provider !== "microsoft") continue;
+      if (typeof e.init_path !== "string" || !e.init_path.startsWith("/")) continue;
+      const q = new URLSearchParams({
+        scope_set: typeof e.scope_set === "string" ? e.scope_set : "calendar",
+        return_to: typeof e.return_to === "string" ? e.return_to : "dashboard"
+      });
+      this.note = `${WEB_POINTER_WORDS.calendarOnWeb} ${(this.deps.apiBase ?? PRODUCTION_API_BASE).replace(/\/+$/, "")}${e.init_path}?${q.toString()}`;
+    }
+    if (this.isMeeting) {
+      for (const e of res.data.effects ?? []) {
+        if (e.type === "invite_ready" && typeof e.handoff_url === "string" && /^https?:\/\//i.test(e.handoff_url)) this.deps.openPage?.(e.handoff_url);
+        if (e.type === "open_conversation" && typeof e.subject_type === "string" && typeof e.subject_id === "string") {
+          const occurrence = typeof e.occurrence_key === "string" && e.occurrence_key ? e.occurrence_key : void 0;
+          const here = e.subject_type === this.subject.type && e.subject_id === this.spaceId && (!occurrence || occurrence === this.subject.occurrenceKey);
+          if (!here) this.deps.openConversation?.({ subject_type: e.subject_type, subject_id: e.subject_id, ...occurrence ? { occurrence_key: occurrence } : {} });
+        }
+      }
+    }
+    for (const step of debriefEffectSteps(res.data.effects)) {
+      if (step.do === "attach_cv") {
+        this.note = DEBRIEF_PANE_WORDS.cvWhere(this.screenTitle(), `${webOrigin(this.deps.apiBase)}/dashboard/spaces/${encodeURIComponent(this.spaceId)}`);
+      } else {
+        this.note = this.note?.trim() ? this.note : DEBRIEF_PANE_WORDS.linkedinHere;
+        this.wantsFocus = true;
+      }
+    }
+    this.deps.onChange();
+  }
+  /** The unlock, in place: the session's key goes back, then the conversation is read again. */
+  async unlockSpace() {
+    if (this.unlocking) return;
+    this.unlocking = true;
+    this.unlockFailed = false;
+    this.deps.onChange();
+    const ok2 = await this.deps.unlock().catch(() => false);
+    this.unlocking = false;
+    if (ok2) {
+      this.needsUnlock = false;
+      this.note = null;
+      await this.read();
+    } else {
+      this.unlockFailed = true;
+    }
+    this.deps.onChange();
+  }
+  say(text) {
+    this.local.push({ turn_id: `local-${++this.seq}`, from: "myu", at: new Date((this.deps.now ?? Date.now)()).toISOString(), text });
+  }
+  async run(steps) {
+    for (const step of steps) {
+      switch (step.do) {
+        case "say":
+          this.say(step.text);
+          break;
+        case "reload":
+          this.focusLineId = step.focus_line_id ?? null;
+          await this.read();
+          break;
+        case "open_journal":
+          this.deps.openJournal(step.text);
+          break;
+        case "unlock_space":
+          this.needsUnlock = true;
+          break;
+        case "open_onboarding":
+          this.note = `${WEB_POINTER_WORDS.profileOnWeb} ${webOrigin(this.deps.apiBase)}/dashboard`;
+          break;
+        case "focus_box":
+          this.wantsFocus = true;
+          break;
+        case "refused_scope":
+          this.say(this.isDebrief ? DEBRIEF_PANE_WORDS.agentRefused : this.isMeeting ? MEETING_CONVERSATION_WORDS.agentRefused : step.text);
+          break;
+      }
+    }
+  }
+  screenTitle() {
+    return this.conv?.subject?.label || this.label || (this.isMeeting ? MEETING_CONVERSATION_WORDS.title : this.isLineConversation ? "This conversation" : "This space");
+  }
+  /** The one ask as the pane draws it: its choices, or — pick-many — its toggles, send and singles; the typed choice; the ways out. */
+  screenAsk(ask) {
+    const askText = shown(ask.text);
+    const line = ask.line;
+    const parts = pickManyParts(line);
+    const many = isPickMany(line);
+    return {
+      line_id: ask.line_id,
+      text: askText,
+      parts: readbackParts(askText),
+      choices: many ? [] : ask.choices,
+      quiet: ask.quiet,
+      picks: many ? {
+        picks: parts.picks.map((c) => ({ id: c.id, label: c.label, on: this.picked.includes(c.id) })),
+        send: parts.send ? { id: parts.send.id, label: parts.send.label, ready: canSendPicks(this.picked, this.typedKept) } : null,
+        singles: parts.singles
+      } : null,
+      typed: parts.typed ? { id: parts.typed.id, label: parts.typed.label, on: this.typedMode === parts.typed.id } : null,
+      kept: many ? this.typedKept : null,
+      // A space's asks carry their own ways out; a meeting's were made with theirs (Skip, Nothing).
+      waysOut: this.isLineConversation ? quietWaysOut(line).map((b) => ({ id: b.id, label: b.label })) : []
+    };
+  }
+  /** Everything the pane shows, as plain data. */
+  screen() {
+    const conv = this.conv;
+    const title = this.screenTitle();
+    const kind = this.subject.type;
+    const typing = !!this.typedMode;
+    const box = { show: this.hasDoor || typing, placeholder: typing ? typedHint(null) : SPACE_MODE_WORDS.placeholder, hints: [], hintsLead: SPACE_MODE_WORDS.hintsLead, draft: this.draft };
+    if (!conv) {
+      return { kind, title, loading: this.loading, failed: this.failed, earlier: null, turns: [], status: null, ask: null, after: this.local.map(screenTurn), note: this.note, empty: null, reading: this.reading, answering: this.answering, unlock: { show: false, busy: false, failed: false }, box };
+    }
+    const view = spaceModeView(conv, this.focusLineId);
+    const anyLocked = conv.history.some((t) => isLockedText(t.text)) || !!view.ask && isLockedText(view.ask.text);
+    return {
+      kind,
+      title,
+      loading: this.loading,
+      failed: this.failed,
+      earlier: this.earlier === "loading" ? "loading" : this.earlier === "none" ? this.showNothingEarlier ? "none" : null : view.earlier ? "link" : null,
+      turns: view.turns.map(screenTurn),
+      status: view.status,
+      ask: view.ask ? this.screenAsk(view.ask) : null,
+      after: this.local.map(screenTurn),
+      note: this.note,
+      empty: !this.hasDoor && !view.ask && !this.loading && this.local.length === 0 ? LINE_CONVERSATION_WORDS.nothingOpen : null,
+      reading: this.reading,
+      answering: this.answering,
+      unlock: { show: this.needsUnlock || anyLocked, busy: this.unlocking, failed: this.unlockFailed },
+      box: { ...box, placeholder: typing ? typedHint(view.ask?.line) : view.box.placeholder, hints: typing ? [] : view.box.hints, hintsLead: view.box.hintsLead }
+    };
+  }
+};
+
+// src/spaceRetro.ts
+var SPACE_RETRO_WORDS = {
+  /** The door on a space's row in Today. */
+  show: "See the team's retro \u25B8",
+  /** The two tabs of a space's pane. */
+  tabConversation: "Your conversation",
+  tabRetro: "The team's retro",
+  loading: "Opening the team's retro",
+  failed: "The team's retro could not be read. Try again in a moment.",
+  /** Nothing is running and nothing has been held. */
+  none: "No retro is running in this space right now.",
+  /** R20: the fold under the top; it holds the backend's `how_it_works`. Shared `RETRO_LEAN_WORDS.howThisWorks`. */
+  howThisWorks: "How this works",
+  results: "Since the last retro",
+  question: "Question",
+  from: "from",
+  replies: "What people wrote",
+  noReplies: "Nobody has written here yet.",
+  summary: "The summary the team chose",
+  tasks: "Tasks",
+  /** Under the page: this page is for reading; the answers go in the conversation. */
+  howToAct: "To vote, accept a summary or take a task, answer Myu in your conversation.",
+  goToConversation: "Go to your conversation \u25B8",
+  /** Locked words arrive as a placeholder; say what to do instead of showing it. */
+  locked: "Unlock this space to read what the team wrote."
+};
+function spaceKindWords(kind) {
+  switch (kind) {
+    case "small_team":
+      return "Small team";
+    case "cofounder":
+      return "Cofounders";
+    case "dyad":
+      return "Two people";
+    case "remote_team":
+      return "Remote team";
+    case "family":
+      return "Family";
+    case "matrix":
+      return "Several teams";
+    default: {
+      const words = (kind ?? "").replace(/_/g, " ").trim();
+      return words ? words.charAt(0).toUpperCase() + words.slice(1) : "";
+    }
+  }
+}
+var SPACE_ROWS = 3;
+function foldSpaceRows(rows, needsYou, limit = SPACE_ROWS) {
+  const ordered = [...rows.filter(needsYou), ...rows.filter((r) => !needsYou(r))];
+  const keep = Math.max(limit, rows.filter(needsYou).length);
+  return { shown: ordered.slice(0, keep), folded: ordered.slice(keep) };
+}
+function spaceIdOf(line) {
+  if (line.conversation?.subject_type === "space" && line.conversation.subject_id) return line.conversation.subject_id;
+  const s2 = (line.subjects ?? []).find((x) => x.type === "space" && x.id);
+  return s2?.id ?? null;
+}
+function isSpaceLine(line) {
+  return spaceIdOf(line) !== null;
+}
+function spaceRows(spaces, lines) {
+  const bySpace = /* @__PURE__ */ new Map();
+  const labels = /* @__PURE__ */ new Map();
+  for (const l of lines) {
+    const id = spaceIdOf(l);
+    if (!id) continue;
+    const at = bySpace.get(id);
+    if (at) at.push(l);
+    else bySpace.set(id, [l]);
+    const label = (l.subjects ?? []).find((x) => x.type === "space" && x.id === id)?.label?.trim();
+    if (label && !labels.has(id)) labels.set(id, label);
+  }
+  const rows = [];
+  const seen = /* @__PURE__ */ new Set();
+  for (const s2 of spaces ?? []) {
+    if (!s2?.space_id || seen.has(s2.space_id)) continue;
+    if (s2.status && s2.status !== "active" && s2.status !== "forming") continue;
+    seen.add(s2.space_id);
+    const members = typeof s2.member_count === "number" && s2.member_count > 0 ? `${s2.member_count} ${s2.member_count === 1 ? "member" : "members"}` : "";
+    const debrief = isDebriefSpace(s2);
+    rows.push({
+      space_id: s2.space_id,
+      name: s2.name?.trim() || labels.get(s2.space_id) || "A space",
+      small: debrief ? debriefSmall(s2.member_count) : [s2.kind_label?.trim() || spaceKindWords(s2.kind), members].filter(Boolean).join(" \xB7 "),
+      lines: bySpace.get(s2.space_id) ?? [],
+      ...debrief ? { debrief: true } : {}
+    });
+  }
+  if (spaces) return rows;
+  for (const [id, ls] of bySpace) rows.push({ space_id: id, name: labels.get(id) || "A space", small: "", lines: ls });
+  return rows;
+}
+var STATE_PHRASE = {
+  offered: "offered",
+  declined: "not this time",
+  preparing: "getting ready",
+  agenda: "questions going up",
+  discussing: "open for answers",
+  soaking: "questions agreed",
+  asking: "handing out tasks",
+  closed: "finished",
+  archived: "archived"
+};
+function retroTopLine(retro) {
+  const parts = [`Retro ${retro.number}`, STATE_PHRASE[retro.state] ?? String(retro.state)];
+  if (retro.state === "preparing") {
+    const pushed = retro.reflects?.pushed ?? 0;
+    const members = retro.reflects?.members ?? 0;
+    if (members > 0) parts.push(`${pushed} of ${members} shared`);
+    if (retro.agenda_when?.trim()) parts.push(`questions up ${retro.agenda_when.trim()}`);
+  }
+  if (retro.state === "discussing" && retro.open_until?.trim()) parts.push(`until ${retro.open_until.trim()}`);
+  return parts.join(" \xB7 ");
+}
+function howThisWorksKey(accountId) {
+  return `myu-retro-how-seen:${accountId}`;
+}
+function outcomeWords(outcome) {
+  switch (outcome) {
+    case "kept":
+      return "done";
+    case "renegotiated":
+      return "given more time";
+    case "dropped":
+      return "dropped";
+    case "unowned":
+      return "nobody took it";
+    case "open":
+      return "still open";
+    default:
+      return (outcome ?? "").replace(/_/g, " ");
+  }
+}
+function taskStanding(td) {
+  const said = td.status_text?.trim();
+  if (said) return said;
+  if (td.state === "unowned") return "nobody took it";
+  if (td.state === "asking") return "Myu is asking someone to take it";
+  if (td.state === "drafted" || !td.state) return "not handed out yet";
+  const who = td.owner?.name ? `taken by ${td.owner.name}` : "taken";
+  const status = td.status && td.status !== "on_track" ? ` \xB7 ${td.status.replace(/_/g, " ")}` : "";
+  return `${who}${status}`;
+}
+function questionTitle(t, index) {
+  const n = typeof t.position === "number" && t.position > 0 ? t.position : index + 1;
+  return `${SPACE_RETRO_WORDS.question} ${n}`;
+}
+function questionFrom(t) {
+  return t.author_kind === "team_myu" ? SPACE_MODE_WORDS.teamMyu : t.author?.name?.trim() || "";
+}
+function retroView(read) {
+  const threads = [...read?.threads ?? []].sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+  const retro = read?.retro;
+  const top = retro?.number && retro.state ? retroTopLine({ number: retro.number, state: retro.state, reflects: retro.reflects, agenda_when: retro.agenda_when, open_until: retro.open_until }) : null;
+  const how = read?.how_it_works?.trim() || null;
+  const resultItems = (read?.pinned?.results?.items ?? []).map((it) => {
+    const what = (it.what ?? "").trim();
+    if (!what) return "";
+    const who = it.owner?.name ? ` (${it.owner.name})` : "";
+    const outcome = outcomeWords(it.outcome);
+    return outcome ? `${what}${who} \u2014 ${outcome}` : `${what}${who}`;
+  }).filter((x) => x.length > 0);
+  const resultsText = (read?.pinned?.results?.text ?? "").trim();
+  const results = resultsText || resultItems.length ? { text: resultsText, items: resultItems } : null;
+  let locked = false;
+  const open = (text) => {
+    const t = (text ?? "").trim();
+    if (isLockedText(t)) {
+      locked = true;
+      return "";
+    }
+    return t;
+  };
+  const questions = threads.map((t, i) => {
+    return {
+      key: t.thread_id || `q${i}`,
+      title: questionTitle(t, i),
+      from: questionFrom(t),
+      text: open(t.text),
+      // R21: the server's sentence as sent; it carries its own short count ("… 1 of 4 done.", "0 of 4 voted.").
+      state: (t.state_text ?? "").trim(),
+      replies: (t.replies ?? []).map((r) => ({ name: r.participant?.name?.trim() || "", text: open(r.text) })).filter((r) => r.text.length > 0),
+      summary: open(t.merged?.text) || null
+    };
+  });
+  const tasks = (read?.todos ?? []).map((td) => ({ text: open(td.text), standing: taskStanding(td) })).filter((td) => td.text.length > 0);
+  const nothing = !top && questions.length === 0 && tasks.length === 0 && !results;
+  return { top, how, results, questions, tasks, none: nothing ? SPACE_RETRO_WORDS.none : null, locked };
+}
+var SpaceRetroPanel = class {
+  constructor(spaceId, deps) {
+    this.spaceId = spaceId;
+    this.deps = deps;
+    this.open = false;
+    this.loading = false;
+    this.failed = false;
+    this.view = null;
+    this.howOpen = null;
+    this.seq = 0;
+  }
+  screen() {
+    return { open: this.open, loading: this.loading, failed: this.failed, view: this.view, howOpen: this.howOpen === true };
+  }
+  /** Open it (and read), or close it. */
+  async toggle() {
+    this.open = !this.open;
+    if (!this.open) {
+      this.deps.onChange();
+      return;
+    }
+    await this.read();
+  }
+  /** Show the retro tab, if it is not showing already. */
+  async show() {
+    if (!this.open) await this.toggle();
+  }
+  /** Back to the conversation. */
+  hide() {
+    if (!this.open) return;
+    this.open = false;
+    this.deps.onChange();
+  }
+  /** "How this works ▸": open or close the fold. */
+  toggleHow() {
+    this.howOpen = !this.howOpen;
+    this.deps.onChange();
+  }
+  /** The space changed (a reply, a vote, an unlock): read again, only while it is showing. */
+  async refresh() {
+    if (this.open) await this.read();
+  }
+  async read() {
+    const mine = ++this.seq;
+    this.loading = this.view === null;
+    this.failed = false;
+    this.deps.onChange();
+    const res = await this.deps.backend.getRetro(this.spaceId).catch(() => null);
+    if (mine !== this.seq) return;
+    this.loading = false;
+    if (res?.ok && res.data) {
+      this.view = retroView(res.data);
+      if (this.howOpen === null && this.view.how) {
+        const seen = this.deps.howSeen?.seen() ?? false;
+        this.howOpen = !seen;
+        if (!seen) this.deps.howSeen?.markSeen();
+      }
+    } else this.failed = true;
+    this.deps.onChange();
+  }
+};
+
+// src/linesSeen.ts
+var LINE_SEEN_AFTER_MS = 1e3;
+var LINE_SEEN_BATCH_MS = 250;
+var LINE_SEEN_AGAIN_AFTER_MS = 6 * 60 * 60 * 1e3;
+var hostSetTimer = setTimeout;
+var hostClearTimer = clearTimeout;
+function createSeenReporter(deps) {
+  const afterMs = deps.afterMs ?? LINE_SEEN_AFTER_MS;
+  const batchMs = deps.batchMs ?? LINE_SEEN_BATCH_MS;
+  const setTimer = deps.setTimer ?? hostSetTimer;
+  const clearTimer = deps.clearTimer ?? hostClearTimer;
+  const againAfterMs = deps.againAfterMs ?? LINE_SEEN_AGAIN_AFTER_MS;
+  const now = deps.now ?? (() => Date.now());
+  const done = /* @__PURE__ */ new Map();
+  const waiting = /* @__PURE__ */ new Map();
+  let queue = [];
+  let flushTimer = null;
+  const flush = () => {
+    flushTimer = null;
+    const ids = queue;
+    queue = [];
+    if (!ids.length) return;
+    Promise.resolve().then(() => deps.send(ids)).catch(() => {
+      for (const id of ids) done.delete(id);
+    });
+  };
+  return {
+    inView(lineId) {
+      if (!lineId || waiting.has(lineId)) return;
+      const reported = done.get(lineId);
+      if (reported !== void 0 && now() - reported < againAfterMs) return;
+      waiting.set(
+        lineId,
+        setTimer(() => {
+          waiting.delete(lineId);
+          done.set(lineId, now());
+          queue.push(lineId);
+          if (flushTimer === null) flushTimer = setTimer(flush, batchMs);
+        }, afterMs)
+      );
+    },
+    outOfView(lineId) {
+      const timer = waiting.get(lineId);
+      if (timer === void 0) return;
+      clearTimer(timer);
+      waiting.delete(lineId);
+    },
+    allOutOfView() {
+      for (const timer of waiting.values()) clearTimer(timer);
+      waiting.clear();
+    },
+    forget(lineId) {
+      done.delete(lineId);
+    },
+    reset() {
+      for (const timer of waiting.values()) clearTimer(timer);
+      waiting.clear();
+      if (flushTimer !== null) clearTimer(flushTimer);
+      flushTimer = null;
+      queue = [];
+      done.clear();
+    }
+  };
+}
+
+// src/linesSeenWatch.ts
+var LINE_ID_ATTR = "data-line-id";
+function lineIdAttr(lineId) {
+  return { [LINE_ID_ATTR]: lineId };
+}
+var SELECTOR = `[${LINE_ID_ATTR}]`;
+function rowInView(e) {
+  if (!e.isIntersecting) return false;
+  if (e.intersectionRatio >= 0.5) return true;
+  return !!e.rootBounds && e.rootBounds.height > 0 && e.intersectionRect.height >= e.rootBounds.height * 0.5;
+}
+var LinesInView = class {
+  constructor(reporter) {
+    this.reporter = reporter;
+    /** The elements in view, each with the line it carries and the pane it is in. */
+    this.showing = /* @__PURE__ */ new Map();
+    /** The panes whose window is hidden. */
+    this.hidden = /* @__PURE__ */ new Set();
+  }
+  /** The element is in view, carrying this line. */
+  show(pane, el, id) {
+    const was = this.showing.get(el);
+    if (was && was.id === id && was.pane === pane) return;
+    this.showing.set(el, { id, pane });
+    if (was && was.id !== id) this.settle(was.id);
+    this.settle(id);
+  }
+  /** The element left the view: scrolled away, its tab behind another, redrawn, gone. */
+  hide(el) {
+    const was = this.showing.get(el);
+    if (!was) return;
+    this.showing.delete(el);
+    this.settle(was.id);
+  }
+  /** A pane's window was hidden, or came back: hidden, nothing in it is in view; back, the second starts again. */
+  windowHidden(pane, hidden) {
+    if (hidden === this.hidden.has(pane)) return;
+    if (hidden) this.hidden.add(pane);
+    else this.hidden.delete(pane);
+    for (const id of this.linesIn(pane)) this.settle(id);
+  }
+  /** A pane closed: nothing in it is in view. */
+  close(pane) {
+    const ids = this.linesIn(pane);
+    for (const [el, s2] of this.showing) if (s2.pane === pane) this.showing.delete(el);
+    this.hidden.delete(pane);
+    for (const id of ids) this.settle(id);
+  }
+  linesIn(pane) {
+    const ids = /* @__PURE__ */ new Set();
+    for (const s2 of this.showing.values()) if (s2.pane === pane) ids.add(s2.id);
+    return ids;
+  }
+  /** Tell the reporter where the line stands now (it ignores what it already knows). */
+  settle(id) {
+    for (const s2 of this.showing.values()) {
+      if (s2.id === id && !this.hidden.has(s2.pane)) {
+        this.reporter.inView(id);
+        return;
+      }
+    }
+    this.reporter.outOfView(id);
+  }
+};
+var VIEW_STEPS = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1];
+function browserObservers() {
+  if (typeof IntersectionObserver === "undefined" || typeof MutationObserver === "undefined") return null;
+  return {
+    view: (report) => new IntersectionObserver((entries) => report(entries), { threshold: VIEW_STEPS }),
+    draws: (pane, report) => {
+      const mo = new MutationObserver((records) => report(records));
+      mo.observe(pane, { childList: true, subtree: true, attributes: true, attributeFilter: [LINE_ID_ATTR] });
+      return mo;
+    }
+  };
+}
+function forgetAnswered(backend, forget) {
+  const answer = backend.answerMyuLine.bind(backend);
+  backend.answerMyuLine = async (lineId, body) => {
+    try {
+      return await answer(lineId, body);
+    } finally {
+      forget(lineId);
+    }
+  };
+}
+var idOf = (el) => el.getAttribute(LINE_ID_ATTR) ?? "";
+function eachLineEl(node, fn) {
+  if (node.nodeType !== 1) return;
+  const el = node;
+  if (el.matches(SELECTOR)) fn(el);
+  el.querySelectorAll(SELECTOR).forEach(fn);
+}
+var SeenWatcher = class {
+  constructor(deps) {
+    /** Each watched pane's way to stop watching it. */
+    this.panes = /* @__PURE__ */ new Map();
+    const timers = deps.timers ?? { set: (fn, ms) => window.setTimeout(fn, ms), clear: (id) => window.clearTimeout(id) };
+    this.reporter = createSeenReporter({
+      send: deps.send,
+      setTimer: (fn, ms) => timers.set(fn, ms),
+      clearTimer: (timer) => timers.clear(timer),
+      ...deps.now ? { now: deps.now } : {}
+    });
+    this.lines = new LinesInView(this.reporter);
+    this.observers = deps.observers !== void 0 ? deps.observers : browserObservers();
+  }
+  /** A pane opened: the lines drawn in it are watched from now on, through every redraw. */
+  watch(pane) {
+    this.unwatch(pane);
+    const observers = this.observers;
+    if (!observers) return;
+    const view = observers.view((entries) => {
+      for (const e of entries) {
+        const id = e.target.isConnected === false ? "" : idOf(e.target);
+        if (id && rowInView(e)) this.lines.show(pane, e.target, id);
+        else this.lines.hide(e.target);
+      }
+    });
+    const found = (el) => view.observe(el);
+    const gone = (el) => {
+      view.unobserve(el);
+      this.lines.hide(el);
+    };
+    const draws = observers.draws(pane, (records) => {
+      for (const r of records) {
+        if (r.type === "attributes") {
+          const el = r.target;
+          gone(el);
+          if (idOf(el)) found(el);
+          continue;
+        }
+        Array.from(r.removedNodes).forEach((n) => eachLineEl(n, gone));
+        Array.from(r.addedNodes).forEach((n) => eachLineEl(n, found));
+      }
+    });
+    pane.querySelectorAll(SELECTOR).forEach(found);
+    const doc = pane.doc;
+    const windowChanged = () => this.lines.windowHidden(pane, doc.visibilityState === "hidden");
+    doc.addEventListener("visibilitychange", windowChanged);
+    windowChanged();
+    const stopMigrated = pane.onWindowMigrated?.(() => this.watch(pane));
+    this.panes.set(pane, () => {
+      stopMigrated?.();
+      doc.removeEventListener("visibilitychange", windowChanged);
+      draws.disconnect();
+      view.disconnect();
+      this.lines.close(pane);
+    });
+  }
+  /** A pane closed: nothing in it is in view any more. */
+  unwatch(pane) {
+    const stop = this.panes.get(pane);
+    if (!stop) return;
+    this.panes.delete(pane);
+    stop();
+  }
+  /** The line was answered here (it may have been put off): if it shows again, it is reported again. */
+  forget(lineId) {
+    this.reporter.forget(lineId);
+  }
+  /** Signed out or locked: nothing is remembered. What is in view is reported again once it has been drawn again. */
+  reset() {
+    this.reporter.reset();
+  }
+  /** The plugin is going: no pane is watched, and no report is left waiting. */
+  stop() {
+    for (const pane of [...this.panes.keys()]) this.unwatch(pane);
+    this.reporter.reset();
+  }
+};
+
+// src/views/lineAsk.ts
+function renderLineDraft(host, draft) {
+  const wrap = host.createDiv({ cls: "myu-line-draft" });
+  const box = wrap.createEl("textarea", { cls: "myu-line-draft-box" });
+  box.value = draft.text;
+  box.setAttr("rows", String(Math.min(9, Math.max(3, Math.ceil(draft.text.length / 45)))));
+  box.setAttr("aria-label", draft.to_name ? `Your message to ${draft.to_name}` : "Your message");
+  const acts = wrap.createDiv({ cls: "myu-mrow-acts myu-line-draft-acts" });
+  const copy = acts.createEl("button", { cls: "myu-aff", text: LINE_ANSWER_WORDS.copy });
+  let failed = null;
+  copy.onclick = async () => {
+    try {
+      await navigator.clipboard.writeText(box.value);
+      copy.setText(LINE_ANSWER_WORDS.copied);
+      failed?.remove();
+      failed = null;
+      window.setTimeout(() => copy.setText(LINE_ANSWER_WORDS.copy), 2500);
+    } catch {
+      box.focus?.();
+      box.select?.();
+      failed ?? (failed = wrap.createDiv({ cls: "myu-quiet myu-line-note", text: LINE_ANSWER_WORDS.copyFailed }));
+    }
+  };
+  box.oninput = () => copy.setText(LINE_ANSWER_WORDS.copy);
+  if (draft.url) acts.createEl("a", { cls: "myu-line-link", text: draft.label, href: draft.url, attr: { target: "_blank", rel: "noopener" } });
+}
+function renderAfter(host, ui) {
+  for (const n of ui.notes ?? []) host.createDiv({ cls: "myu-quiet myu-line-note", text: n });
+  for (const l of ui.links ?? []) {
+    const row = host.createDiv({ cls: "myu-quiet myu-line-note" });
+    if (l.text) row.createSpan({ text: `${l.text} ` });
+    row.createEl("a", { cls: "myu-line-link", text: l.label, href: l.url, attr: { target: "_blank", rel: "noopener" } });
+  }
+  if (ui.draft) renderLineDraft(host, ui.draft);
+}
+function renderLineAsk(host, line, ui, on, opts = {}) {
+  if (ui.said !== void 0 && ui.said !== null) {
+    if (ui.said) host.createDiv({ cls: ui.good ? "myu-done myu-line-said" : "myu-quiet myu-line-said", text: ui.said });
+    renderAfter(host, ui);
+    return;
+  }
+  if (opts.showText !== false) {
+    const cls = line.ask_kind === "tell" ? "myu-done" : line.ask_kind === "wait" ? "myu-quiet" : "myu-line";
+    const el = host.createDiv({ cls, text: (line.text ?? "").trim(), attr: lineIdAttr(line.line_id) });
+    if (showEstimate(line)) el.createSpan({ cls: "myu-est", text: (line.est ?? "").trim() });
+  }
+  if (ui.note) host.createDiv({ cls: "myu-quiet myu-line-note", text: ui.note });
+  const buttons = lineButtons(line);
+  if (buttons.length > 0) {
+    const acts = host.createDiv({ cls: "myu-mrow-acts myu-line-choices" });
+    for (const b of buttons) {
+      const el = acts.createEl("button", { cls: b.quiet ? "myu-aff myu-line-quiet" : "myu-aff", text: b.label });
+      el.disabled = !!ui.busy;
+      el.onclick = () => on.press(b);
+    }
+  }
+  renderAfter(host, ui);
+}
+
+// src/commitmentsFold.ts
+var COMMITMENTS_FOLD_WORDS = {
+  title: "What you owe",
+  youOwe: "you owe",
+  owedToYou: "owed to you",
+  nextCheck: (day) => `next check ${day}`,
+  locked: "Unlock to read it",
+  someone: "someone",
+  more: (n) => `${n} more`
+};
+var FINISHED_COMMITMENT_STATUSES = ["done", "kept", "dropped"];
+function dayWords2(when, now = /* @__PURE__ */ new Date()) {
+  if (!when) return "";
+  const d = typeof when === "string" ? new Date(when) : when;
+  if (Number.isNaN(d.getTime())) return "";
+  const startOf = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const days = Math.round((startOf(d) - startOf(now)) / 864e5);
+  if (days === 0) return "today";
+  if (days === 1) return "tomorrow";
+  if (days === -1) return "yesterday";
+  const weekday = d.toLocaleDateString(void 0, { weekday: "long" });
+  if (days > 1 && days < 7) return weekday;
+  return `${weekday}, ${d.toLocaleDateString(void 0, { month: "short", day: "numeric" })}`;
+}
+var whenOf = (c) => {
+  const t = Date.parse(c.next_check ?? c.due ?? "");
+  return Number.isFinite(t) ? t : Number.POSITIVE_INFINITY;
+};
+function commitmentRow(c, now = /* @__PURE__ */ new Date()) {
+  const what = isLockedText(c.what) ? COMMITMENTS_FOLD_WORDS.locked : (c.what ?? "").trim();
+  const name = c.counterparty?.name?.trim() || c.space?.name?.trim() || COMMITMENTS_FOLD_WORDS.someone;
+  const day = c.next_check ? dayWords2(c.next_check, now) : "";
+  const check = day ? COMMITMENTS_FOLD_WORDS.nextCheck(day) : null;
+  const status = c.status && c.status !== "open" ? String(c.status) : null;
+  const relId = c.counterparty?.relationship_id ?? (c.counterparty?.type === "person" ? c.counterparty.id : void 0);
+  const spaceId = c.counterparty?.type === "space" ? c.counterparty.id : c.space?.space_id;
+  const open = relId ? { subject_type: "person", subject_id: relId, label: c.counterparty?.name ?? void 0 } : spaceId ? { subject_type: "space", subject_id: spaceId, label: c.space?.name ?? c.counterparty?.name ?? void 0 } : null;
+  return { commitment_id: c.commitment_id, text: [what, name, check, status].filter(Boolean).join(" \xB7 "), what, name, check, status, open };
+}
+function commitmentsFold(items, opts = {}) {
+  const now = opts.now ?? /* @__PURE__ */ new Date();
+  const limit = opts.limit ?? 5;
+  const running = (items ?? []).filter((c) => !FINISHED_COMMITMENT_STATUSES.includes(String(c.status)));
+  const sorted = (xs) => [...xs].sort((a, b) => whenOf(a) - whenOf(b));
+  const mine = sorted(running.filter((c) => c.owner !== "them"));
+  const theirs = sorted(running.filter((c) => c.owner === "them"));
+  return {
+    youOwe: mine.slice(0, limit).map((c) => commitmentRow(c, now)),
+    owedToYou: theirs.slice(0, limit).map((c) => commitmentRow(c, now)),
+    moreYouOwe: Math.max(0, mine.length - limit),
+    moreOwedToYou: Math.max(0, theirs.length - limit),
+    empty: mine.length + theirs.length === 0
+  };
+}
+
 // src/views/TodayView.ts
 function remainingLabel(expiresAt) {
   if (!expiresAt) return "";
   const leftMs = expiresAt - Date.now();
-  if (leftMs <= 0) return "This one has expired \u2014 ask that device to try again.";
+  if (leftMs <= 0) return "This request has expired. Ask that device to try again.";
   const mins = Math.ceil(leftMs / 6e4);
   return `About ${mins} ${mins === 1 ? "minute" : "minutes"} left.`;
 }
@@ -8899,9 +11463,17 @@ function shortDate(ymd) {
   return Number.isNaN(d.getTime()) ? ymd : d.toLocaleDateString(void 0, { month: "short", day: "numeric" });
 }
 var TODAY_VIEW_TYPE = "askmyu-today";
-function openTargetFor(item) {
-  const refs = item.entity_references ?? [];
-  return refs.find((r) => r.entity_type === "person") ?? refs.find((r) => r.entity_type === "company") ?? null;
+function dateTitle(d) {
+  const weekday = d.toLocaleDateString(void 0, { weekday: "long" });
+  const month = d.toLocaleDateString(void 0, { month: "long" });
+  return `${weekday}, ${d.getDate()} ${month}`;
+}
+async function safe(f) {
+  try {
+    return await f();
+  } catch {
+    return null;
+  }
 }
 var TodayView = class extends import_obsidian16.ItemView {
   constructor(leaf, plugin) {
@@ -8911,8 +11483,41 @@ var TodayView = class extends import_obsidian16.ItemView {
     /** P4.6: the hero shows 2; the rest render on demand. Reset per refresh. */
     this.briefExpanded = false;
     this.meetings = [];
-    /** P8.8 — the rest of the week, day-labeled doors into prep. */
-    this.weekAhead = [];
+    /**
+     * One list, two lenses (F0): today's lines. A meeting's line sits under its
+     * row in Next / Earlier; a person's, company's or space's line is a row of
+     * its own under "for you". The dot beside a row (2026-10-06): lit while something came in for it since Today was
+     * opened before this visit (new), grey while a question there waits for an answer.
+     */
+    this.todayLines = [];
+    /**
+     * Myu's questions answered here with a tap (2026-09-25): what each line shows between answers,
+     * and the lines answered here, kept on the list to show what Myu said back (the read keeps an
+     * answered line until tomorrow but sends no readback for it).
+     */
+    this.lineUi = /* @__PURE__ */ new Map();
+    this.answeredHere = /* @__PURE__ */ new Set();
+    /** Space mode (R14): each space's door words, by space id (from the step of the person's getting-ready). */
+    this.spaceDoors = /* @__PURE__ */ new Map();
+    /**
+     * The spaces this person belongs to. A space is on Today whether or not Myu has a line about
+     * it: until 0.1.3 the only way into a space was a line, and a space whose line did not need
+     * you could not be found at all. Null until the list was read (or when it cannot be).
+     */
+    this.spaces = null;
+    /**
+     * Rows whose other lines are showing, and whether the rest of "for you" is. Held on the
+     * VIEW (like the mirror's state below): the ambient refresh re-renders everything, and a
+     * row the reader opened must not snap shut under them.
+     */
+    this.openStacks = /* @__PURE__ */ new Set();
+    this.forYouOpen = false;
+    this.spacesOpen = false;
+    /** "Open with you today" — the open commitments, as Tasks checkboxes. */
+    this.commitments = [];
+    /** "what you owe ▸" (terminal parity, 2026-09-26): the commitments between people, `GET /commitments`. */
+    this.owed = [];
+    this.owedOpen = false;
     this.mirror = null;
     this.weekly = null;
     /**
@@ -8933,12 +11538,23 @@ var TodayView = class extends import_obsidian16.ItemView {
     // ── render ────────────────────────────────────────────────────────────────
     /** The gate's checkbox, kept across re-renders so a tick survives a refresh. */
     this.termsAgreed = false;
+    /**
+     * The rows' dots as drawn last, each with its way to draw itself again. Made on first use (a view built without its
+     * constructor, as the tests do, has none).
+     */
+    this.dots = [];
     /** "the week" — the server weekly edition, verbatim, only while fresh. */
     /** Sync, always within reach (operator, 2026-08-29): the button lives at the top of Today, whatever else the day holds. */
     this.giveLine = null;
     this.loop = null;
     this.coupledLoops = [];
     this.loopRated = null;
+  }
+  /** The two above, made on first use (a view built without its constructor, as the tests do, has neither). */
+  lineState() {
+    this.lineUi ?? (this.lineUi = /* @__PURE__ */ new Map());
+    this.answeredHere ?? (this.answeredHere = /* @__PURE__ */ new Set());
+    return { ui: this.lineUi, answered: this.answeredHere };
   }
   getViewType() {
     return TODAY_VIEW_TYPE;
@@ -8951,6 +11567,7 @@ var TodayView = class extends import_obsidian16.ItemView {
   }
   async onOpen() {
     this.contentEl.addClass("myu-today");
+    this.plugin.linesSeen?.watch(this.contentEl);
     await this.refresh();
   }
   async onClose() {
@@ -8958,6 +11575,7 @@ var TodayView = class extends import_obsidian16.ItemView {
       window.clearTimeout(this.retryTimer);
       this.retryTimer = null;
     }
+    this.plugin.linesSeen?.unwatch(this.contentEl);
     this.contentEl.empty();
   }
   /**
@@ -9045,9 +11663,57 @@ var TodayView = class extends import_obsidian16.ItemView {
     );
     const dated = raw.map((e) => ({ ...e, startDate: parseEventTime(e.start_time) })).sort((a, b) => a.startDate.getTime() - b.startDate.getTime());
     this.meetings = dated.filter((e) => localDate(e.startDate) === today);
-    this.weekAhead = dated.filter((e) => localDate(e.startDate) > today);
+    await this.readLinesAndCommitments();
     this.loading = false;
     this.render();
+  }
+  /**
+   * The lines and the open commitments ride along the good day; neither
+   * decides the pane's error state (a backend without them is an older one,
+   * not a broken one). Encrypted commitment rows open here — this device has
+   * custody — the same way the vault's Commitments file opens them.
+   */
+  async readLinesAndCommitments() {
+    const [linesRes, commitsRes, spacesRes, owedRes] = await Promise.all([
+      safe(() => this.plugin.backend.getMyuLines("today")),
+      safe(() => this.plugin.backend.listVaultCommitments()),
+      safe(() => this.plugin.backend.listSpaces()),
+      safe(() => this.plugin.backend.getCommitments())
+    ]);
+    if (owedRes?.ok) this.owed = owedRes.data?.items ?? [];
+    if (spacesRes?.ok) this.spaces = spacesRes.data?.spaces ?? [];
+    if (linesRes?.ok) {
+      this.todayLines = (linesRes.data?.lines ?? []).filter(
+        (l) => !l.state || l.state === "queued" || l.state === "released" || this.lineState().answered.has(l.line_id)
+      );
+    }
+    const debriefs = new Set((this.spaces ?? []).filter(isDebriefSpace).map((sp) => sp.space_id));
+    const doors = /* @__PURE__ */ new Map();
+    await Promise.all(
+      [.../* @__PURE__ */ new Set([...spaceIdsOf(this.todayLines), ...(this.spaces ?? []).map((sp) => sp.space_id)])].filter((id) => !debriefs.has(id)).map(async (id) => {
+        const mine = await safe(() => this.plugin.backend.getRetroPrepMine(id));
+        doors.set(id, spaceDoorLabel(mine?.ok ? mine.data : null));
+      })
+    );
+    this.spaceDoors = doors;
+    if (commitsRes?.ok) this.commitments = await this.openCommitments(commitsRes.data?.commitments ?? []);
+  }
+  async openCommitments(rows) {
+    const key = this.plugin.keys?.get() ?? null;
+    const out = [];
+    for (const c of rows) {
+      if (c.status && c.status !== "open") continue;
+      if ((c.content ?? "").trim() || !c.encrypted_content || !key) {
+        out.push(c);
+        continue;
+      }
+      try {
+        out.push({ ...c, content: (await decryptWithKey(c.encrypted_content, key)).trim() });
+      } catch {
+        out.push(c);
+      }
+    }
+    return out;
   }
   /**
    * A refresh that could not reach Myu retries in seconds, not on the ambient
@@ -9063,6 +11729,7 @@ var TodayView = class extends import_obsidian16.ItemView {
   render() {
     const root = this.contentEl;
     root.empty();
+    this.dots = [];
     if (this.loading) {
       root.createEl("p", { cls: "myu-quiet myu-thinking", text: "Opening your day" });
       return;
@@ -9075,19 +11742,23 @@ var TodayView = class extends import_obsidian16.ItemView {
       this.renderTermsGate(root);
       return;
     }
+    this.renderMenuMarks(root);
     this.renderSyncBar(root);
     if (this.plugin.termsUpdateVisible()) this.renderTermsUpdate(root);
     this.renderDeviceRequests(root);
     this.renderSetup(root);
     this.renderMaterializeProgress(root);
-    this.renderCues(root);
     this.renderInsights(root);
     this.renderOffers(root);
+    this.renderBrief(root);
+    this.renderSpaces(root);
+    this.renderForYou(root);
+    this.renderNext(root);
+    this.renderOpenWithYou(root);
+    this.renderWhatYouOwe(root);
     this.renderHelpMyu(root);
     this.renderWeekEdition(root);
     this.renderLoop(root);
-    this.renderBrief(root);
-    this.renderNext(root);
     this.renderWeek(root);
     this.renderMonthlyPointer(root);
     this.renderMirror(root);
@@ -9104,7 +11775,7 @@ var TodayView = class extends import_obsidian16.ItemView {
     zone.createEl("h3", { text: "Before you start" });
     zone.createEl("p", {
       cls: "myu-prose",
-      text: "The beta needs one thing first: your agreement to the beta participation terms and the privacy policy. Read them, then tick the box."
+      text: "Before you use the beta, please agree to the beta participation terms and the privacy policy. Read them, then tick the box."
     });
     this.renderTermsLinks(zone);
     const label = zone.createEl("label", { cls: "myu-terms-label" });
@@ -9120,7 +11791,7 @@ var TodayView = class extends import_obsidian16.ItemView {
     };
     go.onclick = async () => {
       go.disabled = true;
-      go.textContent = "Recording\u2026";
+      go.textContent = "Saving\u2026";
       const ok2 = await this.plugin.acceptTerms();
       if (!ok2) {
         go.disabled = false;
@@ -9137,7 +11808,7 @@ var TodayView = class extends import_obsidian16.ItemView {
   renderTermsUpdate(root) {
     const zone = root.createDiv({ cls: "myu-zone myu-terms-update" });
     zone.createEl("h3", { text: "We\u2019ve updated the terms" });
-    zone.createEl("p", { cls: "myu-prose", text: `The beta participation terms or the privacy policy changed (version ${this.plugin.terms?.currentVersion ?? ""}). You can keep working on the version you agreed to; accepting the new one takes a moment.` });
+    zone.createEl("p", { cls: "myu-prose", text: `The beta participation terms or the privacy policy changed (version ${this.plugin.terms?.currentVersion ?? ""}). You can keep using Myu under the version you agreed to. Accepting the new one takes a moment.` });
     this.renderTermsLinks(zone);
     const actions = zone.createDiv({ cls: "myu-mirror-actions" });
     const accept = actions.createEl("button", { cls: "myu-affordance myu-cta", text: "I agree to the updated terms" });
@@ -9166,7 +11837,7 @@ var TodayView = class extends import_obsidian16.ItemView {
     if (!requests.length) return;
     for (const request of requests) {
       const zone = root.createDiv({ cls: "myu-zone myu-device-request" });
-      zone.createDiv({ cls: "myu-whisper", text: "a device wants in" });
+      zone.createDiv({ cls: "myu-whisper", text: "a device wants to join" });
       zone.createDiv({ cls: "myu-claim", text: `\u201C${request.device_name || "A new device"}\u201D wants to join your account` });
       const left = remainingLabel(request.expires_at);
       zone.createDiv({ cls: "myu-quiet", text: left ? `Type the 4-digit code it shows. ${left}` : "Type the 4-digit code it shows." });
@@ -9191,8 +11862,8 @@ var TodayView = class extends import_obsidian16.ItemView {
   renderHelpMyu(root) {
     const n = this.plugin.helpQueue.length;
     if (n === 0) return;
-    const row = root.createEl("button", { cls: "myu-row myu-row-tappable", attr: { "aria-label": "People Myu needs help placing" } });
-    row.createSpan({ cls: "myu-row-title", text: `${n} ${n === 1 ? "person needs" : "people need"} your help placing them` });
+    const row = root.createEl("button", { cls: "myu-row myu-row-tappable", attr: { "aria-label": "People Myu needs help identifying" } });
+    row.createSpan({ cls: "myu-row-title", text: `Help Myu identify ${n} ${n === 1 ? "person" : "people"}` });
     const chev = row.createSpan({ cls: "myu-affordance-inline myu-chevron" });
     (0, import_obsidian16.setIcon)(chev, "chevron-right");
     row.onclick = () => void this.plugin.openHelpMyu();
@@ -9239,16 +11910,16 @@ var TodayView = class extends import_obsidian16.ItemView {
       const facts = item.meta?.facts;
       const lines = [facts?.role_line, facts?.why_meeting ? `Why: ${facts.why_meeting}` : "", facts?.mutual_ties?.length ? `You both know ${facts.mutual_ties.join(", ")}` : "", ...(facts?.public_context ?? []).slice(0, 2)].filter((x) => !!x);
       for (const l of lines) row.createDiv({ cls: "myu-quiet", text: l });
-      if (item.meta?.cold) row.createDiv({ cls: "myu-quiet", text: item.meta.first_time ? "First meeting \u2014 facts only, worth capturing how it lands." : "No history here yet \u2014 Myu starts learning this one afterwards." });
+      if (item.meta?.cold) row.createDiv({ cls: "myu-quiet", text: item.meta.first_time ? "First meeting. Facts only; worth noting how it goes afterwards." : "No history yet. Myu starts learning about this person after the meeting." });
       const actions = row.createDiv({ cls: "myu-canvas-actions" });
       const eventId = item.actions?.find((a) => a.action_type === "prep")?.target_id || item.meta?.event_id;
       if (eventId) {
-        const prep = actions.createEl("button", { cls: "myu-affordance myu-cta", text: "Prep" });
+        const prep = actions.createEl("button", { cls: "myu-affordance myu-cta", text: "Prepare" });
         prep.onclick = () => void this.plugin.openPrep(eventId);
       }
       if (item.actions?.some((a) => a.action_type === "capture_after")) {
         const name = item.entity_references?.[0]?.display_name ?? "them";
-        const cap = actions.createEl("button", { cls: "myu-affordance", text: "Capture after" });
+        const cap = actions.createEl("button", { cls: "myu-affordance", text: "Add notes" });
         cap.onclick = () => void this.plugin.openChat({ text: `After the meeting with ${name}: `, send: false });
       }
     }
@@ -9258,13 +11929,13 @@ var TodayView = class extends import_obsidian16.ItemView {
     const offers = this.plugin.pendingOffers;
     if (offers.length === 0) return;
     const zone = root.createDiv({ cls: "myu-zone myu-offers" });
-    zone.createDiv({ cls: "myu-whisper", text: "myu prepared" });
+    zone.createDiv({ cls: "myu-whisper", text: "prepared by Myu" });
     for (const offer of offers) {
       const row = zone.createDiv({ cls: "myu-offer-row" });
       row.createSpan({ cls: "myu-claim", text: (offer.summaryText || "A canvas") + (offer.subjectName ? ` \u2014 ${offer.subjectName}` : "") });
       const open = row.createEl("button", { cls: "myu-affordance", text: offer.actionLabel });
       open.onclick = () => void this.plugin.openOffer(offer.compositionId);
-      const drop = row.createEl("button", { cls: "myu-affordance myu-icon-button", attr: { "aria-label": "Let this canvas go" } });
+      const drop = row.createEl("button", { cls: "myu-affordance myu-icon-button", attr: { "aria-label": "Dismiss this canvas" } });
       (0, import_obsidian16.setIcon)(drop, "x");
       drop.onclick = () => this.plugin.dismissOffer(offer.compositionId);
     }
@@ -9293,7 +11964,7 @@ var TodayView = class extends import_obsidian16.ItemView {
       go.onclick = () => r.open();
     }
     if (this.giveLine) zone.createEl("p", { cls: "myu-voice", text: this.giveLine });
-    const hide = zone.createEl("button", { cls: "myu-affordance myu-link-button", text: "Hide setup \u2014 every door stays in settings" });
+    const hide = zone.createEl("button", { cls: "myu-affordance myu-link-button", text: "Hide setup. Everything here is also in settings" });
     hide.onclick = () => {
       s2.setup_hidden = true;
       void this.plugin.saveSettings();
@@ -9306,23 +11977,23 @@ var TodayView = class extends import_obsidian16.ItemView {
     const rows = [];
     const refresh = () => void this.refresh();
     if (!s2.materialize_consented && (this.brief || s2.consent_completed)) {
-      rows.push({ title: "Keep what Myu knows in your vault", why: "One folder, Myu/, renameable: people and companies, your journal by day, meetings, today, commitments as checkboxes, every canvas you keep. Your own notes are never edited.", button: "Let Myu write\u2026", primary: true, open: () => p.offerResidencyThen(refresh) });
+      rows.push({ title: "Save what Myu knows to your vault", why: "One folder, Myu/ (you can rename it): people and companies, your journal by day, meetings, today, commitments as checkboxes, every canvas you save. Your own notes are never edited.", button: "Let Myu write\u2026", primary: true, open: () => p.offerResidencyThen(refresh) });
     }
     if (!s2.consent_completed) {
-      rows.push({ title: "Choose what Myu may read", why: "Nothing is read until you choose. Only the folders you choose leave this device, encrypted with a key that stays here.", button: "Choose folders\u2026", primary: !rows.length, open: () => new ConsentModal(this.app, p, refresh).open() });
+      rows.push({ title: "Choose what Myu may read", why: "Nothing is read until you choose. Only notes in the folders you choose are sent, encrypted with a key that stays on this device.", button: "Choose folders\u2026", primary: !rows.length, open: () => new ConsentModal(this.app, p, refresh).open() });
     }
     if (s2.consent_completed && !s2.backfill_done) {
       const { files, oldest } = p.capture.surveyBackfill();
       if (files.length > 0) {
         const months = oldest ? Math.max(1, Math.round((Date.now() - oldest) / (1e3 * 60 * 60 * 24 * 30))) : 0;
-        rows.push({ title: "Bring in what you have already written", why: `${files.length} ${files.length === 1 ? "note" : "notes"} in the folders you shared${months ? `, going back ${months >= 12 ? `${Math.round(months / 12)} ${Math.round(months / 12) === 1 ? "year" : "years"}` : `${months} ${months === 1 ? "month" : "months"}`}` : ""}. Preview first; nothing leaves until you press Start.`, button: "Preview\u2026", open: () => p.offerBackfill() });
+        rows.push({ title: "Share the notes you have already written", why: `${files.length} ${files.length === 1 ? "note" : "notes"} in the folders you shared${months ? `, going back ${months >= 12 ? `${Math.round(months / 12)} ${Math.round(months / 12) === 1 ? "year" : "years"}` : `${months} ${months === 1 ? "month" : "months"}`}` : ""}. Preview first; nothing is sent until you press Start.`, button: "Preview\u2026", open: () => p.offerBackfill() });
       } else if (!s2.backfill_done) {
         s2.backfill_done = true;
         void p.saveSettings();
       }
     }
     if (s2.consent_completed && s2.meeting_folders.length === 0 && !s2.meeting_consent_offered) {
-      rows.push({ title: "Share meeting notes", why: "A separate choice: meeting notes are processed on the server like every meeting source, not end-to-end encrypted like your journal.", button: "Choose\u2026", open: () => new MeetingConsentModal(this.app, p, refresh).open() });
+      rows.push({ title: "Share meeting notes", why: "A separate choice. Meeting notes are processed on the server like every other meeting source. Unlike your journal, they are not encrypted with your device key.", button: "Choose\u2026", open: () => new MeetingConsentModal(this.app, p, refresh).open() });
     }
     if (p.onboardingComplete === false) {
       rows.push({ title: "Tell Myu who you are", why: "Optional. Used to name you and your role in briefs; kept with your encrypted account data only.", button: "Tell Myu\u2026", open: () => p.openOnboarding(refresh) });
@@ -9346,8 +12017,8 @@ var TodayView = class extends import_obsidian16.ItemView {
     }
     const messages = {
       disconnected: "Not connected yet. Create an account, or sign in to the one you already have.",
-      locked: "Locked. Myu reopens your notes when this device reaches the server.",
-      offline: "No connection right now. Capture is paused and will catch up."
+      locked: "Locked. Myu unlocks your notes when this device can reach the server.",
+      offline: "No connection right now. Sharing notes is paused and will catch up."
     };
     root.createEl("p", { cls: "myu-prose myu-quiet", text: messages[this.errorState ?? "locked"] });
     if (this.errorState === "disconnected") {
@@ -9383,7 +12054,7 @@ var TodayView = class extends import_obsidian16.ItemView {
     if (unlock.genesisPending || detail === "genesis_pending" || detail === "genesis_failed") {
       root.createEl("p", {
         cls: "myu-prose",
-        text: detail === "genesis_failed" ? "Key setup did not finish. Two minutes to try again: the twelve words, then everything works." : "One step left: your twelve words. Two minutes, then everything works."
+        text: detail === "genesis_failed" ? "Key setup did not finish. Try again: the twelve-word step takes two minutes, then everything works." : "One step left: your twelve-word recovery phrase. It takes two minutes, then everything works."
       });
       const finish = root.createEl("button", { cls: "myu-door-primary", text: "Finish setup\u2026" });
       finish.onclick = () => this.plugin.openGenesisCeremony();
@@ -9403,7 +12074,7 @@ var TodayView = class extends import_obsidian16.ItemView {
     if (approval?.status === "pending") {
       root.createEl("p", { cls: "myu-prose", text: "Waiting for your approval. In Myu on your phone or the web app, approve this device and enter:" });
       root.createDiv({ cls: "myu-code", text: approval.code });
-      root.createEl("p", { cls: "myu-prose myu-quiet", text: "It finishes on its own: go approve it and come back. The code is good for a few minutes." });
+      root.createEl("p", { cls: "myu-prose myu-quiet", text: "It finishes on its own. Approve it there and come back. The code works for a few minutes." });
       const actions = root.createDiv({ cls: "myu-door-stack" });
       phraseDoor(actions, "Use my recovery phrase instead");
       const cancel = actions.createEl("button", { cls: "myu-affordance", text: "Cancel" });
@@ -9415,7 +12086,7 @@ var TodayView = class extends import_obsidian16.ItemView {
     }
     root.createEl("p", {
       cls: "myu-prose",
-      text: detail === "device_revoked" ? "This device was removed from your account. Approve it again to continue." : detail === "key_mismatch" ? "This device\u2019s key no longer matches your account. Approve it again to continue." : "You are signed in, but this device is not approved yet. Your notes are encrypted with a key only your approved devices hold."
+      text: detail === "device_revoked" ? "This device was removed from your account. Approve it again to continue." : detail === "key_mismatch" ? "This device\u2019s key no longer matches your account. Approve it again to continue." : "You are signed in, but this device is not approved yet. Your notes are encrypted with a key that only your approved devices have."
     });
     if (approval) {
       root.createEl("p", {
@@ -9432,7 +12103,7 @@ var TodayView = class extends import_obsidian16.ItemView {
       again();
     };
     const alt = doors.createDiv({ cls: "myu-door-alt" });
-    alt.createSpan({ cls: "myu-quiet", text: "No other device handy?" });
+    alt.createSpan({ cls: "myu-quiet", text: "No other device nearby?" });
     phraseDoor(alt, "Use my recovery phrase");
     const out = root.createDiv({ cls: "myu-door-alt" });
     out.createSpan({ cls: "myu-quiet", text: "Not you?" });
@@ -9474,68 +12145,75 @@ var TodayView = class extends import_obsidian16.ItemView {
     if (line && !row && !this.loading && !this.errorState) this.render();
   }
   /**
-   * Cue rows — the toast's vault analogue, ambient by construction. Two
-   * sources merged: SSE-pushed cues (arrive the moment dispatch delivers) and
-   * the client-derived pair as belt-and-suspenders when the stream is down —
-   * T-15 before a meeting, and just-ended. All are pane content; none are
-   * popups (invariant 4).
+   * The menu's marks on a phone (2026-10-06), where Obsidian has no status bar: what is new in Myu's places
+   * ("3 new in Today · 2 in Spaces"), lit, at the top of the pane. Nothing on a computer, nothing when nothing is new.
    */
-  renderCues(root) {
-    const now = Date.now();
-    const rows = [];
-    for (const cue of this.plugin.liveCues) {
-      rows.push({ text: cue.text, eventId: cue.event_id });
-    }
-    for (const meeting of this.meetings) {
-      const start = meeting.startDate.getTime();
-      const title = meeting.summary || "Meeting";
-      if (start - now > 0 && start - now < 15 * 60 * 1e3) {
-        rows.push({ text: `prep ready \u2014 ${title}`, eventId: meeting.event_id });
-      } else if (now - start > 5 * 60 * 1e3 && now - start < 90 * 60 * 1e3) {
-        rows.push({ text: `your read on ${title}?`, eventId: meeting.event_id });
-      }
-    }
-    if (rows.length === 0) return;
-    const seen = /* @__PURE__ */ new Set();
-    const zone = root.createDiv({ cls: "myu-cues" });
-    for (const row of rows.slice(0, 3)) {
-      if (seen.has(row.text)) continue;
-      seen.add(row.text);
-      const el = zone.createEl("button", { cls: "myu-cue-row" });
-      el.createSpan({ cls: "myu-claim", text: row.text });
-      if (row.eventId) {
-        const eventId = row.eventId;
-        (0, import_obsidian16.setIcon)(el.createSpan({ cls: "myu-affordance-inline myu-chevron", attr: { "aria-hidden": "true" } }), "chevron-right");
-        el.addClass("myu-row-tappable");
-        el.onclick = () => void this.plugin.openPrep(eventId);
-      }
-    }
+  renderMenuMarks(root) {
+    const line = this.plugin.menuMarksLine();
+    if (line) root.createDiv({ cls: "myu-menu-new", text: line });
   }
+  /**
+   * The marks moved: repaint THAT LINE, nothing else, no fetch. A line that is not there yet goes in at the top; a
+   * line with nothing left to say goes. Only over the day itself (not while it opens, rests or waits at the terms).
+   */
+  paintMenuMarks() {
+    if (this.loading || this.errorState || this.plugin.termsStanding() === "gated") return;
+    const line = this.plugin.menuMarksLine();
+    const row = this.contentEl.querySelector(".myu-menu-new");
+    if (!line) {
+      row?.remove();
+      return;
+    }
+    if (row) row.textContent = line;
+    else this.contentEl.createDiv({ cls: "myu-menu-new", text: line, prepend: true });
+  }
+  dotPainters() {
+    this.dots ?? (this.dots = []);
+    return this.dots;
+  }
+  /**
+   * A row's dot (2026-10-06, the operator's rule: orange is always new). Lit, in the colour of the status bar's "new",
+   * while something came in for the row since Today was opened before this visit: a question or a note alike. Grey
+   * while a question there waits for an answer. New wins while it lasts. With no marks from the server nothing is
+   * known to be new, and only what waits is marked.
+   */
+  drawDot(mark, lines) {
+    mark.empty();
+    const dot = entryDot(lines, this.plugin.menuMarks?.since("home") ?? null);
+    if (dot) mark.createSpan({ cls: dot === "new" ? "myu-dot" : "myu-dot myu-dot-waiting", attr: { "aria-label": ENTRY_DOT_WORDS[dot] } });
+  }
+  /**
+   * The marks moved, or Today was opened: repaint THE DOTS, nothing else, no fetch. What is new is counted from when
+   * Today was opened before this visit, so an opening changes it. Only over the day itself.
+   */
+  paintDots() {
+    if (this.loading || this.errorState || this.plugin.termsStanding() === "gated") return;
+    for (const paint of this.dotPainters()) paint();
+  }
+  /**
+   * "From Myu — Friday, 12 September", then the brief in Myu's voice. The
+   * title is the label that says who is speaking, so the voice needs no
+   * whisper of its own. The first two items lead; the rest sit behind
+   * `+N more` (R7: OUR trimming is disclosed — the server already disclosed
+   * its own via suppressed_count).
+   */
   renderBrief(root) {
+    const zone = root.createDiv({ cls: "myu-zone myu-from-myu" });
+    zone.createEl("h2", { cls: "myu-from-myu-title", text: `From Myu \u2014 ${dateTitle(/* @__PURE__ */ new Date())}` });
     const all = (this.brief?.sections ?? []).filter((s2) => s2.visible && s2.section !== "week").flatMap((s2) => s2.items ?? []);
     const items = this.briefExpanded ? all : all.slice(0, 2);
     const held = all.length - 2;
     if (items.length === 0) {
-      root.createEl("p", {
+      zone.createEl("p", {
         cls: "myu-quiet",
-        text: this.loadedOnce ? "Nothing pressing this morning." : "Still reading your day\u2026"
+        text: this.loadedOnce ? "Nothing urgent today." : "Still loading your day\u2026"
       });
     }
     for (const item of items) {
-      const row = root.createDiv({ cls: "myu-hero" });
-      row.createDiv({ cls: "myu-whisper", text: "noticing" });
-      row.createDiv({ cls: "myu-voice", text: item.text ?? "" });
-      const ref = openTargetFor(item);
-      if (!ref) continue;
-      const open = row.createEl("button", { cls: "myu-affordance", text: "Open" });
-      open.onclick = () => void this.plugin.openCard(
-        ref.entity_type === "company" ? "company" : "person",
-        ref.entity_id,
-        ref.display_name
-      );
+      zone.createEl("p", { cls: "myu-voice myu-brief-line", text: item.text ?? "" });
     }
     if (!this.briefExpanded && held > 0) {
-      const more = root.createEl("button", { cls: "myu-affordance", text: `+${held} more` });
+      const more = zone.createEl("button", { cls: "myu-affordance myu-link-button", text: `+${held} more` });
       more.onclick = () => {
         this.briefExpanded = true;
         this.render();
@@ -9543,11 +12221,331 @@ var TodayView = class extends import_obsidian16.ItemView {
     }
     const suppressed = this.brief?.suppressed_count ?? 0;
     if (suppressed > 0) {
-      root.createEl("p", {
+      zone.createEl("p", {
         cls: "myu-quiet",
-        text: suppressed === 1 ? "1 lower-confidence item held back" : `${suppressed} lower-confidence items held back`
+        text: suppressed === 1 ? "1 less certain item hidden" : `${suppressed} less certain items hidden`
       });
     }
+  }
+  // ── the rows: a meeting, a person, a company, a space — and Myu's line under it ──
+  /** The lines under one meeting's row: the occurrence first, the event otherwise. */
+  linesForMeeting(m) {
+    const all = this.todayLines ?? [];
+    const isMeeting = (l, withKey) => (l.subjects ?? []).some(
+      (s2) => s2.type === "meeting" && s2.id === m.event_id && (!withKey || !s2.occurrence_key || s2.occurrence_key === String(m.startDate.getTime()))
+    );
+    const exact = all.filter((l) => isMeeting(l, true));
+    return exact.length ? exact : all.filter((l) => isMeeting(l, false));
+  }
+  nonMeetingLines() {
+    return (this.todayLines ?? []).filter((l) => (l.subjects?.[0]?.type ?? "person") !== "meeting" && !isSpaceLine(l));
+  }
+  /**
+   * One row as the mock draws it: the mark (a dot: lit when something new
+   * came in for the row, grey when a question there waits), the time, the
+   * title with who, Myu's line under it in the theme's accent (a tell in its
+   * success colour, a waiting line quiet), and the doors on the right.
+   */
+  row(host, r) {
+    const row = host.createDiv({ cls: `myu-mrow${r.past ? " myu-mrow-past" : ""}` });
+    const mark = row.createSpan({ cls: "myu-mark" });
+    this.drawDot(mark, r.lines);
+    this.dotPainters().push(() => this.drawDot(mark, r.lines));
+    row.createSpan({ cls: "myu-time", text: r.time });
+    const body = row.createDiv({ cls: "myu-mrow-body" });
+    const ttl = body.createDiv({ cls: "myu-ttl", text: r.title });
+    if (r.small) ttl.createSpan({ cls: "myu-ttl-small", text: r.small });
+    const { ui: lineUi, answered } = this.lineState();
+    const saidHere = r.lines.filter((l) => answered.has(l.line_id));
+    const stack = stackOf(r.lines.filter((l) => !answered.has(l.line_id)));
+    const say = (l) => {
+      if (!isSpaceLine(l)) {
+        renderLineAsk(body, l, lineUi.get(l.line_id) ?? {}, { press: (b) => void this.pressLine(l, b) });
+        return;
+      }
+      const cls = l.ask_kind === "tell" ? "myu-done" : l.ask_kind === "wait" ? "myu-quiet" : "myu-line";
+      const line = body.createDiv({ cls, text: (l.text ?? "").trim(), attr: lineIdAttr(l.line_id) });
+      if (l.est && l.ask_kind !== "tell" && l.ask_kind !== "wait") line.createSpan({ cls: "myu-est", text: l.est });
+    };
+    saidHere.forEach(say);
+    if (stack.top) say(stack.top);
+    if (stack.count) {
+      const open = this.openStacks.has(r.key);
+      const fold = body.createEl("button", { cls: "myu-aff myu-fold-aff", text: `${stack.count} \u2014 ${open ? "hide" : "show"} \u25B8`, attr: { "aria-expanded": String(open) } });
+      fold.onclick = () => {
+        if (open) this.openStacks.delete(r.key);
+        else this.openStacks.add(r.key);
+        this.render();
+      };
+      if (open) stack.rest.forEach(say);
+    }
+    if (r.acts.length === 0) return;
+    const acts = body.createDiv({ cls: "myu-mrow-acts" });
+    for (const a of r.acts) {
+      const b = acts.createEl("button", { cls: "myu-aff", text: a.label });
+      b.onclick = a.onClick;
+    }
+  }
+  /**
+   * One of a question's buttons: the answer (`POST /myu/lines/answer`), the pages it opens (a
+   * calendar consent, the invite's compose), what Myu said back, then the pane again.
+   */
+  async pressLine(line, button) {
+    const id = line.line_id;
+    const { ui, answered } = this.lineState();
+    if (ui.get(id)?.busy) return;
+    ui.set(id, { busy: true });
+    this.render();
+    const out = await pressLineButton({ answer: (lineId, answer) => this.plugin.backend.answerMyuLine(lineId, answer), apiBase: this.plugin.settings.base_url }, line, button);
+    if (out.closed) {
+      ui.delete(id);
+      await this.refresh();
+      return;
+    }
+    for (const url of out.open) window.open(url, "_blank");
+    if (out.conversation) void this.plugin.openConversationRef(out.conversation, line.subjects?.[0]?.label ?? "");
+    ui.set(id, out.ui);
+    if (out.settled) answered.add(id);
+    this.render();
+    if (out.settled) await this.refresh();
+  }
+  /** "6 people" — a count, never who. */
+  who(m) {
+    const n = m.attendee_emails?.length ?? 0;
+    return n > 1 ? `${n} people` : "";
+  }
+  /** talk ▸ — the chat pane opens about this meeting, Myu speaking first. */
+  talkAboutMeeting(m, phase) {
+    const lines = this.linesForMeeting(m);
+    const line = stackOf(lines).top ?? lines.find((l) => (l.text ?? "").trim());
+    void this.plugin.openChatAbout("meeting", m.event_id, {
+      label: m.summary || "Meeting",
+      occurrenceKey: String(m.startDate.getTime()),
+      phase,
+      line: line?.text,
+      lineObj: line
+    });
+  }
+  /**
+   * The spaces this person belongs to: always here, under their own heading, one row each. Two
+   * doors: the space's own conversation with Myu (its words say where the person is in getting
+   * ready), and the team's retro (the questions, what people wrote, the tasks). An interview
+   * debrief's space has the first door only. Someone in many spaces sees the ones that need them
+   * and the first few; the rest sit behind "Show N more".
+   */
+  renderSpaces(root) {
+    const rows = spaceRows(this.spaces, this.todayLines ?? []);
+    if (rows.length === 0) return;
+    const zone = root.createDiv({ cls: "myu-zone" });
+    zone.createDiv({ cls: "myu-whisper", text: "spaces" });
+    const { shown: shown2, folded } = foldSpaceRows(rows, (r) => r.lines.some(lineNeedsYou));
+    for (const r of this.spacesOpen ? [...shown2, ...folded] : shown2) {
+      const first = stackOf(r.lines).top ?? r.lines[0];
+      this.row(zone, {
+        key: `space:${r.space_id}`,
+        time: "",
+        title: r.name,
+        small: r.small,
+        lines: r.lines,
+        // An interview debrief: one door, into its conversation. A team's space: its conversation and its retro.
+        acts: r.debrief ? [{ label: DEBRIEF_PANE_WORDS.door, onClick: () => void this.plugin.openChatAbout("space", r.space_id, { label: r.name, line: first?.text, debrief: true }) }] : [
+          { label: this.spaceDoors.get(r.space_id) ?? spaceDoorLabel(null), onClick: () => void this.plugin.openChatAbout("space", r.space_id, { label: r.name, line: first?.text }) },
+          { label: SPACE_RETRO_WORDS.show, onClick: () => void this.plugin.openChatAbout("space", r.space_id, { label: r.name, retro: true }) }
+        ]
+      });
+    }
+    if (folded.length === 0) return;
+    const more = zone.createEl("button", {
+      cls: "myu-aff myu-fold-aff",
+      text: this.spacesOpen ? "Show fewer \u25B8" : `Show ${folded.length} more \u25B8`,
+      attr: { "aria-expanded": String(this.spacesOpen) }
+    });
+    more.onclick = () => {
+      this.spacesOpen = !this.spacesOpen;
+      this.render();
+    };
+  }
+  /**
+   * People and companies Myu has something to say about: ONE row each, its door the
+   * conversation. Rows that need you come first; past the first few the rest fold behind
+   * "Show N more", so a busy day cannot push the meetings off the pane.
+   */
+  renderForYou(root) {
+    const groups = groupBySubject(this.nonMeetingLines());
+    if (groups.length === 0) return;
+    const zone = root.createDiv({ cls: "myu-zone" });
+    zone.createDiv({ cls: "myu-whisper", text: "for you" });
+    const { shown: shown2, folded } = foldRows(groups);
+    for (const g of this.forYouOpen ? [...shown2, ...folded] : shown2) {
+      const first = stackOf(g.lines).top ?? g.lines[0];
+      this.row(zone, {
+        key: g.key,
+        time: "",
+        title: g.label,
+        lines: g.lines,
+        // A drafted interview debrief's row has no conversation behind it: its line is answered here.
+        acts: rowOpensConversation(g) ? [{ label: "talk about this \u25B8", onClick: () => void this.plugin.openChatAbout(g.type, g.id, { label: g.label, line: first?.text, lineObj: first }) }] : []
+      });
+    }
+    if (folded.length === 0) return;
+    const more = zone.createEl("button", {
+      cls: "myu-aff myu-fold-aff",
+      text: this.forYouOpen ? "Show fewer \u25B8" : `Show ${folded.length} more \u25B8`,
+      attr: { "aria-expanded": String(this.forYouOpen) }
+    });
+    more.onclick = () => {
+      this.forYouOpen = !this.forYouOpen;
+      this.render();
+    };
+  }
+  /**
+   * Next, then Earlier — today's meetings as rows with Myu's line under each.
+   * `talk ▸` on every row; `prepare ▸` on the next meeting only. An earlier
+   * meeting's talk is the after-conversation ("how it went").
+   */
+  renderNext(root) {
+    const now = Date.now();
+    const grace = now - 15 * 60 * 1e3;
+    const meetings = this.meetings ?? [];
+    const upcoming = meetings.filter((m) => m.startDate.getTime() > grace);
+    const earlier = meetings.filter((m) => m.startDate.getTime() <= grace).reverse();
+    const zone = root.createDiv({ cls: "myu-zone" });
+    zone.createDiv({ cls: "myu-whisper", text: "next" });
+    if (upcoming.length === 0) {
+      zone.createEl("p", { cls: "myu-quiet", text: earlier.length > 0 ? "Nothing more today." : "No meetings today." });
+    }
+    upcoming.slice(0, 6).forEach((m, index) => {
+      const lines = this.linesForMeeting(m);
+      this.row(zone, {
+        key: `meeting:${m.event_id}:${m.startDate.getTime()}`,
+        time: timeLabel(m.startDate),
+        title: m.summary || "Meeting",
+        small: this.who(m),
+        lines,
+        acts: [
+          { label: "talk about this \u25B8", onClick: () => this.talkAboutMeeting(m, "before") },
+          ...index === 0 ? [{ label: "prepare \u25B8", onClick: () => void this.plugin.openPrep(m.event_id) }] : []
+        ]
+      });
+    });
+    if (earlier.length === 0) return;
+    const past = root.createDiv({ cls: "myu-zone" });
+    past.createDiv({ cls: "myu-whisper", text: "earlier" });
+    for (const m of earlier.slice(0, 4)) {
+      const lines = this.linesForMeeting(m);
+      this.row(past, {
+        key: `meeting:${m.event_id}:${m.startDate.getTime()}`,
+        time: timeLabel(m.startDate),
+        title: m.summary || "Meeting",
+        small: this.who(m),
+        lines,
+        past: true,
+        acts: [{ label: "talk about this \u25B8", onClick: () => this.talkAboutMeeting(m, "after") }]
+      });
+    }
+  }
+  // ── Open with you today ────────────────────────────────────────────────────
+  folder() {
+    return this.plugin.settings?.materialize_folder || "Myu";
+  }
+  /** `[[Myu/People/Dan Park|Dan Park]]` — their own page when they keep one. */
+  openPerson(name) {
+    const own = this.plugin.personIndex?.find(name)?.path ?? null;
+    const path = own ?? `${this.folder()}/People/${sanitizeName(name)}.md`;
+    void this.app.workspace.openLinkText(path, "", true);
+  }
+  /**
+   * The open commitments as Tasks checkboxes: owner as a wikilink, the words,
+   * the due date, where it came from. Soonest first, six shown, the rest in
+   * the Commitments file. Ticking marks it done in Myu through the same
+   * vault-interaction path the folder watcher uses for the files.
+   */
+  renderOpenWithYou(root) {
+    const open = (this.commitments ?? []).filter((c) => !c.status || c.status === "open");
+    if (open.length === 0) return;
+    const state = this.plugin.settings?.myu_checkbox_state ?? {};
+    const zone = root.createDiv({ cls: "myu-zone myu-open-today" });
+    zone.createDiv({ cls: "myu-whisper", text: "open items today" });
+    const list2 = zone.createEl("ul", { cls: "myu-tasks" });
+    const sorted = [...open].sort((a, b) => (a.deadline ?? "9999").localeCompare(b.deadline ?? "9999"));
+    for (const c of sorted.slice(0, 6)) {
+      const checked = !!state[c.commitment_id];
+      const li = list2.createEl("li", { cls: `myu-task${checked ? " myu-task-done" : ""}` });
+      const box = li.createEl("input", { attr: { type: "checkbox", "aria-label": "Mark this done in Myu" } });
+      box.checked = checked;
+      const body = li.createSpan({ cls: "myu-task-body" });
+      if (c.owner) {
+        const owner = c.owner;
+        const link = body.createSpan({ cls: "myu-wl", text: owner });
+        link.onclick = () => this.openPerson(owner);
+        body.createSpan({ text: " " });
+      }
+      body.createSpan({ text: (c.content ?? "").trim() || "(encrypted \u2014 open in Myu)" });
+      if (c.deadline) body.createSpan({ cls: "myu-task-date", text: ` \u{1F4C5} ${c.deadline.slice(0, 10)}` });
+      if (c.meeting_title) body.createSpan({ cls: "myu-task-from", text: ` (from ${c.meeting_title})` });
+      box.onchange = () => void this.tickCommitment(c, box.checked);
+    }
+    if (sorted.length > 6) {
+      const more = zone.createEl("button", { cls: "myu-affordance myu-link-button", text: `+${sorted.length - 6} more in Commitments` });
+      more.onclick = () => void this.app.workspace.openLinkText(`${this.folder()}/Commitments.md`, "", true);
+    }
+  }
+  /**
+   * "what you owe ▸", folded (terminal parity, 2026-09-26): the web's Home and the phone's Today show the same two
+   * lists, "you owe" and "owed to you", each row `what · name · next check <day>` with the status as sent. A row
+   * opens the other person's conversation. Nothing running either way: nothing is drawn.
+   */
+  renderWhatYouOwe(root) {
+    const fold = commitmentsFold(this.owed);
+    if (fold.empty) return;
+    const zone = root.createDiv({ cls: "myu-zone myu-owed" });
+    const head = zone.createEl("button", {
+      cls: "myu-affordance myu-link-button myu-whisper",
+      text: `${COMMITMENTS_FOLD_WORDS.title.toLowerCase()} ${this.owedOpen ? "\u25BE" : "\u25B8"}`,
+      attr: { "aria-expanded": String(this.owedOpen) }
+    });
+    head.onclick = () => {
+      this.owedOpen = !this.owedOpen;
+      this.render();
+    };
+    if (!this.owedOpen) return;
+    const list2 = (title, rows, more) => {
+      if (!rows.length) return;
+      zone.createDiv({ cls: "myu-whisper", text: title });
+      for (const r of rows) {
+        const row = zone.createEl("button", { cls: "myu-row myu-row-tappable myu-owed-row", text: r.text });
+        const open = r.open;
+        if (open) row.onclick = () => void this.plugin.openChatAbout(open.subject_type, open.subject_id, { label: open.label });
+        else row.disabled = true;
+      }
+      if (more > 0) zone.createDiv({ cls: "myu-quiet", text: COMMITMENTS_FOLD_WORDS.more(more) });
+    };
+    list2(COMMITMENTS_FOLD_WORDS.youOwe, fold.youOwe, fold.moreYouOwe);
+    list2(COMMITMENTS_FOLD_WORDS.owedToYou, fold.owedToYou, fold.moreOwedToYou);
+  }
+  async tickCommitment(c, checked) {
+    const s2 = this.plugin.settings;
+    const event = {
+      myu_id: c.commitment_id,
+      kind: checked ? "tick" : "untick",
+      after: commitmentLine(c, checked),
+      source_timestamp: Date.now()
+    };
+    const res = await safe(() => this.plugin.backend.vaultInteraction([event]));
+    if (!res?.ok) {
+      s2.vault_event_queue.push(event);
+      s2.myu_checkbox_state[c.commitment_id] = checked;
+      await this.plugin.saveSettings();
+      this.render();
+      return;
+    }
+    for (const r of res.data?.results ?? []) {
+      if (r.kind === "tick" && r.outcome === "resolved") s2.myu_checkbox_state[r.myu_id] = true;
+      else if (r.kind === "untick") s2.myu_checkbox_state[r.myu_id] = r.outcome === "restored";
+    }
+    await this.plugin.saveSettings();
+    void this.plugin.materializer?.refreshCommitmentSurfaces().catch(() => void 0);
+    await this.refresh();
   }
   /**
    * P4.4 — a quiet catch-up row when this month's mirror edition hasn't been
@@ -9579,7 +12577,7 @@ var TodayView = class extends import_obsidian16.ItemView {
     const loop = this.loop;
     if (!loop?.statement) return;
     const zone = root.createDiv({ cls: "myu-zone myu-loop" });
-    zone.createDiv({ cls: "myu-whisper", text: `the loop${loop.domain ? ` \xB7 ${loop.domain}` : ""}` });
+    zone.createDiv({ cls: "myu-whisper", text: `about you${loop.domain ? ` \xB7 ${loop.domain}` : ""}` });
     zone.createDiv({ cls: "myu-voice", text: loop.statement });
     for (const c of this.coupledLoops) {
       if (!c.other_statement) continue;
@@ -9589,11 +12587,11 @@ var TodayView = class extends import_obsidian16.ItemView {
     }
     const rate = zone.createDiv({ cls: "myu-chat-rating" });
     if (this.loopRated) {
-      rate.createSpan({ cls: "myu-whisper", text: this.loopRated === 1 ? "good read \u2014 noted" : "off the mark \u2014 noted" });
+      rate.createSpan({ cls: "myu-whisper", text: this.loopRated === 1 ? "Marked as helpful" : "Marked as not helpful" });
       return;
     }
-    for (const [rating, icon, label] of [[1, "thumbs-up", "Good read"], [-1, "thumbs-down", "Off the mark"]]) {
-      const b = rate.createEl("button", { cls: "myu-affordance myu-icon-button myu-rating-btn", attr: { "aria-label": `${label} \u2014 rate this read` } });
+    for (const [rating, icon, label] of [[1, "thumbs-up", "Helpful"], [-1, "thumbs-down", "Not helpful"]]) {
+      const b = rate.createEl("button", { cls: "myu-affordance myu-icon-button myu-rating-btn", attr: { "aria-label": `${label} \u2014 rate this` } });
       (0, import_obsidian16.setIcon)(b, icon);
       b.onclick = () => {
         this.loopRated = rating;
@@ -9626,7 +12624,7 @@ var TodayView = class extends import_obsidian16.ItemView {
   renderSyncBar(root) {
     if (this.staleSince) {
       const mins = Math.max(1, Math.round((Date.now() - this.staleSince) / 6e4));
-      root.createDiv({ cls: "myu-quiet", text: `Couldn\u2019t reach Myu ${mins === 1 ? "a minute" : `${mins} minutes`} ago \u2014 showing what was here, trying again.` });
+      root.createDiv({ cls: "myu-quiet", text: `Couldn\u2019t reach Myu ${mins === 1 ? "a minute" : `${mins} minutes`} ago. Showing the last update and trying again.` });
     }
     const bar = root.createDiv({ cls: "myu-sync-bar" });
     const sync = bar.createEl("button", { cls: "myu-affordance myu-icon-button", attr: { "aria-label": "Sync everything from Myu now" } });
@@ -9667,7 +12665,7 @@ var TodayView = class extends import_obsidian16.ItemView {
     if (!this.mirror) return;
     const zone = root.createDiv({ cls: "myu-zone myu-mirror" });
     zone.createDiv({ cls: "myu-whisper", text: "noticed this month" });
-    zone.createEl("p", { cls: "myu-quiet myu-mirror-caveat", text: "Patterns, not verdicts \u2014 each may be wrong" });
+    zone.createEl("p", { cls: "myu-quiet myu-mirror-caveat", text: "These are patterns Myu noticed, not conclusions. Each may be wrong." });
     for (const obs of this.mirror.observations) {
       this.renderMirrorObservation(zone, obs);
     }
@@ -9676,11 +12674,11 @@ var TodayView = class extends import_obsidian16.ItemView {
     const box = zone.createDiv({ cls: "myu-mirror-obs" });
     const state = this.mirrorFeedback.get(obs.observation_id) ?? "idle";
     if (state === "done") {
-      box.createEl("p", { cls: "myu-quiet", text: "Noted." });
+      box.createEl("p", { cls: "myu-quiet", text: "Okay." });
       return;
     }
     const line = box.createDiv({ cls: "myu-voice myu-mirror-voice", text: obs.text });
-    if (obs.forming) line.createSpan({ cls: "myu-mirror-forming", text: "  forming" });
+    if (obs.forming) line.createSpan({ cls: "myu-mirror-forming", text: "  still forming" });
     const isMap = obs.layer === "map";
     const actions = box.createDiv({ cls: "myu-mirror-actions" });
     const talk = actions.createEl("button", { cls: "myu-mirror-ctl", text: "Talk about this" });
@@ -9725,8 +12723,8 @@ var TodayView = class extends import_obsidian16.ItemView {
       refine.createSpan({ cls: "myu-mirror-ctl-label", text: "noted \u2014" });
       const options = [
         ["wrong_facts", "Wrong facts"],
-        ["wrong_reading", "Wrong read"],
-        ["true_drop_it", "True \u2014 drop it"]
+        ["wrong_reading", "Wrong conclusion"],
+        ["true_drop_it", "True, but drop it"]
       ];
       for (const [evt, label] of options) {
         const btn = refine.createEl("button", { cls: "myu-mirror-ctl", text: label });
@@ -9755,56 +12753,7 @@ var TodayView = class extends import_obsidian16.ItemView {
     void this.plugin.backend.submitPatternFeedback(eventType, obs.pattern_id, "mirror_edition").catch(() => {
     });
   }
-  renderNext(root) {
-    const now = Date.now();
-    const grace = now - 15 * 60 * 1e3;
-    const upcoming = this.meetings.filter((m) => m.startDate.getTime() > grace);
-    const earlier = this.meetings.filter((m) => m.startDate.getTime() <= grace).reverse();
-    if (earlier.length > 0) {
-      const past = root.createDiv({ cls: "myu-zone" });
-      past.createDiv({ cls: "myu-whisper", text: "earlier today" });
-      for (const meeting of earlier.slice(0, 4)) {
-        const row = past.createEl("button", { cls: "myu-row myu-row-tappable" });
-        row.createSpan({ cls: "myu-time", text: timeLabel(meeting.startDate) });
-        row.createSpan({ cls: "myu-row-title myu-row-past", text: meeting.summary || "Meeting" });
-        row.createSpan({ cls: "myu-affordance-inline", text: "Your read" });
-        row.onclick = () => void this.plugin.openPrep(meeting.event_id);
-      }
-    }
-    const zone = root.createDiv({ cls: "myu-zone" });
-    zone.createDiv({ cls: "myu-whisper", text: "next" });
-    if (upcoming.length === 0) {
-      zone.createEl("p", { cls: "myu-quiet", text: earlier.length > 0 ? "Nothing more today." : "No meetings today." });
-    }
-    upcoming.slice(0, 5).forEach((meeting, index) => {
-      const row = zone.createEl("button", { cls: "myu-row myu-row-tappable" });
-      row.createSpan({ cls: "myu-time", text: timeLabel(meeting.startDate) });
-      row.createSpan({ cls: "myu-row-title", text: meeting.summary || "Meeting" });
-      row.createSpan({
-        cls: index === 0 ? "myu-affordance-inline" : "myu-chevron",
-        text: index === 0 ? "Prep" : "\u203A"
-      });
-      row.onclick = () => void this.plugin.openPrep(meeting.event_id);
-    });
-    if (this.weekAhead.length > 0) {
-      zone.createDiv({ cls: "myu-whisper", text: "this week" });
-      for (const meeting of this.weekAhead.slice(0, 6)) {
-        const row = zone.createEl("button", { cls: "myu-row myu-row-tappable" });
-        row.createSpan({ cls: "myu-time", text: dayLabel(meeting.startDate) });
-        row.createSpan({ cls: "myu-row-title", text: meeting.summary || "Meeting" });
-        row.createSpan({ cls: "myu-chevron", text: "\u203A" });
-        row.onclick = () => void this.plugin.openPrep(meeting.event_id);
-      }
-      const held = this.weekAhead.length - 6;
-      if (held > 0) {
-        zone.createEl("p", { cls: "myu-quiet", text: `+${held} more later this week` });
-      }
-    }
-  }
 };
-function dayLabel(date) {
-  return date.toLocaleDateString([], { weekday: "short" }).toLowerCase();
-}
 function parseEventTime(value) {
   return new Date(value.includes("T") ? value : `${value.replace(" ", "T")}Z`);
 }
@@ -9828,6 +12777,15 @@ var import_obsidian20 = require("obsidian");
 
 // src/views/SourceDetailModal.ts
 var import_obsidian17 = require("obsidian");
+var SOURCE_KIND_WORDS = {
+  gmail: "Gmail",
+  email: "Email",
+  upload: "Uploaded email",
+  manual_upload: "Uploaded email",
+  journal_entry: "Journal",
+  journal_chat: "Chat",
+  calendar_event: "Calendar"
+};
 var SourceDetailModal = class extends import_obsidian17.Modal {
   constructor(app, plugin, sourceType, sourceId) {
     super(app);
@@ -9844,18 +12802,18 @@ var SourceDetailModal = class extends import_obsidian17.Modal {
     wait.remove();
     const d = res?.data?.detail;
     if (!res?.ok || !d) {
-      contentEl.createEl("p", { cls: "myu-problem", text: res?.data?.error === "unsupported_source_type" ? "Myu cannot show this kind of source yet." : "Could not fetch the source." });
+      contentEl.createEl("p", { cls: "myu-problem", text: res?.data?.error === "unsupported_source_type" ? "Myu cannot show this kind of source yet." : "Could not load the source." });
       return;
     }
-    contentEl.createDiv({ cls: "myu-claim", text: d.title || this.sourceType });
-    const meta = [d.subtitle, d.timestamp ? new Date(d.timestamp).toISOString().slice(0, 10) : "", d.source_type].filter(Boolean).join(" \xB7 ");
+    contentEl.createDiv({ cls: "myu-claim", text: d.title || SOURCE_KIND_WORDS[this.sourceType] || "A source" });
+    const meta = [d.subtitle, cardDayWords(d.timestamp) ?? "", d.source_type ? SOURCE_KIND_WORDS[d.source_type] ?? "" : ""].filter(Boolean).join(" \xB7 ");
     if (meta) contentEl.createDiv({ cls: "myu-quiet", text: meta });
     if (d.memories?.length) {
       const zone = contentEl.createDiv({ cls: "myu-zone" });
-      zone.createDiv({ cls: "myu-whisper", text: "what Myu took from it" });
+      zone.createDiv({ cls: "myu-whisper", text: "what Myu noted from it" });
       for (const m of d.memories) {
         const row = zone.createDiv({ cls: "myu-row" });
-        if (m.memory_date) row.createSpan({ cls: "myu-time", text: new Date(m.memory_date).toISOString().slice(0, 10) });
+        if (cardDayWords(m.memory_date)) row.createSpan({ cls: "myu-time", text: cardDayWords(m.memory_date) ?? "" });
         row.createSpan({ cls: "myu-row-title", text: m.content });
       }
     }
@@ -9919,7 +12877,7 @@ function controlsOf(component) {
         buttons.push({ label: o.label, action: `offer:${o.id}`, cta, params: { ...o.init ? { init: o.init } : {}, ...moment2 ? { moment: moment2, journal_id: str(data.journal_id) || void 0 } : {}, ...str(data.stopped_ack) ? { stopped_ack: str(data.stopped_ack) } : {} } });
       }
       if (ids.some((o) => o.id === "calendar_ical")) {
-        input = { action: "offer:calendar_ical", param_name: "url", placeholder: "https://calendar.google.com/calendar/ical/\u2026/basic.ics", submit_label: "Read my week", submitting_label: "Reading\u2026", validate: "url", help_text: "Google Calendar \u2192 Settings \u2192 your calendar \u2192 Secret address in iCal format. Outlook: Shared calendars \u2192 Publish. Read-only by construction." };
+        input = { action: "offer:calendar_ical", param_name: "url", placeholder: "https://calendar.google.com/calendar/ical/\u2026/basic.ics", submit_label: "Add calendar", submitting_label: "Reading\u2026", validate: "url", help_text: "Google Calendar \u2192 Settings \u2192 your calendar \u2192 Secret address in iCal format. Outlook: Shared calendars \u2192 Publish. Myu can only read this address; it can never change your calendar." };
       }
       break;
     }
@@ -9959,7 +12917,7 @@ function renderComponentActions(parent, component, host) {
     say(working);
     if (!action) {
       await host.interact(component.id, interaction).catch(() => void 0);
-      say("Sent \u2014 Myu will pick this up in the conversation.");
+      say("Sent. Myu will reply in the conversation.");
       return;
     }
     const res = await host.run(component.id, action, params);
@@ -10087,7 +13045,7 @@ function renderAsCanvasCard(root, component, host, onReject) {
       }
       if (!res?.ok) return { ok: false, message: res?.error || "That didn\u2019t work. Try again." };
       if (resolve === "confirm" || resolve === "manual_url") notifyStatus("Linked.");
-      if (resolve === "no_linkedin") notifyStatus("Noted \u2014 Myu won\u2019t keep guessing.");
+      if (resolve === "no_linkedin") notifyStatus("Okay. Myu won\u2019t suggest more profiles.");
       host.onResolved();
       return { ok: true, message: resolve === "reject" ? "noted \u2713" : "linked \u2713" };
     },
@@ -10159,7 +13117,7 @@ function renderLinkedInMatchesInline(root, suggestions, host) {
           none.disabled = false;
           return;
         }
-        notifyStatus("Noted \u2014 Myu won\u2019t keep guessing.");
+        notifyStatus("Okay. Myu won\u2019t suggest more profiles.");
         host.onResolved();
       })();
     };
@@ -10245,7 +13203,7 @@ var PersonEditModal = class extends import_obsidian19.Modal {
     contentEl.createEl("h2", { text: `Correct what Myu knows about ${this.displayName}` });
     contentEl.createEl("p", {
       cls: "myu-prose",
-      text: "These go to Myu, not to the note \u2014 the note is rewritten from what Myu knows, so this is the end that sticks."
+      text: "Your changes go to Myu, not to the note. Myu rewrites the note from what it knows, so changes made here stay."
     });
     new import_obsidian19.Setting(contentEl).setName("Facts").setHeading();
     this.textField(contentEl, "Name", "primary_name", this.displayName);
@@ -10257,7 +13215,7 @@ var PersonEditModal = class extends import_obsidian19.Modal {
       new import_obsidian19.Setting(contentEl).setName("Things Myu believes").setHeading();
       contentEl.createEl("p", {
         cls: "myu-prose",
-        text: "Correcting one keeps the original as a down-weighted memory and records your correction, so Myu learns the difference. Deleting removes it entirely."
+        text: "Correcting one keeps the original but gives it less weight, and saves your correction so Myu learns the difference. Deleting removes it completely."
       });
       for (const memory of this.memories.slice(0, 12)) this.memoryRow(contentEl, memory);
     }
@@ -10266,7 +13224,7 @@ var PersonEditModal = class extends import_obsidian19.Modal {
       this.close();
       this.plugin.mergePerson({ id: this.relationshipId, name: this.displayName });
     }));
-    new import_obsidian19.Setting(contentEl).setName("This is me").setDesc("Myu made a person out of you.").addButton((b) => b.setButtonText("That\u2019s me").onClick(() => {
+    new import_obsidian19.Setting(contentEl).setName("This is me").setDesc("Myu created this person by mistake. It is actually you.").addButton((b) => b.setButtonText("That\u2019s me").onClick(() => {
       this.close();
       this.plugin.markPersonAsSelf({ id: this.relationshipId, name: this.displayName });
     }));
@@ -10281,7 +13239,7 @@ var PersonEditModal = class extends import_obsidian19.Modal {
         } else notifyError(res.data?.error || "Couldn\u2019t unlink.");
       }));
     }
-    new import_obsidian19.Setting(contentEl).setName("Archive").setDesc("Myu stops surfacing them. Reversible, and nothing is deleted.").addButton(
+    new import_obsidian19.Setting(contentEl).setName("Archive").setDesc("Myu stops showing them. You can undo this, and nothing is deleted.").addButton(
       (b) => b.setButtonText("Archive").onClick(async () => {
         const res = await this.plugin.backend.archiveRelationship(this.relationshipId, "archive");
         if (res.ok) {
@@ -10291,7 +13249,7 @@ var PersonEditModal = class extends import_obsidian19.Modal {
         } else notifyError("Couldn't archive them.");
       })
     );
-    new import_obsidian19.Setting(contentEl).setName("Forget entirely").setDesc("Deletes them and everything Myu derived from them. Cannot be undone.").addButton(
+    new import_obsidian19.Setting(contentEl).setName("Forget entirely").setDesc("Deletes them and everything Myu has learned from them. Cannot be undone.").addButton(
       (b) => b.setButtonText("Forget").setDestructive().onClick(async () => {
         const res = await this.plugin.backend.purgeRelationship(this.relationshipId);
         if (res.ok) {
@@ -10319,12 +13277,12 @@ var PersonEditModal = class extends import_obsidian19.Modal {
     row.addButton(
       (b) => b.setButtonText("Correct").onClick(async () => {
         if (!correction) {
-          notifyError("Say what is actually true first.");
+          notifyError("Type the correction first.");
           return;
         }
         const res = await this.plugin.backend.editRelationshipMemory(memory.memory_id, "correct", correction);
         if (res.ok) {
-          notifyStatus("Corrected \u2014 Myu keeps both and weights yours.");
+          notifyStatus("Corrected. Myu keeps both versions and trusts yours more.");
           this.onChanged();
         } else notifyError("Couldn't record that correction.");
       })
@@ -10359,6 +13317,97 @@ var PersonEditModal = class extends import_obsidian19.Modal {
   }
 };
 
+// src/mapFold.ts
+var MAP_FOLD_PAGE = 50;
+function objectPronoun(pronouns) {
+  const p = (pronouns ?? "").trim().toLowerCase();
+  if (p === "she/her") return "her";
+  if (p === "he/him") return "him";
+  return "them";
+}
+var MAP_FOLD_WORDS = {
+  /** The one control on a folded row (the name sits beside it). */
+  keep: "Keep track",
+  /** The same control on a person's card. */
+  keepOf: (first) => `Keep track of ${first}`,
+  /** The first line inside the fold. */
+  intro: "These people were on your emails, but Myu isn\u2019t keeping track of them. Pick anyone you want it to keep track of.",
+  /** The mark on a search result for a person on the map. */
+  mark: "not keeping track yet",
+  /** The state on a person's card. */
+  cardState: (first, pronouns) => `${first} has been on a few of your emails. Myu isn\u2019t keeping track of ${objectPronoun(pronouns)} yet.`,
+  /** How often they were on your mail. */
+  onEmails: (n) => n === 1 ? "on 1 email" : `on ${n} emails`,
+  /** The day they were last seen, as a person says it: "2 Oct", or "2 Oct 2024" in another year. */
+  lastSeen: (when, now = /* @__PURE__ */ new Date()) => {
+    if (!when) return "";
+    const parsed = Date.parse(when);
+    const d = Number.isNaN(parsed) ? new Date(when.replace(" ", "T")) : new Date(parsed);
+    if (Number.isNaN(d.getTime())) return "";
+    const sameYear = d.getFullYear() === now.getFullYear();
+    return d.toLocaleDateString(void 0, sameYear ? { day: "numeric", month: "short" } : { day: "numeric", month: "short", year: "numeric" });
+  },
+  more: "More \u25B8",
+  showing: (shown2, total) => `Showing ${shown2} of ${total}`,
+  /** After the last one was taken. */
+  empty: "That\u2019s everyone.",
+  /** After "Keep track" went through. */
+  kept: (first) => `Myu is keeping track of ${first} now.`,
+  /** A "Keep track" the server refused or that did not go through. */
+  failed: "Myu couldn\u2019t do that just now. Try again."
+};
+function foldLine(map) {
+  if (!map || !(map.count > 0)) return null;
+  return map.line?.trim() || `${map.count} more people from your mail`;
+}
+function isOnMap(row) {
+  return row?.on_map === true;
+}
+function mapRowId(row) {
+  return row.relationship_id ?? row.id ?? "";
+}
+function mapRowName(row) {
+  return row.primary_name ?? row.name ?? row.email_primary ?? row.email ?? "Someone";
+}
+function mapRowCompany(row) {
+  return row.company_name ?? row.organization ?? row.stated_company ?? null;
+}
+function mapRowAddress(row) {
+  return row.email_primary ?? row.email ?? null;
+}
+function timesSeen(row) {
+  return row.times_seen ?? row.mention_count ?? 0;
+}
+function seenWords(row, now = /* @__PURE__ */ new Date()) {
+  const times = MAP_FOLD_WORDS.onEmails(timesSeen(row));
+  const last = MAP_FOLD_WORDS.lastSeen(row.last_seen, now);
+  return last ? `${times}, last ${last}` : times;
+}
+function mapRowMeta(row, now = /* @__PURE__ */ new Date()) {
+  return [mapRowCompany(row), mapRowAddress(row), seenWords(row, now)].filter(Boolean).join(" \xB7 ");
+}
+function foldHasMore(loaded, count2, lastPage, limit = MAP_FOLD_PAGE) {
+  return loaded < count2 && lastPage >= limit;
+}
+function foldAfterOneLeft(map) {
+  if (!map) return null;
+  const count2 = Math.max(0, map.count - 1);
+  if (count2 === 0) return { count: 0, line: null };
+  const line = map.line ? map.line.replace(String(map.count), String(count2)) : null;
+  return { count: count2, line };
+}
+function withoutRow(rows, relationshipId) {
+  return rows.filter((r) => mapRowId(r) !== relationshipId);
+}
+function mapRowFirst(row) {
+  const name = mapRowName(row).trim();
+  return name.split(/\s+/)[0] || name;
+}
+function firstNameOf(name) {
+  const n = (name ?? "").trim();
+  return n.split(/\s+/)[0] || "them";
+}
+
 // src/views/CardView.ts
 var CARD_VIEW_TYPE = "askmyu-card";
 var _CardView = class _CardView extends import_obsidian20.ItemView {
@@ -10376,6 +13425,14 @@ var _CardView = class _CardView extends import_obsidian20.ItemView {
     /** Board perspectives — fetched on demand, reset per entity. */
     this.board = null;
     this.boardOpen = false;
+    /**
+     * People Myu isn't keeping track of yet (2026-10-03): the words under the header after "Keep track of <First>"
+     * went through, kept across the re-read (the fresh card no longer says `on_map`); the one that failed, until the
+     * next press. Both forgotten when the pane moves to someone else.
+     */
+    this.mapWord = null;
+    /** The press in flight — tests wait on it. */
+    this.busy = Promise.resolve();
   }
   getViewType() {
     return CARD_VIEW_TYPE;
@@ -10420,14 +13477,19 @@ var _CardView = class _CardView extends import_obsidian20.ItemView {
       }
       const id = row.memory_id;
       if (!text || !id) continue;
-      memories.push({ memory_id: id, text, date: row.memory_date?.slice(0, 10) });
+      memories.push({ memory_id: id, text, date: cardDayWords(row.memory_date) ?? void 0 });
     }
     new PersonEditModal(this.app, this.plugin, entityId, this.entityName, memories, () => {
       void this.showEntity(this.entityType, entityId, this.entityName);
       void this.plugin.materializer.materializeAll();
     }, this.card?.header?.linkedin_url ?? null).open();
   }
+  /** The "Keep track of …" press in flight, if any. */
+  whenIdle() {
+    return this.busy;
+  }
   async showEntity(entityType, entityId, fallbackName) {
+    if (this.mapWord && this.mapWord.entityId !== entityId) this.mapWord = null;
     this.entityType = entityType;
     this.entityId = entityId;
     this.entityName = fallbackName;
@@ -10478,7 +13540,7 @@ var _CardView = class _CardView extends import_obsidian20.ItemView {
       }
       root.createEl("p", {
         cls: "myu-quiet",
-        text: this.entityType === "company" ? "Myu doesn't have a read on this company yet." : "Myu couldn't find this person. Point it at the right profile:"
+        text: this.entityType === "company" ? "Myu doesn't know anything about this company yet." : "Myu couldn't find this person. Paste their LinkedIn profile below, or say they are not on LinkedIn:"
       });
       if (this.entityType === "person") this.renderLinkedInRecovery(root);
       return;
@@ -10487,8 +13549,9 @@ var _CardView = class _CardView extends import_obsidian20.ItemView {
     const header = this.card.header;
     root.createDiv({ cls: "myu-card-title", text: header?.display_name || this.entityName || "Card" });
     if (header?.subtitle) root.createDiv({ cls: "myu-quiet", text: header.subtitle });
+    if (this.entityType === "person" && this.entityId) this.renderMapState(root, this.entityId, header);
     if (header?.identity_status && header.identity_status !== "confirmed" && header.identity_status !== "linked") {
-      const confirm = root.createEl("button", { cls: "myu-affordance myu-cta", text: "That's them \u2014 confirm" });
+      const confirm = root.createEl("button", { cls: "myu-affordance myu-cta", text: "Yes, that's them" });
       confirm.onclick = () => {
         const entityId = this.entityId;
         if (!entityId) return;
@@ -10522,10 +13585,10 @@ var _CardView = class _CardView extends import_obsidian20.ItemView {
     if (this.entityId) this.renderDispatch(root, header?.display_name || this.entityName);
     if (this.entityType === "person") this.renderVaultLink(root, header?.display_name);
     if (this.entityType === "person" && this.entityId) {
-      const correct = root.createEl("button", { cls: "myu-affordance", text: "Correct this" });
+      const correct = root.createEl("button", { cls: "myu-affordance", text: "Edit or correct" });
       correct.onclick = () => void this.openCorrections();
     }
-    const discuss = root.createEl("button", { cls: "myu-affordance", text: "Discuss" });
+    const discuss = root.createEl("button", { cls: "myu-affordance", text: "Discuss with Myu" });
     discuss.onclick = () => void this.plugin.openChat({
       text: "",
       send: false,
@@ -10576,13 +13639,45 @@ var _CardView = class _CardView extends import_obsidian20.ItemView {
       const disclosure = root.createDiv({ cls: "myu-zone" });
       const link = disclosure.createEl("a", {
         cls: "myu-quiet",
-        text: `${undrawn} ${undrawn === 1 ? "section doesn\u2019t" : "sections don\u2019t"} render here yet \u2014 open on the web`,
+        text: `${undrawn} ${undrawn === 1 ? "section can\u2019t" : "sections can\u2019t"} be shown here yet \u2014 open on the web`,
         href: `${this.plugin.settings.base_url.replace(/\/api\/?$/, "")}/dashboard`
       });
       link.setAttr("target", "_blank");
       link.setAttr("rel", "noopener");
     }
     this.renderBoard(root);
+  }
+  /**
+   * The block under the header for a person on the map: the state sentence (their first name, their pronouns) and
+   * "Keep track of <First>" → `POST /v2/relationships/keep`. On success the block says so and the card re-reads
+   * (the fresh header no longer says `on_map`, so only the sentence stays); a refusal says so under the button, which
+   * stays pressable. Nothing when `on_map` is false or absent — except the words from a press on this very card.
+   */
+  renderMapState(root, entityId, header) {
+    const word = this.mapWord?.entityId === entityId ? this.mapWord.text : null;
+    if (!isOnMap(header)) {
+      if (word) root.createDiv({ cls: "myu-map-state" }).createDiv({ cls: "myu-map-state-line myu-quiet", text: word });
+      return;
+    }
+    const first = firstNameOf(header?.display_name || this.entityName);
+    const block = root.createDiv({ cls: "myu-map-state" });
+    block.createDiv({ cls: "myu-map-state-line myu-quiet", text: MAP_FOLD_WORDS.cardState(first, header?.pronouns) });
+    const keep = block.createEl("button", { cls: "myu-affordance myu-cta myu-map-keep", text: MAP_FOLD_WORDS.keepOf(first) });
+    if (word) block.createDiv({ cls: "myu-map-state-line myu-quiet", text: word });
+    keep.onclick = () => {
+      keep.disabled = true;
+      this.busy = this.busy.then(async () => {
+        const res = await this.plugin.backend.keepRelationship(entityId).catch(() => null);
+        if (this.entityId !== entityId) return;
+        if (!res?.ok) {
+          this.mapWord = { entityId, text: MAP_FOLD_WORDS.failed };
+          this.render();
+          return;
+        }
+        this.mapWord = { entityId, text: MAP_FOLD_WORDS.kept(first) };
+        await this.showEntity(this.entityType, entityId, this.entityName);
+      }).catch(() => void 0);
+    };
   }
   /**
    * Board perspectives (parity gap closed 2026-08-21) — 2-3 advisor takes,
@@ -10609,12 +13704,12 @@ var _CardView = class _CardView extends import_obsidian20.ItemView {
     }
     zone.createDiv({ cls: "myu-whisper", text: "the board" });
     if (!this.board) {
-      zone.createEl("p", { cls: "myu-quiet", text: "Convening\u2026" });
+      zone.createEl("p", { cls: "myu-quiet", text: "Loading\u2026" });
       return;
     }
     const takes = this.board.takes ?? [];
     if (takes.length === 0) {
-      zone.createEl("p", { cls: "myu-quiet", text: "The board has nothing yet \u2014 not enough history here." });
+      zone.createEl("p", { cls: "myu-quiet", text: "The board has nothing to say yet. There is not enough history with this person." });
       return;
     }
     for (const take of takes) {
@@ -10622,7 +13717,7 @@ var _CardView = class _CardView extends import_obsidian20.ItemView {
       block.createDiv({ cls: "myu-whisper", text: (take.advisor_name ?? "advisor").toLowerCase() });
       block.createDiv({ cls: "myu-voice", text: take.take_text ?? take.text ?? "" });
     }
-    const talk = zone.createEl("button", { cls: "myu-affordance", text: "Talk this through" });
+    const talk = zone.createEl("button", { cls: "myu-affordance", text: "Discuss with Myu" });
     talk.onclick = () => {
       const lines = takes.map((t) => `${t.advisor_name ?? "Advisor"}: ${t.take_text ?? t.text ?? ""}`).join("\n");
       void this.plugin.openChat({
@@ -10657,9 +13752,9 @@ What do you make of these?`,
           const url = init?.data?.auth_url;
           if (init?.ok && url) {
             window.open(url, "_blank");
-            notifyStatus("Finish in your browser \u2014 Myu reads the history when you come back.");
+            notifyStatus("Finish in your browser. Myu will read your email history once you are done.");
           } else {
-            notifyError("The consent screen did not answer. Try again in a moment.");
+            notifyError("Could not open the sign-in page. Try again in a moment.");
             b.disabled = false;
           }
         };
@@ -10714,7 +13809,7 @@ What do you make of these?`,
     const mems = memories?.data?.related ?? [];
     if (!persons.length && !mems.length) return;
     const zone = root.createDiv({ cls: "myu-zone" });
-    zone.createDiv({ cls: "myu-whisper", text: "around them" });
+    zone.createDiv({ cls: "myu-whisper", text: "related" });
     for (const p of persons) {
       const row = zone.createEl("button", { cls: "myu-row myu-row-tappable", attr: { "aria-label": `Open ${p.display_name}` } });
       row.createSpan({ cls: "myu-row-title", text: p.display_name + (p.subtitle ? ` \u2014 ${p.subtitle}` : "") });
@@ -10723,7 +13818,7 @@ What do you make of these?`,
     for (const m of mems) {
       if (!m.content) continue;
       const row = zone.createDiv({ cls: "myu-row" });
-      if (m.memory_date) row.createSpan({ cls: "myu-time", text: m.memory_date.slice(0, 10) });
+      if (cardDayWords(m.memory_date)) row.createSpan({ cls: "myu-time", text: cardDayWords(m.memory_date) ?? "" });
       row.createSpan({ cls: "myu-row-title", text: (m.entity_display_name ? `${m.entity_display_name}: ` : "") + m.content });
       if (m.source_type && m.source_id) {
         const src = row.createEl("button", { cls: "myu-affordance myu-icon-button", attr: { "aria-label": "Where this came from" } });
@@ -10738,7 +13833,7 @@ What do you make of these?`,
     if (!page) return;
     const note = this.plugin.app.vault.getAbstractFileByPath(page.path);
     if (!(note instanceof import_obsidian20.TFile)) return;
-    const link = root.createEl("button", { cls: "myu-affordance", text: "Your note" });
+    const link = root.createEl("button", { cls: "myu-affordance", text: "Open your note" });
     link.onclick = () => void this.app.workspace.getLeaf(false).openFile(note);
   }
 };
@@ -10752,342 +13847,1202 @@ _CardView.mailOfferHidden = false;
 var CardView = _CardView;
 
 // src/views/PrepView.ts
+var import_obsidian22 = require("obsidian");
+
+// src/prepCard.ts
+var PREP_WORDS = {
+  parts: {
+    purpose: "What it\u2019s for",
+    since_last: "Since last time",
+    moves: "Your moves",
+    power: "Where power sits",
+    watch: "One thing to watch"
+  },
+  why: "why \u25B8",
+  whyOpen: "why \u25BE",
+  more: "more \u25B8",
+  less: "less \u25B4",
+  stands: "Where things stand",
+  youOwe: "You owe",
+  theyOwe: "They owe",
+  worksBest: "How they like to work",
+  stance: "In your threads",
+  room: "The room",
+  beforeYouGo: "Before you go in",
+  planned: "What\u2019s planned",
+  documents: "Documents",
+  setUpEmail: "The email that set it up",
+  lastNotes: "Last time\u2019s notes",
+  openNotes: "Open the notes \u25B8",
+  notReplied: "Hasn\u2019t replied",
+  notRepliedMany: "Haven\u2019t replied",
+  afterwards: "Afterwards",
+  candidateFacts: "About the candidate",
+  yourTopics: "Your topics",
+  openItem: "open \u25B8",
+  openConversation: "Open the conversation \u25B8",
+  writeHowItWent: "Write how it went \u25B8",
+  answerPlaceholder: "Type your answer",
+  sendAnswer: "Send",
+  partial: "From your calendar only for now. The rest comes when you open it with your key here.",
+  loading: "Getting it ready\u2026",
+  failed: "That didn\u2019t load. Try again in a moment."
+};
+function prepPartLabel(part) {
+  return PREP_WORDS.parts[part] ?? part.replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase());
+}
+function prepEvidenceFor(prep, ids) {
+  const out = [];
+  for (const id of ids ?? []) {
+    const ev = prep.evidence?.[id];
+    if (ev) out.push({ id, ev });
+  }
+  return out;
+}
+function prepPersonHasMore(p) {
+  return !!(p.stands || p.works_best || p.stance || p.last_time || p.you_owe.length || p.they_owe.length);
+}
+function prepPhase(prep, now = Date.now()) {
+  const t = Date.parse(prep.starts_at);
+  return Number.isFinite(t) && now >= t ? "after" : "before";
+}
+function prepDocument(d) {
+  if (typeof d === "string") return { name: d, url: null };
+  return { name: d.title || d.name || d.fileUrl || d.url || "", url: d.fileUrl || d.url || null };
+}
+function prepNotRepliedLabel(names) {
+  return names.length === 1 ? PREP_WORDS.notReplied : PREP_WORDS.notRepliedMany;
+}
+function prepTextLines(prep) {
+  const out = [];
+  const push = (s2) => {
+    const t = s2?.trim();
+    if (t) out.push(t);
+  };
+  for (const t of prep.top ?? []) {
+    push(t.text);
+    for (const it of t.items ?? []) push(it.text);
+  }
+  for (const p of prep.people ?? []) {
+    push(p.to_you);
+    push(p.stands);
+    push(p.stance);
+    for (const o of p.you_owe) push(`You owe ${p.name}: ${o}`);
+    for (const o of p.they_owe) push(`${p.name} owes you: ${o}`);
+  }
+  for (const l of prep.room?.lines ?? []) push(l.text);
+  push(prep.before_you_go?.agenda);
+  push(prep.before_you_go?.last_notes?.summary);
+  for (const f of prep.interview?.candidate_facts ?? []) push(f);
+  push(prep.afterwards);
+  return out;
+}
+function isPrepV2(p) {
+  return !!p && typeof p === "object" && p.version === 2 && Array.isArray(p.top);
+}
+function prepAskMode(ask) {
+  if (ask.select === "many") return "many";
+  return ask.input === "choice" ? "choice" : "text";
+}
+var PREP_VIEW_WORDS = {
+  /** The pane's tab before a card has loaded; with one, the meeting's title follows the dash. */
+  pane: "Myu \u2014 meeting",
+  /** 404: the event is not on this account's calendar. */
+  unknown: "Myu can\u2019t find this meeting on your calendar.",
+  retry: "Try again",
+  /** The label over Myu's own words (its question, the arc's invitation, what it said back). */
+  myu: "myu",
+  /** A typed answer went into the meeting's conversation. */
+  sent: "Sent. Myu\u2019s reply is in the conversation.",
+  /** A meeting's notes, shown in place when the vault has no note for that meeting. */
+  notesLoading: "Opening the notes\u2026",
+  notesEmpty: "Nothing in those notes yet.",
+  notesFailed: "Those notes didn\u2019t open. Try again in a moment."
+};
+function prepWhen(iso) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const day = d.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" });
+  const time = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }).toLowerCase().replace(":00", "").replace(/\s/g, "");
+  return `${day}, ${time}`;
+}
+var MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+function prepShortDate(iso) {
+  const d = new Date(iso ?? "");
+  return Number.isNaN(d.getTime()) ? "" : `${d.getDate()} ${MONTHS[d.getMonth()]}`;
+}
+function evidenceOpening(ev) {
+  const open = ev.open;
+  if (!open?.id) return null;
+  switch (open.kind) {
+    case "url":
+    case "linkedin":
+      return /^https?:\/\//i.test(open.id) ? { kind: "link", url: open.id } : null;
+    case "email":
+      return open.url && /^https?:\/\//i.test(open.url) ? { kind: "link", url: open.url } : null;
+    case "journal":
+      return { kind: "journal", id: open.id };
+    case "meeting":
+      return { kind: "meeting", id: open.id };
+    case "space":
+      return { kind: "space", id: open.id };
+    default:
+      return null;
+  }
+}
+function meetingNoteLines(detail) {
+  const text = (v) => typeof v === "string" ? v.trim() : "";
+  const list2 = (v) => Array.isArray(v) ? v.map((i) => typeof i === "string" ? i.trim() : text(i?.text) || text(i?.content)).filter(Boolean) : [];
+  const m = detail?.meeting ?? {};
+  return [text(m.summary) || text(m.debrief), ...list2(detail?.key_points), ...list2(detail?.decisions)].filter(Boolean);
+}
+function prepChatContext(prep, phase = prepPhase(prep)) {
+  const starts = Date.parse(prep.starts_at);
+  return {
+    source: "prep",
+    source_id: prep.event_id,
+    prep_phase: phase,
+    prep_event_id: prep.event_id,
+    prep_meeting_title: prep.title,
+    ...Number.isFinite(starts) ? { prep_meeting_starts_at: starts } : {},
+    prep_claims: prepTextLines(prep),
+    entity_references: prep.people.flatMap((p) => p.relationship_id ? [{ entity_type: "person", entity_id: p.relationship_id, display_name: p.name }] : [])
+  };
+}
+function prepOccurrenceKey(prep) {
+  if (prep.occurrence_key) return String(prep.occurrence_key);
+  const t = Date.parse(prep.starts_at);
+  return Number.isFinite(t) && t > 0 ? String(t) : null;
+}
+var settledNothing = () => ({ said: null, note: null, open: [], conversation: null, closed: false });
+var failedWords = (error) => error === "offline" ? LINE_ANSWER_WORDS.offline : LINE_ANSWER_WORDS.failed;
+function isHoldChoice(choiceId) {
+  return choiceId === "hold_time" || choiceId === "hold";
+}
+function holdPage(effects, arc) {
+  const ready = (effects ?? []).find((e) => e.type === "invite_ready" && typeof e.handoff_url === "string" && /^https?:\/\//i.test(e.handoff_url));
+  if (ready && typeof ready.handoff_url === "string") return ready.handoff_url;
+  return arc?.hold_link && /^https?:\/\//i.test(arc.hold_link) ? arc.hold_link : null;
+}
+function conversationOf(effects) {
+  const e = (effects ?? []).find((x) => x.type === "open_conversation" && typeof x.subject_type === "string" && typeof x.subject_id === "string");
+  if (!e || typeof e.subject_type !== "string" || typeof e.subject_id !== "string") return null;
+  return { subject_type: e.subject_type, subject_id: e.subject_id, ...typeof e.occurrence_key === "string" && e.occurrence_key ? { occurrence_key: e.occurrence_key } : {} };
+}
+async function answerPrepPick(backend, line, answer) {
+  const res = await backend.answerMyuLine(line.line_id, answer).catch(() => null);
+  if (lineClosed(res)) return { ...settledNothing(), closed: true };
+  if (!res?.ok || !res.data) return { ...settledNothing(), note: failedWords(res?.error) };
+  const said = readbackText(res.data);
+  if (res.data.line_open) return { ...settledNothing(), note: said };
+  return { ...settledNothing(), said: said ?? "" };
+}
+async function sendPrepAnswer(backend, prep, text, pasted = []) {
+  const content = text.trim();
+  if (!content && pasted.length === 0) return settledNothing();
+  const occurrenceKey = prepOccurrenceKey(prep) ?? void 0;
+  const read = await backend.getSubjectConversation("meeting", prep.event_id, { occurrenceKey }).catch(() => null);
+  const conversationId = read?.ok ? read.data?.conversation_id : void 0;
+  if (!conversationId) return { ...settledNothing(), note: failedWords(read?.error) };
+  const res = await backend.addSubjectTurn(conversationId, content, pasted).catch(() => null);
+  if (!res?.ok) return { ...settledNothing(), note: failedWords(res?.error) };
+  if (pastedTextLost(pasted.length, res.data)) return { ...settledNothing(), note: PASTE_WORDS.lost, pastedLost: true };
+  return { ...settledNothing(), said: PREP_VIEW_WORDS.sent };
+}
+async function answerPrepLine(backend, prep, line, choiceId) {
+  const onArc = !!prep.arc && prep.arc.line_id === line.line_id;
+  const hold = onArc && isHoldChoice(choiceId);
+  const res = await backend.answerMyuLine(line.line_id, { choice_id: choiceId }).catch(() => null);
+  if (lineClosed(res)) return { ...settledNothing(), closed: true };
+  if (!res?.ok || !res.data) {
+    const page2 = hold ? holdPage(null, prep.arc) : null;
+    return { ...settledNothing(), note: failedWords(res?.error), open: page2 ? [page2] : [] };
+  }
+  const effects = res.data.effects ?? [];
+  const page = hold ? holdPage(effects, prep.arc) : null;
+  const occurrenceKey = prepOccurrenceKey(prep);
+  const nowRef = { subject_type: "meeting", subject_id: prep.event_id, ...occurrenceKey ? { occurrence_key: occurrenceKey } : {} };
+  const conversation = conversationOf(effects) ?? (onArc && choiceId === "now" ? nowRef : null);
+  const said = readbackText(res.data);
+  const open = page ? [page] : [];
+  if (res.data.line_open) return { ...settledNothing(), note: said, open, conversation };
+  return { ...settledNothing(), said: said ?? "", open, conversation };
+}
+
+// src/views/pastedChips.ts
+function attachPasteListeners(input, host) {
+  let draggingHere = false;
+  const take = (e, text, source) => {
+    if (!text || !shouldChip(text) || host.isTyping?.()) return;
+    e.preventDefault();
+    const value = input.value;
+    const start = Math.min(input.selectionStart ?? value.length, value.length);
+    const end = Math.min(Math.max(start, input.selectionEnd ?? start), value.length);
+    if (source === "paste") {
+      if (end > start) input.value = value.slice(0, start) + value.slice(end);
+      input.setSelectionRange(start, start);
+    }
+    host.addPasted(text, source, start);
+  };
+  const box = input;
+  box.addEventListener("paste", (e) => take(e, e.clipboardData?.getData("text/plain") ?? "", "paste"));
+  box.addEventListener("dragstart", () => {
+    draggingHere = true;
+  });
+  box.addEventListener("dragend", () => {
+    draggingHere = false;
+  });
+  box.addEventListener("drop", (e) => {
+    if (draggingHere || (e.dataTransfer?.files?.length ?? 0) > 0) return;
+    take(e, e.dataTransfer?.getData("text/plain") ?? "", "drop");
+  });
+  box.addEventListener("beforeinput", (e) => {
+    if (e.inputType !== "insertText" && e.inputType !== "insertReplacementText") return;
+    take(e, e.data ?? e.dataTransfer?.getData("text/plain") ?? "", "paste");
+  });
+}
+function isUndoKey(e) {
+  return (e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && (e.key === "z" || e.key === "Z" || e.code === "KeyZ");
+}
+function pastedLiveRegion(host) {
+  return host.createDiv({ cls: "myu-sr-only", attr: { role: "status", "aria-live": "polite" } });
+}
+function announce(region, words) {
+  if (!region) return;
+  region.setText("");
+  region.setText(words);
+}
+function renderPastedRow(el, chips, on) {
+  el.empty();
+  chips.forEach((chip, i) => {
+    const n = chips.length > 1 ? i + 1 : void 0;
+    const item = el.createSpan({ cls: "myu-pasted-chip" });
+    const open = item.createEl("button", { cls: "myu-pasted-open", text: chipLabel(chip, n) });
+    const preview = pastedPreview(chip.text);
+    if (preview) open.createSpan({ cls: "myu-pasted-preview", text: preview });
+    open.onclick = () => on.open(chip.id);
+    const remove = item.createEl("button", { cls: "myu-pasted-remove", text: "\xD7", attr: { "aria-label": PASTE_WORDS.removeLabel(n) } });
+    remove.onclick = () => on.remove(chip.id);
+  });
+  const problem = pastedBlocksProblem(chips);
+  if (problem) el.createDiv({ cls: "myu-pasted-hint myu-pasted-problem", text: problem.words });
+  if (on.note) el.createDiv({ cls: "myu-pasted-hint", text: on.note });
+  const undo = on.undo;
+  if (undo) {
+    const hint = el.createDiv({ cls: "myu-pasted-hint" });
+    hint.createSpan({ text: `${PASTE_WORDS.hint} \xB7 ` });
+    const b = hint.createEl("button", { cls: "myu-pasted-undo", text: PASTE_WORDS.undo });
+    b.onclick = () => undo();
+  }
+}
+function renderPastedCards(el, blocks, expanded, onToggle) {
+  blocks.forEach((pasted, i) => {
+    const n = blocks.length > 1 ? i + 1 : void 0;
+    const card = el.createEl("details", { cls: "myu-pasted-card" });
+    if (expanded.has(pasted.id)) card.setAttr("open", "");
+    card.createEl("summary", { text: cardLabel(pasted, n) });
+    card.createDiv({ cls: "myu-pasted-text", text: pasted.text });
+    card.addEventListener("toggle", () => onToggle(pasted.id, card.hasAttribute("open")));
+  });
+}
+
+// src/views/PastedTextModal.ts
 var import_obsidian21 = require("obsidian");
+var reasonIds = 0;
+var PastedTextModal = class extends import_obsidian21.Modal {
+  constructor(app, chip, n, typed, on) {
+    super(app);
+    this.chip = chip;
+    this.n = n;
+    this.typed = typed;
+    this.on = on;
+  }
+  onOpen() {
+    const { contentEl } = this;
+    contentEl.empty();
+    this.setTitle(chipLabel(this.chip, this.n));
+    contentEl.createDiv({ cls: "myu-pasted-text myu-pasted-sheet", text: this.chip.text, attr: { tabindex: "0" } });
+    const check = canPutBack(this.typed, this.chip);
+    const acts = contentEl.createDiv({ cls: "modal-button-container" });
+    const putBack = acts.createEl("button", { cls: "mod-cta", text: PASTE_WORDS.putBack });
+    putBack.disabled = !check.ok;
+    putBack.onclick = () => {
+      this.close();
+      this.on.putBack();
+    };
+    const remove = acts.createEl("button", { text: PASTE_WORDS.remove });
+    remove.onclick = () => {
+      this.close();
+      this.on.remove();
+    };
+    if (!check.ok) {
+      const id = `myu-pasted-why-${++reasonIds}`;
+      contentEl.createDiv({ cls: "myu-pasted-hint", text: PASTE_WORDS.putBackTooLong(check.length), attr: { id } });
+      putBack.setAttr("aria-describedby", id);
+    }
+  }
+  onClose() {
+    this.contentEl.empty();
+  }
+};
+
+// src/views/PrepView.ts
 var PREP_VIEW_TYPE = "askmyu-prep";
-var PrepView = class extends import_obsidian21.ItemView {
+var PrepView = class extends import_obsidian22.ItemView {
   constructor(leaf, plugin) {
     super(leaf);
     this.plugin = plugin;
     this.prep = null;
     this.eventId = null;
     this.state = "idle";
-    this.showWhy = false;
-    this.showNotes = false;
-    this.showLink = false;
-    this.linkResults = [];
-    this.linkQuery = "";
-    this.linking = false;
-    this.searchSeq = 0;
+    /** Guards a slow read for an earlier meeting from painting over the one now asked for. */
+    this.readSeq = 0;
+    /** Which "why ▸" lists are open, by line key; which people show their "more". */
+    this.openWhy = /* @__PURE__ */ new Set();
+    this.openPeople = /* @__PURE__ */ new Set();
+    /** A meeting's notes shown in place: one at a time, under the door that asked. */
+    this.notes = null;
+    /** The question before: the typed words, and whether a line is being answered. */
+    this.draft = "";
+    /** Pasted text in the question's box, as chips (2026-10-06): sent beside the draft, cleared with it. */
+    this.pasted = [];
+    /** The last paste that became a chip, while Undo can put it back inline. */
+    this.undo = null;
+    /** The box, its chip row and Send, as drawn last: a chip redraws the row in place, never the card. */
+    this.inputEl = null;
+    this.pastedRowEl = null;
+    this.sendEl = null;
+    /** The pane's live region, outside contentEl (which every render empties). */
+    this.liveEl = null;
+    this.busy = false;
+    /** A pick inside the card (2026-10-04): the people picked, "Someone else" pressed and the name typed, for `pickFor`. */
+    this.picked = [];
+    this.naming = false;
+    this.name = "";
+    this.pickFor = null;
+    /** Under the question or the arc when an answer did not go (or the line stays up and says why). */
+    this.notesUnder = /* @__PURE__ */ new Map();
+    /** What Myu said back once a line was answered: shown where it was, since the card reads again without it. */
+    this.said = null;
+    /** Lines answered here: not drawn again, even from a card read before the answer landed. */
+    this.answered = /* @__PURE__ */ new Set();
   }
   getViewType() {
     return PREP_VIEW_TYPE;
   }
   getDisplayText() {
-    return this.prep ? `Myu \u2014 ${this.prep.subject.display_name}` : "Myu \u2014 prep";
+    return this.prep?.title ? `Myu \u2014 ${this.prep.title}` : PREP_VIEW_WORDS.pane;
   }
   getIcon() {
     return "target";
   }
   async onOpen() {
     this.contentEl.addClass("myu-today");
+    this.liveEl = pastedLiveRegion(this.containerEl);
+    this.plugin.linesSeen?.watch(this.contentEl);
     this.render();
   }
   async onClose() {
+    this.plugin.linesSeen?.unwatch(this.contentEl);
     this.contentEl.empty();
   }
+  /** Show a meeting's card: everything opened or typed for the one before starts fresh. */
   async showMeeting(eventId) {
     this.eventId = eventId;
     this.state = "loading";
     this.prep = null;
-    this.showWhy = false;
-    this.showNotes = false;
-    this.showLink = false;
-    this.linkQuery = "";
-    this.linkResults = [];
+    this.openWhy.clear();
+    this.openPeople.clear();
+    this.notes = null;
+    this.notesUnder.clear();
+    this.answered.clear();
+    this.draft = "";
+    this.pasted = [];
+    this.undo = null;
+    this.busy = false;
+    this.said = null;
+    this.pickFor = null;
     this.render();
-    await this.loadPrep();
+    await this.readCard();
   }
-  async loadPrep() {
-    if (!this.eventId) return;
-    const res = await this.plugin.backend.getMeetingPrep(this.eventId);
-    if (!res.ok || !res.data?.prep) {
-      this.state = res.status === 404 ? "unavailable" : "error";
+  /** Read the card. `quiet`: the one on screen stays while it reads (after an answer). */
+  async readCard(quiet = false) {
+    const eventId = this.eventId;
+    if (!eventId) return;
+    const seq = ++this.readSeq;
+    if (!quiet) {
+      this.state = "loading";
+      this.render();
+    }
+    const res = await this.plugin.backend.getMeetingPrep(eventId).catch(() => null);
+    if (seq !== this.readSeq || eventId !== this.eventId) return;
+    const prep = res?.ok ? res.data?.prep : null;
+    if (isPrepV2(prep)) {
+      this.prep = prep;
+      this.state = "idle";
+    } else if (!quiet || !this.prep) {
+      this.prep = null;
+      this.state = res?.status === 404 ? "unknown" : "failed";
+    }
+    this.render();
+  }
+  // ── what the buttons do ───────────────────────────────────────────────────
+  /** The question before, typed: into the meeting's own conversation. Then the card reads again. */
+  async sendAnswer(ask) {
+    const prep = this.prep;
+    const pasted = [...this.pasted];
+    if (!prep || this.busy || !this.draft.trim() && pasted.length === 0) return;
+    if (pastedBlocksProblem(pasted)) return;
+    this.busy = true;
+    this.undo = null;
+    this.notesUnder.delete(ask.line_id);
+    this.render();
+    const out = await sendPrepAnswer(this.plugin.backend, prep, this.draft, pasted);
+    if (this.eventId !== prep.event_id) return;
+    this.busy = false;
+    if (out.note) {
+      if (out.pastedLost) this.draft = "";
+      this.notesUnder.set(ask.line_id, out.note);
       this.render();
       return;
     }
-    this.prep = res.data.prep;
-    this.state = "idle";
-    this.render();
+    this.draft = "";
+    this.pasted = [];
+    await this.afterAnswer(ask, out);
   }
-  /** Quiet refetch — the stale chip's `refresh` and the post-link re-warm. */
-  refresh() {
-    void this.loadPrep();
+  // ── pasted text in the question's box (2026-10-06) ──────────────────────────
+  /** The chip row and Send's hold, redrawn in place: the box itself is never touched. */
+  drawPasted() {
+    if (this.pastedRowEl) {
+      renderPastedRow(this.pastedRowEl, this.pasted, {
+        open: (id) => this.openPasted(id),
+        remove: (id) => this.removePasted(id),
+        undo: this.undo ? () => this.undoPaste() : null
+      });
+    }
+    if (this.sendEl) this.sendEl.disabled = this.busy || !!pastedBlocksProblem(this.pasted);
+  }
+  addPasted(text, source, at) {
+    const out = chipAdded(this.pasted, text, source, at);
+    this.pasted = out.chips;
+    this.undo = out.undo;
+    if (this.inputEl) this.draft = this.inputEl.value;
+    announce(this.liveEl, PASTE_WORDS.announce(out.chip.chars));
+    this.drawPasted();
+  }
+  undoPaste() {
+    const input = this.inputEl;
+    const undo = this.undo;
+    this.undo = null;
+    const out = input && undo ? undoChip(input.value, this.pasted, undo) : null;
+    if (input && out) {
+      this.pasted = out.chips;
+      input.value = out.value;
+      this.draft = out.value;
+    }
+    this.drawPasted();
+    if (input && out) {
+      input.focus();
+      input.setSelectionRange(out.caret, out.caret);
+    }
+  }
+  removePasted(id) {
+    this.pasted = this.pasted.filter((c) => c.id !== id);
+    this.undo = null;
+    this.drawPasted();
+    this.inputEl?.focus();
+  }
+  openPasted(id) {
+    const at = this.pasted.findIndex((c) => c.id === id);
+    const chip = this.pasted[at];
+    if (!chip) return;
+    const n = this.pasted.length > 1 ? at + 1 : void 0;
+    new PastedTextModal(this.app, chip, n, this.draft, {
+      putBack: () => {
+        if (!canPutBack(this.draft, chip).ok) return;
+        this.draft = putBackText(this.draft, chip);
+        this.pasted = this.pasted.filter((c) => c !== chip);
+        this.undo = null;
+        const input = this.inputEl;
+        if (input) input.value = this.draft;
+        this.drawPasted();
+        if (input) {
+          input.focus();
+          input.setSelectionRange(this.draft.length, this.draft.length);
+        }
+      },
+      remove: () => this.removePasted(id)
+    }).open();
+  }
+  /** One of a line's own choices (the question's Skip, the arc's Hold time / Now / Skip). */
+  async choose(line, choiceId) {
+    const prep = this.prep;
+    if (!prep || this.busy) return;
+    this.busy = true;
+    this.notesUnder.delete(line.line_id);
+    this.render();
+    const out = await answerPrepLine(this.plugin.backend, prep, line, choiceId);
+    for (const url of out.open) window.open(url, "_blank");
+    if (out.conversation) void this.plugin.openConversationRef(out.conversation, prep.title);
+    if (this.eventId !== prep.event_id) return;
+    this.busy = false;
+    if (out.note) {
+      this.notesUnder.set(line.line_id, out.note);
+      this.render();
+      return;
+    }
+    await this.afterAnswer(line, out);
+  }
+  /** A pick inside the card: a typed name, or the picks sent together. The card reads again after. */
+  async answerPick(line, answer) {
+    const prep = this.prep;
+    if (!prep || this.busy || !answer) return;
+    this.busy = true;
+    this.notesUnder.delete(line.line_id);
+    this.render();
+    const out = await answerPrepPick(this.plugin.backend, line, answer);
+    if (this.eventId !== prep.event_id) return;
+    this.busy = false;
+    if (out.note) {
+      this.notesUnder.set(line.line_id, out.note);
+      this.render();
+      return;
+    }
+    await this.afterAnswer(line, out);
+  }
+  /** A settled line leaves the card (what Myu said back stays in its place); the card and Today read again. */
+  async afterAnswer(line, out) {
+    if (!out.closed) {
+      this.answered.add(line.line_id);
+      this.said = out.said?.trim() || null;
+    }
+    this.plugin.requestTodayRefresh();
+    await this.readCard(true);
+  }
+  openEvidence(how, prep, where) {
+    switch (how.kind) {
+      case "link":
+        window.open(how.url, "_blank");
+        return;
+      case "journal":
+        void this.plugin.openConversation(how.id);
+        return;
+      case "space":
+        void this.plugin.openChatAbout("space", how.id, { label: prep.room.team?.space_id === how.id ? prep.room.team.name : "" });
+        return;
+      case "meeting":
+        void this.openMeetingNotes(how.id, where);
+        return;
+    }
+  }
+  /**
+   * A meeting's notes: its note in Myu's folder when the vault has one; else its notes here, under
+   * the door that asked (pressed again, they fold away).
+   */
+  async openMeetingNotes(meetingId, where) {
+    if (this.notes?.where === where && this.notes.meetingId === meetingId && this.notes.state !== "loading") {
+      this.notes = null;
+      this.render();
+      return;
+    }
+    if (await this.plugin.openMeetingNote(meetingId).catch(() => false)) return;
+    const asked = { where, meetingId, state: "loading", lines: [] };
+    this.notes = asked;
+    this.render();
+    const res = await this.plugin.backend.getMeetingDetail(meetingId).catch(() => null);
+    if (this.notes !== asked) return;
+    this.notes = res?.ok ? { ...asked, state: "shown", lines: meetingNoteLines(res.data) } : { ...asked, state: "failed" };
+    this.render();
   }
   // ── render ────────────────────────────────────────────────────────────────
   render() {
     const root = this.contentEl;
     root.empty();
+    this.inputEl = null;
+    this.pastedRowEl = null;
+    this.sendEl = null;
     if (this.state === "loading") {
-      root.createEl("p", { cls: "myu-quiet", text: "Opening prep\u2026" });
+      root.createEl("p", { cls: "myu-quiet", text: PREP_WORDS.loading });
       return;
     }
-    if (this.state === "unavailable") {
-      root.createEl("p", { cls: "myu-quiet", text: "No prep for this meeting yet." });
+    if (this.state === "unknown") {
+      root.createEl("p", { cls: "myu-quiet", text: PREP_VIEW_WORDS.unknown });
       return;
     }
-    if (this.state === "error") {
-      root.createEl("p", { cls: "myu-quiet", text: "Couldn't reach Myu just now." });
-      const retry = root.createEl("button", { cls: "myu-affordance", text: "Try again" });
-      retry.onclick = () => this.refresh();
+    if (this.state === "failed" || !this.prep) {
+      if (this.state !== "failed") return;
+      root.createEl("p", { cls: "myu-quiet", text: PREP_WORDS.failed });
+      const retry = root.createEl("button", { cls: "myu-affordance", text: PREP_VIEW_WORDS.retry });
+      retry.onclick = () => void this.readCard();
       return;
     }
-    if (!this.prep) return;
     const prep = this.prep;
-    this.renderHeader(root, prep);
-    this.renderChips(root, prep);
-    if (this.showLink) this.renderLinkSearch(root);
-    this.renderZones(root, prep);
-    this.renderFactual(root, prep);
-    this.renderFooter(root, prep);
-    if (this.showNotes) this.renderNotes(root, prep);
-    if (this.showWhy) this.renderWhy(root, prep);
-  }
-  renderHeader(root, prep) {
     const head = root.createDiv({ cls: "myu-prep-head" });
-    head.createDiv({ cls: "myu-card-title", text: prep.subject.display_name });
-    if (prep.meeting) {
-      const time = new Date(prep.meeting.starts_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }).toLowerCase();
-      head.createDiv({
-        cls: "myu-quiet myu-prep-meeting",
-        text: `${prep.meeting.title ? `${prep.meeting.title} \xB7 ` : ""}${time}`
-      });
+    head.createDiv({ cls: "myu-card-title", text: prep.title });
+    const when = prepWhen(prep.starts_at);
+    if (when) head.createDiv({ cls: "myu-quiet myu-prep-meeting", text: when });
+    if (prep.partial) root.createEl("p", { cls: "myu-quiet myu-prep-partial", text: PREP_WORDS.partial });
+    if (this.said) {
+      const said = root.createDiv({ cls: "myu-prep-said" });
+      said.createDiv({ cls: "myu-whisper", text: PREP_VIEW_WORDS.myu });
+      said.createDiv({ cls: "myu-voice", text: this.said });
     }
+    if (prep.ask && !this.answered.has(prep.ask.line_id)) this.renderAsk(root, prep.ask);
+    if (prep.arc && !this.answered.has(prep.arc.line_id)) this.renderArc(root, prep.arc);
+    this.renderTop(root, prep);
+    if (prep.interview) this.renderInterview(root, prep.interview);
+    this.renderPeople(root, prep);
+    this.renderRoom(root, prep);
+    this.renderBefore(root, prep);
+    if (prep.afterwards?.trim()) {
+      const zone = root.createDiv({ cls: "myu-zone myu-prep-afterwards" });
+      zone.createDiv({ cls: "myu-whisper", text: PREP_WORDS.afterwards });
+      zone.createDiv({ cls: "myu-prep-text", text: prep.afterwards });
+    }
+    this.renderDoors(root, prep);
   }
-  renderChips(root, prep) {
-    const cold = prep.data_tier === "cold";
-    const stale = prep.data_tier === "stale";
-    const identityUnconfirmed = prep.subject.identity_status === "likely_match" || prep.subject.identity_status === "pending_disambiguation";
-    const unlinked = prep.subject.entity_id === "unlinked" || prep.subject.entity_id.includes("@");
-    if (!cold && !stale && !identityUnconfirmed && !unlinked) return;
-    const chips = root.createDiv({ cls: "myu-prep-chips" });
-    if (identityUnconfirmed) {
-      const confirm = chips.createEl("button", { cls: "myu-chip myu-chip-amber", text: "Likely match \u2014 confirm" });
-      confirm.onclick = () => {
-        this.showLink = true;
-        this.linkQuery = prep.subject.display_name ?? "";
-        void this.runLinkSearch(this.linkQuery);
-        this.render();
-      };
-    }
-    if (unlinked) {
-      const who = chips.createEl("button", { cls: "myu-chip myu-chip-amber", text: "Who is this?" });
-      who.onclick = () => {
-        this.showLink = !this.showLink;
-        this.render();
-      };
-    }
-    if (cold) chips.createSpan({ cls: "myu-chip", text: "no history yet" });
-    if (stale) {
-      chips.createSpan({ cls: "myu-chip", text: `stale \u2014 ${staleLabel(prep)}` });
-      const refresh = chips.createEl("button", { cls: "myu-affordance", text: "Refresh" });
-      refresh.onclick = () => this.refresh();
-    }
-  }
-  /** Inline `who is this?` — search people, link, refetch re-warmed. */
-  renderLinkSearch(root) {
-    const box = root.createDiv({ cls: "myu-prep-evidence" });
-    const input = box.createEl("input", { cls: "myu-prep-search", attr: { placeholder: "Search your people\u2026" } });
-    input.value = this.linkQuery;
-    input.oninput = () => {
-      this.linkQuery = input.value;
-      void this.runLinkSearch(input.value);
-    };
-    window.setTimeout(() => input.focus(), 0);
-    for (const result of this.linkResults) {
-      const row = box.createEl("button", { cls: "myu-affordance myu-prep-link-row" });
-      row.createSpan({ text: `${result.display_name} ` });
-      if (result.organization) row.createSpan({ cls: "myu-quiet", text: `${result.organization} ` });
-      (0, import_obsidian21.setIcon)(row.createSpan({ cls: "myu-chevron", attr: { "aria-hidden": "true" } }), "chevron-right");
-      row.disabled = this.linking;
-      row.onclick = () => void this.linkSubject(result.entity_id);
-    }
-    if (this.linkQuery.trim().length > 1 && this.linkResults.length === 0) {
-      box.createEl("p", {
-        cls: "myu-quiet",
-        text: "Nobody by that name yet \u2014 they may not have history with you"
-      });
-    }
-  }
-  async runLinkSearch(query) {
-    const q = query.trim();
-    if (q.length < 2) {
-      this.linkResults = [];
-      this.render();
+  /**
+   * The question inside the card. The question before: Myu's question, a box and Send, and its own choices as quiet
+   * text. A pick (2026-10-04): one choice, its "Someone else" opening a box for the name; or several, the people as
+   * toggles, "Someone else" opening a box whose name rides with them, "That's everyone" sending, "Not sure" alone.
+   */
+  renderAsk(root, ask) {
+    const zone = root.createDiv({ cls: "myu-zone myu-prep-ask", attr: { "data-mode": prepAskMode(ask) } });
+    zone.createDiv({ cls: "myu-whisper", text: PREP_VIEW_WORDS.myu });
+    zone.createDiv({ cls: "myu-voice", text: ask.text, attr: lineIdAttr(ask.line_id) });
+    if (prepAskMode(ask) !== "text") {
+      this.renderPick(zone, ask);
       return;
     }
-    const seq = ++this.searchSeq;
-    const res = await this.plugin.backend.searchEntities(q);
-    if (seq !== this.searchSeq) return;
-    this.linkResults = (res.data?.results ?? []).filter((r) => r.entity_type === "person").slice(0, 5);
-    this.render();
+    this.pastedRowEl = zone.createDiv({ cls: "myu-pasted-row" });
+    const row = zone.createDiv({ cls: "myu-prep-answer" });
+    const input = row.createEl("input", { cls: "myu-prep-input", attr: { type: "text", placeholder: PREP_WORDS.answerPlaceholder, "aria-label": ask.text } });
+    this.inputEl = input;
+    input.value = this.draft;
+    input.disabled = this.busy;
+    input.oninput = () => {
+      this.draft = input.value;
+      if (this.undo) {
+        this.undo = null;
+        this.drawPasted();
+      }
+    };
+    input.onkeydown = (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        void this.sendAnswer(ask);
+        return;
+      }
+      if (this.undo && isUndoKey(event)) {
+        event.preventDefault();
+        this.undoPaste();
+      }
+    };
+    attachPasteListeners(input, { addPasted: (text, source, at) => this.addPasted(text, source, at) });
+    const send = row.createEl("button", { cls: "myu-affordance", text: PREP_WORDS.sendAnswer });
+    send.disabled = this.busy;
+    send.onclick = () => void this.sendAnswer(ask);
+    this.sendEl = send;
+    this.drawPasted();
+    this.renderChoices(zone, ask);
   }
-  async linkSubject(relationshipId) {
-    if (!this.eventId || this.linking) return;
-    this.linking = true;
-    this.render();
-    const res = await this.plugin.backend.linkPrepSubject(this.eventId, relationshipId);
-    this.linking = false;
-    if (res.ok) {
-      this.showLink = false;
-      this.refresh();
-    } else {
-      this.render();
+  renderPick(zone, ask) {
+    if (this.pickFor !== ask.line_id) {
+      this.pickFor = ask.line_id;
+      this.picked = [];
+      this.naming = false;
+      this.name = "";
     }
-  }
-  renderZones(root, prep) {
-    if (prep.watch) {
-      const zone = root.createDiv({ cls: "myu-zone" });
-      zone.createDiv({ cls: "myu-whisper", text: "signal" });
-      const row = zone.createDiv({ cls: "myu-prep-signal" });
-      row.createSpan({ cls: "myu-prep-dot" });
-      row.createSpan({ cls: "myu-claim", text: prep.watch.text });
-      this.renderDated(zone, prep, prep.watch);
-    }
-    if (prep.stand) {
-      const zone = root.createDiv({ cls: "myu-zone" });
-      zone.createDiv({ cls: "myu-whisper", text: "read" });
-      zone.createDiv({ cls: "myu-voice", text: prep.stand.text });
-      this.renderDated(zone, prep, prep.stand);
-    }
-    if (prep.move) {
-      const zone = root.createDiv({ cls: "myu-zone" });
-      zone.createDiv({ cls: "myu-whisper", text: "move" });
-      zone.createDiv({ cls: "myu-claim", text: prep.move.text });
-    }
-  }
-  /** Stale claims surface their date (isStalePrep contract). */
-  renderDated(zone, prep, claim) {
-    if (prep.data_tier !== "stale" || !claim.last_updated) return;
-    zone.createDiv({ cls: "myu-quiet", text: `as of ${new Date(claim.last_updated).toLocaleDateString()}` });
-  }
-  /** Cold/low floor: facts, plainly, never an invented read. Zero accents. */
-  renderFactual(root, prep) {
-    const factual = prep.factual;
-    if (!factual) return;
-    const zone = root.createDiv({ cls: "myu-zone" });
-    zone.createDiv({ cls: "myu-whisper", text: "what we know" });
-    for (const line of [
-      factual.role_line,
-      factual.company_name,
-      factual.why_meeting,
-      (factual.mutual_ties ?? []).length ? `Mutual: ${(factual.mutual_ties ?? []).join(", ")}` : null,
-      ...factual.public_context ?? []
-    ]) {
-      if (line) zone.createDiv({ cls: "myu-quiet myu-fact-row", text: line });
-    }
-    if (factual.no_history) {
-      zone.createEl("p", {
-        cls: "myu-quiet",
-        text: `Myu doesn't have history with ${prep.subject.display_name} yet \u2014 it builds from here.`
-      });
-    }
-  }
-  renderFooter(root, prep) {
-    const hasWhy = this.evidence(prep).length > 0 || prep.thread !== null;
-    if (!hasWhy && !prep.capture_hook && !prep.notes_captured) return;
-    const foot = root.createDiv({ cls: "myu-prep-foot" });
-    if (hasWhy) {
-      const why = foot.createEl("button", { cls: "myu-affordance", text: "Why" });
-      why.onclick = () => {
-        this.showWhy = !this.showWhy;
-        this.render();
-      };
-    }
-    if (prep.notes_captured) {
-      const notes = foot.createEl("button", { cls: "myu-affordance", text: "Notes captured" });
-      notes.onclick = () => {
-        this.showNotes = !this.showNotes;
-        this.render();
-      };
-    }
-    if (prep.capture_hook) {
-      const after = prep.meeting ? Date.now() >= prep.meeting.starts_at : false;
-      const talk = foot.createEl("button", { cls: "myu-affordance", text: after ? "After" : "Ask" });
-      talk.onclick = () => void this.plugin.openChat({
-        text: after ? `How it went with ${prep.subject.display_name}: ` : "",
-        send: false,
-        context: {
-          source: "prep",
-          source_id: prep.prep_id,
-          prep_phase: after ? "after" : "before",
-          prep_event_id: prep.meeting?.meeting_id,
-          prep_meeting_title: prep.meeting?.title,
-          prep_claims: [prep.watch, prep.stand, prep.thread, prep.move].filter((c) => c !== null).map((c) => c.text),
-          entity_references: [
-            {
-              entity_type: prep.subject.entity_type,
-              entity_id: prep.subject.entity_id,
-              display_name: prep.subject.display_name
-            }
-          ]
-        }
-      });
-    }
-  }
-  /** The captured notes, inspectable in place — a state you can't inspect reads as a claim. */
-  renderNotes(root, prep) {
-    const box = root.createDiv({ cls: "myu-prep-evidence" });
-    if (prep.notes_summary) box.createDiv({ cls: "myu-claim", text: prep.notes_summary });
-    const decisions = prep.notes_decision_count ?? 0;
-    const actions = prep.notes_action_count ?? 0;
-    if (decisions > 0 || actions > 0) {
-      const parts = [
-        decisions > 0 ? `${decisions} decision${decisions === 1 ? "" : "s"}` : null,
-        actions > 0 ? `${actions} action item${actions === 1 ? "" : "s"}` : null
-      ].filter(Boolean);
-      box.createDiv({ cls: "myu-quiet", text: `${parts.join(" \xB7 ")} on record` });
-    }
-  }
-  renderWhy(root, prep) {
-    const box = root.createDiv({ cls: "myu-prep-evidence" });
-    if (prep.thread) box.createDiv({ cls: "myu-claim", text: prep.thread.text });
-    for (const { refs } of this.evidence(prep)) {
-      for (const ref of refs) {
-        if (ref.link) {
-          const a = box.createEl("a", { cls: "myu-quiet myu-prep-ref", text: `${ref.label}`, href: ref.link });
-          a.setAttr("target", "_blank");
-          a.setAttr("rel", "noopener");
-        } else {
-          box.createDiv({ cls: "myu-quiet myu-prep-ref", text: ref.label });
-        }
+    const many = prepAskMode(ask) === "many";
+    const parts = pickManyParts(ask);
+    const acts = zone.createDiv({ cls: "myu-mrow-acts myu-line-choices" });
+    const button = (label, cls, attr2, onClick, off = false) => {
+      const b = acts.createEl("button", { cls, text: label, attr: attr2 });
+      b.disabled = this.busy || off;
+      b.onclick = onClick;
+      return b;
+    };
+    for (const c of ask.choices) {
+      if (parts.typed && c.id === parts.typed.id) {
+        button(c.label, "myu-aff myu-pick", { "data-choice": c.id, "aria-pressed": String(this.naming) }, () => {
+          this.naming = !this.naming;
+          this.render();
+        });
+      } else if (many && parts.picks.some((p) => p.id === c.id)) {
+        button(c.label, "myu-aff myu-pick", { "data-choice": c.id, "aria-pressed": String(this.picked.includes(c.id)) }, () => {
+          this.picked = togglePick(this.picked, c.id);
+          this.render();
+        });
+      } else if (many && parts.send && c.id === parts.send.id) {
+        const typedName = () => this.naming ? this.name : null;
+        button(c.label, "myu-aff myu-pick-send", { "data-choice": c.id }, () => void this.answerPick(ask, pickManyAnswer(ask, this.picked, typedName())), !canSendPicks(this.picked, typedName()));
+      } else {
+        button(c.label, "myu-aff", { "data-choice": c.id }, () => void this.choose(ask, c.id));
       }
     }
+    if (this.naming) {
+      const row = zone.createDiv({ cls: "myu-prep-answer" });
+      const input = row.createEl("input", { cls: "myu-prep-input", attr: { type: "text", placeholder: typedHint(ask), "aria-label": typedHint(ask) } });
+      input.value = this.name;
+      input.disabled = this.busy;
+      input.oninput = () => {
+        this.name = input.value;
+        const send = acts.querySelector(".myu-pick-send");
+        if (send) send.disabled = this.busy || !canSendPicks(this.picked, this.name);
+      };
+      if (!many) {
+        const sendName = () => void this.answerPick(ask, typedAnswer(ask, this.name));
+        input.onkeydown = (event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            sendName();
+          }
+        };
+        const send = row.createEl("button", { cls: "myu-affordance", text: PREP_WORDS.sendAnswer });
+        send.disabled = this.busy;
+        send.onclick = sendName;
+      }
+      queueMicrotask(() => input.focus?.());
+    }
+    const note = this.notesUnder.get(ask.line_id);
+    if (note) zone.createDiv({ cls: "myu-quiet myu-line-note", text: note });
   }
-  evidence(prep) {
-    return [prep.watch, prep.stand, prep.move, prep.thread].filter((c) => c !== null && (c.evidence_refs?.length ?? 0) > 0).map((c) => ({ refs: c.evidence_refs ?? [] }));
+  /** The arc: Myu's invitation and its three choices (Hold time, Now, Skip). */
+  renderArc(root, arc) {
+    const zone = root.createDiv({ cls: "myu-zone myu-prep-arc" });
+    zone.createDiv({ cls: "myu-whisper", text: PREP_VIEW_WORDS.myu });
+    zone.createDiv({ cls: "myu-voice", text: arc.text, attr: lineIdAttr(arc.line_id) });
+    this.renderChoices(zone, arc);
+  }
+  /** A line's choices as the server sent them; Skip is the quiet way out. What did not go is said under them. */
+  renderChoices(zone, line) {
+    if (line.choices.length > 0) {
+      const acts = zone.createDiv({ cls: "myu-mrow-acts myu-line-choices" });
+      for (const c of line.choices) {
+        const b = acts.createEl("button", { cls: c.id === "skip" ? "myu-aff myu-line-quiet" : "myu-aff", text: c.label, attr: { "data-choice": c.id } });
+        b.disabled = this.busy;
+        b.onclick = () => void this.choose(line, c.id);
+      }
+    }
+    const note = this.notesUnder.get(line.line_id);
+    if (note) zone.createDiv({ cls: "myu-quiet myu-line-note", text: note });
+  }
+  /** The top: 3 to 5 parts in the server's order, always open; a part's items are a list. */
+  renderTop(root, prep) {
+    if (!prep.top.length) return;
+    const zone = root.createDiv({ cls: "myu-zone myu-prep-top" });
+    prep.top.forEach((t, i) => {
+      const part = zone.createDiv({ cls: "myu-prep-part", attr: { "data-part": t.part } });
+      part.createDiv({ cls: "myu-whisper", text: prepPartLabel(t.part) });
+      if (t.text.trim()) this.why(prep, part.createDiv({ cls: "myu-prep-text", text: t.text }), `top:${i}`, t.evidence_ids);
+      const items = t.items ?? [];
+      if (!items.length) return;
+      const list2 = part.createEl("ul", { cls: "myu-prep-items" });
+      items.forEach((it, j) => this.why(prep, list2.createEl("li", { text: it.text }), `top:${i}:${j}`, it.evidence_ids));
+    });
+  }
+  /** The interview: the candidate's facts, your topics with their questions, the scorecard note. */
+  renderInterview(root, iv) {
+    if (!iv.candidate_facts.length && !iv.topics.length && !iv.scorecard_note) return;
+    const zone = root.createDiv({ cls: "myu-zone myu-prep-interview" });
+    if (iv.candidate_facts.length) {
+      zone.createDiv({ cls: "myu-whisper", text: PREP_WORDS.candidateFacts });
+      const facts = zone.createEl("ul", { cls: "myu-prep-items" });
+      for (const f of iv.candidate_facts) facts.createEl("li", { text: f });
+    }
+    if (iv.topics.length) {
+      zone.createDiv({ cls: "myu-whisper myu-prep-sub", text: PREP_WORDS.yourTopics });
+      for (const t of iv.topics) {
+        const topic = zone.createDiv({ cls: "myu-prep-topic" });
+        topic.createDiv({ cls: "myu-prep-name", text: t.name });
+        if (!t.questions.length) continue;
+        const qs = topic.createEl("ul", { cls: "myu-prep-items" });
+        for (const q of t.questions) qs.createEl("li", { text: q });
+      }
+    }
+    if (iv.scorecard_note) zone.createEl("p", { cls: "myu-quiet", text: iv.scorecard_note });
+  }
+  /** One block per person: the name and who they are to you; "more ▸" opens the rest. A thin person is its line only. */
+  renderPeople(root, prep) {
+    if (!prep.people.length) return;
+    const zone = root.createDiv({ cls: "myu-zone myu-prep-people" });
+    prep.people.forEach((p, i) => {
+      const block = zone.createDiv({ cls: "myu-prep-person", attr: { "data-thin": String(p.thin) } });
+      const line = block.createDiv({ cls: "myu-prep-person-line" });
+      line.createSpan({ cls: "myu-prep-name", text: p.name });
+      if (p.to_you) {
+        line.createSpan({ cls: "myu-quiet", text: " \xB7 " });
+        line.createSpan({ cls: "myu-prep-to-you", text: p.to_you });
+      }
+      this.why(prep, line, `person:${i}`, p.evidence_ids);
+      if (p.thin || !prepPersonHasMore(p)) return;
+      const open = this.openPeople.has(i);
+      const more = block.createEl("button", { cls: "myu-aff myu-prep-more", text: open ? PREP_WORDS.less : PREP_WORDS.more, attr: { "aria-expanded": String(open) } });
+      more.onclick = () => {
+        if (open) this.openPeople.delete(i);
+        else this.openPeople.add(i);
+        this.render();
+      };
+      if (open) this.renderPersonMore(block, p);
+    });
+  }
+  renderPersonMore(block, p) {
+    const detail = block.createDiv({ cls: "myu-prep-detail" });
+    if (p.stands) attr(detail, PREP_WORDS.stands, p.stands);
+    if (p.you_owe.length) attr(detail, PREP_WORDS.youOwe, p.you_owe.join("; "));
+    if (p.they_owe.length) attr(detail, PREP_WORDS.theyOwe, p.they_owe.join("; "));
+    if (p.works_best) attr(detail, PREP_WORDS.worksBest, p.works_best);
+    if (p.stance) attr(detail, PREP_WORDS.stance, p.stance);
+    if (p.last_time) detail.createDiv({ cls: "myu-quiet", text: p.last_time });
+  }
+  /** The room: team or not, and its lines. */
+  renderRoom(root, prep) {
+    const room = prep.room;
+    if (!room || !room.team && !room.lines.length) return;
+    const zone = root.createDiv({ cls: "myu-zone myu-prep-room" });
+    zone.createDiv({ cls: "myu-whisper", text: `${PREP_WORDS.room}${room.team ? ` \xB7 ${room.team.name}` : ""}` });
+    room.lines.forEach((l, i) => this.why(prep, zone.createDiv({ cls: "myu-prep-text", text: l.text }), `room:${i}`, l.evidence_ids));
+  }
+  /** Before you go in: what's planned, documents, the email that set it up, last time's notes, who hasn't replied. */
+  renderBefore(root, prep) {
+    const b = prep.before_you_go;
+    if (!b || !(b.agenda || b.documents.length || b.set_up_email || b.last_notes || b.not_replied.length)) return;
+    const zone = root.createDiv({ cls: "myu-zone myu-prep-before" });
+    zone.createDiv({ cls: "myu-whisper", text: PREP_WORDS.beforeYouGo });
+    if (b.agenda) attr(zone, PREP_WORDS.planned, b.agenda);
+    if (b.documents.length) {
+      const docs = attr(zone, PREP_WORDS.documents, "");
+      b.documents.forEach((d, i) => {
+        const doc = prepDocument(d);
+        if (i > 0) docs.createSpan({ text: ", " });
+        if (doc.url && /^https?:\/\//i.test(doc.url)) docs.createEl("a", { cls: "myu-prep-link", text: doc.name, href: doc.url, attr: { target: "_blank", rel: "noopener" } });
+        else docs.createSpan({ text: doc.name });
+      });
+    }
+    if (b.set_up_email) {
+      const e = b.set_up_email;
+      const date = prepShortDate(e.at);
+      attr(zone, PREP_WORDS.setUpEmail, `${e.subject} \xB7 ${e.from}${date ? ` \xB7 ${date}` : ""}`);
+    }
+    if (b.last_notes) {
+      const meetingId = b.last_notes.meeting_id;
+      const row = attr(zone, PREP_WORDS.lastNotes, b.last_notes.summary);
+      if (meetingId) {
+        const open = row.createEl("button", { cls: "myu-aff myu-prep-open-notes", text: PREP_WORDS.openNotes });
+        open.onclick = () => void this.openMeetingNotes(meetingId, "last_notes");
+        this.renderNotes(zone, "last_notes");
+      }
+    }
+    if (b.not_replied.length) attr(zone, prepNotRepliedLabel(b.not_replied), b.not_replied.join(", "));
+  }
+  /** The meeting's own conversation; after it, writing how it went (the capture, with this card as its context). */
+  renderDoors(root, prep) {
+    const foot = root.createDiv({ cls: "myu-prep-foot" });
+    const talk = foot.createEl("button", { cls: "myu-affordance", text: PREP_WORDS.openConversation });
+    talk.onclick = () => void this.plugin.openMeetingConversation(prep.event_id, prep.title, prepOccurrenceKey(prep) ?? void 0);
+    if (prepPhase(prep) !== "after") return;
+    const after = foot.createEl("button", { cls: "myu-affordance", text: PREP_WORDS.writeHowItWent });
+    after.onclick = () => void this.plugin.openChat({ text: "", send: false, context: prepChatContext(prep, "after") });
+  }
+  /**
+   * A line's quiet "why ▸" (only when it has evidence that resolves) and, open, its evidence: each
+   * item's label; one that opens something is a button, the rest are text.
+   */
+  why(prep, line, key, ids) {
+    const evidence = prepEvidenceFor(prep, ids);
+    if (!evidence.length) return;
+    const open = this.openWhy.has(key);
+    const b = line.createEl("button", { cls: "myu-aff myu-prep-why", text: open ? PREP_WORDS.whyOpen : PREP_WORDS.why, attr: { "aria-expanded": String(open) } });
+    b.onclick = () => {
+      if (open) this.openWhy.delete(key);
+      else this.openWhy.add(key);
+      this.render();
+    };
+    if (!open) return;
+    const list2 = line.createDiv({ cls: "myu-prep-evidence" });
+    for (const { id, ev } of evidence) {
+      const how = evidenceOpening(ev);
+      if (!how) {
+        list2.createDiv({ cls: "myu-quiet myu-prep-ref", text: ev.label, attr: { "data-evidence": id } });
+        continue;
+      }
+      const item = list2.createEl("button", { cls: "myu-aff myu-prep-ref", text: ev.label, attr: { "data-evidence": id, "data-open": how.kind } });
+      item.createSpan({ cls: "myu-prep-open", text: ` ${PREP_WORDS.openItem}` });
+      const where = `${key}/${id}`;
+      item.onclick = () => this.openEvidence(how, prep, where);
+      if (how.kind === "meeting") this.renderNotes(list2, where);
+    }
+  }
+  /** A meeting's notes shown in place, under the door that asked for them (the vault had no note of it). */
+  renderNotes(host, where) {
+    const notes = this.notes;
+    if (notes?.where !== where) return;
+    const box = host.createDiv({ cls: "myu-prep-notes" });
+    if (notes.state === "loading") {
+      box.createDiv({ cls: "myu-quiet", text: PREP_VIEW_WORDS.notesLoading });
+      return;
+    }
+    if (notes.state === "failed") {
+      box.createDiv({ cls: "myu-quiet", text: PREP_VIEW_WORDS.notesFailed });
+      return;
+    }
+    if (!notes.lines.length) {
+      box.createDiv({ cls: "myu-quiet", text: PREP_VIEW_WORDS.notesEmpty });
+      return;
+    }
+    const [first, ...rest] = notes.lines;
+    box.createDiv({ cls: "myu-prep-text", text: first });
+    if (!rest.length) return;
+    const list2 = box.createEl("ul", { cls: "myu-prep-items" });
+    for (const l of rest) list2.createEl("li", { text: l });
   }
 };
-function staleLabel(prep) {
-  const newest = [prep.stand, prep.thread, prep.watch, prep.move].filter((c) => c !== null).reduce((max, c) => Math.max(max, c.last_updated ?? 0), 0) || prep.generated_at;
-  return new Date(newest).toLocaleDateString([], { month: "short", day: "numeric" }).toLowerCase();
+function attr(host, label, text) {
+  const row = host.createDiv({ cls: "myu-prep-attr" });
+  row.createSpan({ cls: "myu-prep-attr-label", text: label });
+  if (text) row.createSpan({ cls: "myu-prep-attr-text", text });
+  return row;
 }
 
 // src/views/LookupModal.ts
-var import_obsidian22 = require("obsidian");
-var LookupModal = class extends import_obsidian22.FuzzySuggestModal {
+var import_obsidian24 = require("obsidian");
+
+// src/views/MapFoldModal.ts
+var import_obsidian23 = require("obsidian");
+var MapFoldModal = class extends import_obsidian23.Modal {
+  constructor(app, plugin, map, opts = {}) {
+    super(app);
+    this.plugin = plugin;
+    this.opts = opts;
+    this.rows = [];
+    this.offset = 0;
+    /** How long the last page was — a short one means there is no more to read. */
+    this.lastPage = MAP_FOLD_PAGE;
+    this.loading = false;
+    this.failed = false;
+    /** A row was pressed: the person's card is open, so closing does not go back to the look-up. */
+    this.opened = false;
+    /** Someone was kept: the look-up behind this has to read again. */
+    this.changed = false;
+    this.busy = Promise.resolve();
+    this.count = map.count;
+    this.line = map.line;
+    this.lastPage = this.pageSize;
+  }
+  onOpen() {
+    this.modalEl.addClass("myu-map-fold");
+    this.render();
+    this.run(() => this.loadMore());
+  }
+  onClose() {
+    this.contentEl.empty();
+    if (!this.opened) this.opts.onBack?.(this.changed);
+  }
+  /** The page read or the Keep track in flight — tests wait on it. */
+  whenIdle() {
+    return this.busy;
+  }
+  run(work) {
+    this.busy = this.busy.then(work).catch(() => void 0);
+  }
+  get pageSize() {
+    return this.opts.pageSize ?? MAP_FOLD_PAGE;
+  }
+  hasMore() {
+    return foldHasMore(this.rows.length, this.count, this.lastPage, this.pageSize);
+  }
+  async loadMore() {
+    if (this.loading) return;
+    this.loading = true;
+    this.failed = false;
+    this.render();
+    const res = await this.plugin.backend.listMapPeople(this.pageSize, this.offset).catch(() => null);
+    this.loading = false;
+    if (!res?.ok || !res.data) {
+      this.failed = true;
+      this.render();
+      return;
+    }
+    const page = res.data.relationships ?? [];
+    const have = new Set(this.rows.map((r) => mapRowId(r)));
+    for (const r of page) if (!have.has(mapRowId(r))) this.rows.push(r);
+    this.offset += page.length;
+    this.lastPage = page.length;
+    this.takeMap(res.data.map);
+    this.render();
+  }
+  takeMap(map) {
+    if (!map) return;
+    this.count = map.count;
+    this.line = map.line;
+  }
+  /** "Keep track": the one way back. The row goes, the count comes down, the main list is read again. */
+  async keep(row) {
+    const id = mapRowId(row);
+    const res = await this.plugin.backend.keepRelationship(id).catch(() => null);
+    if (!res?.ok) {
+      notifyError(MAP_FOLD_WORDS.failed);
+      return;
+    }
+    this.changed = true;
+    this.rows = withoutRow(this.rows, id);
+    this.offset = Math.max(0, this.offset - 1);
+    const after = foldAfterOneLeft({ count: this.count, line: this.line });
+    this.count = after?.count ?? 0;
+    this.line = after?.line ?? null;
+    notifyStatus(MAP_FOLD_WORDS.kept(mapRowFirst(row)));
+    this.render();
+    const list2 = await this.plugin.backend.listEntities("person").catch(() => null);
+    this.takeMap(list2?.data?.map);
+    this.render();
+  }
+  /** A row opens the person's card and nothing else changes: they stay on the map, the row and the count stay. */
+  openPerson(row) {
+    this.opened = true;
+    this.close();
+    void this.plugin.openCard("person", mapRowId(row), mapRowName(row));
+  }
+  render() {
+    this.titleEl.setText(foldLine({ count: this.count, line: this.line }) ?? "");
+    const c = this.contentEl;
+    c.empty();
+    const settledEmpty = !this.loading && !this.failed && this.rows.length === 0;
+    if (!settledEmpty) c.createDiv({ cls: "myu-map-intro myu-quiet", text: MAP_FOLD_WORDS.intro });
+    const list2 = c.createDiv({ cls: "myu-map-list" });
+    for (const row of this.rows) {
+      const name = mapRowName(row);
+      const item = list2.createDiv({ cls: "myu-map-item" });
+      const open = item.createEl("button", { cls: "myu-row-tappable myu-map-row", attr: { "aria-label": `Open ${name}` } });
+      open.createDiv({ cls: "myu-row-title", text: name });
+      const meta = mapRowMeta(row);
+      if (meta) open.createDiv({ cls: "myu-quiet", text: meta });
+      open.onclick = () => this.openPerson(row);
+      const keep = item.createEl("button", { cls: "myu-map-keep", text: MAP_FOLD_WORDS.keep, attr: { "aria-label": MAP_FOLD_WORDS.keepOf(name) } });
+      keep.onclick = () => this.run(() => this.keep(row));
+    }
+    const foot = c.createDiv({ cls: "myu-map-foot" });
+    if (this.loading) {
+      foot.createDiv({ cls: "myu-quiet", text: "Reading\u2026" });
+    } else if (this.failed) {
+      foot.createDiv({ cls: "myu-quiet", text: "Myu couldn't read these people just now." });
+      const again = foot.createEl("button", { text: "Try again" });
+      again.onclick = () => this.run(() => this.loadMore());
+    } else if (this.hasMore()) {
+      foot.createDiv({ cls: "myu-quiet", text: MAP_FOLD_WORDS.showing(this.rows.length, this.count) });
+      const more = foot.createEl("button", { cls: "myu-map-more", text: MAP_FOLD_WORDS.more });
+      more.onclick = () => this.run(() => this.loadMore());
+    } else if (this.rows.length === 0) {
+      foot.createDiv({ cls: "myu-quiet", text: MAP_FOLD_WORDS.empty });
+    }
+  }
+};
+
+// src/views/LookupModal.ts
+var SEARCH_WAIT_MS = 250;
+var LookupModal = class _LookupModal extends import_obsidian24.FuzzySuggestModal {
   constructor(app, plugin, tab, onPick) {
     super(app);
     this.plugin = plugin;
     this.tab = tab;
     this.onPick = onPick;
     this.entities = [];
+    /** Whoever the server found for the typed words that the list leaves out: on the map, or down the long tail. */
+    this.found = [];
+    this.map = null;
+    this.foot = null;
+    this.seq = 0;
+    this.lastQuery = "";
+    this.cancelSearch = null;
+    this.busy = Promise.resolve();
+    /** The wait before the server is asked — swapped for an immediate one in tests. */
+    this.schedule = (fn, ms) => {
+      const t = window.setTimeout(fn, ms);
+      return () => window.clearTimeout(t);
+    };
     this.setPlaceholder(tab === "company" ? "Look up a company\u2026" : "Look up someone Myu knows\u2026");
   }
   async onOpen() {
     await super.onOpen();
     const res = await this.plugin.backend.listEntities(this.tab);
     this.entities = res.data?.entities ?? [];
+    this.map = this.tab === "person" ? res.data?.map ?? null : null;
+    this.renderFoot();
     this.inputEl.dispatchEvent(new Event("input"));
   }
+  onClose() {
+    this.cancelSearch?.();
+    this.cancelSearch = null;
+  }
+  /** The server's line at the foot of the list, when anyone is on the map; it opens the fold. */
+  renderFoot() {
+    this.foot?.remove();
+    this.foot = null;
+    const line = foldLine(this.map);
+    if (!line) return;
+    this.foot = this.modalEl.createDiv({ cls: "myu-map-foot" });
+    const open = this.foot.createEl("button", { cls: "myu-map-foot-line", text: line });
+    open.onclick = () => this.openFold();
+  }
+  /** The fold in place of this list; closing it comes back here, to a list read again. */
+  openFold() {
+    if (!this.map) return null;
+    this.close();
+    const fold = new MapFoldModal(this.app, this.plugin, this.map, {
+      onBack: () => new _LookupModal(this.app, this.plugin, this.tab, this.onPick).open()
+    });
+    fold.open();
+    return fold;
+  }
   getItems() {
-    return this.entities;
+    return this.found.length ? [...this.entities, ...this.found] : this.entities;
   }
   getItemText(entity) {
     return entity.display_name;
   }
+  getSuggestions(query) {
+    this.askServer(query.trim());
+    return super.getSuggestions(query);
+  }
+  /** The search in flight — tests wait on it. */
+  whenIdle() {
+    return this.busy;
+  }
+  askServer(query) {
+    this.cancelSearch?.();
+    this.cancelSearch = null;
+    if (query.length < 2) {
+      this.found = [];
+      this.lastQuery = "";
+      return;
+    }
+    if (query === this.lastQuery) return;
+    this.cancelSearch = this.schedule(() => {
+      this.cancelSearch = null;
+      this.busy = this.busy.then(() => this.search(query)).catch(() => void 0);
+    }, SEARCH_WAIT_MS);
+  }
+  async search(query) {
+    const mine = ++this.seq;
+    const res = await this.plugin.backend.searchEntities(query).catch(() => null);
+    if (mine !== this.seq) return;
+    this.lastQuery = query;
+    const listed = new Set(this.entities.map((e) => e.entity_id));
+    const kind = this.tab === "company" ? "company" : "person";
+    const found = (res?.data?.results ?? []).filter((r) => r.entity_type === kind && !listed.has(r.entity_id));
+    const same = found.length === this.found.length && found.every((r, i) => r.entity_id === this.found[i]?.entity_id);
+    this.found = found;
+    if (!same) this.inputEl.dispatchEvent(new Event("input"));
+  }
   renderSuggestion(match, el) {
-    el.createDiv({ text: match.item.display_name });
-    const sub = match.item.organization || match.item.subtitle;
+    const item = match.item;
+    const onMap = isOnMap(item);
+    if (onMap) el.addClass("myu-map-hit");
+    el.createDiv({ text: item.display_name });
+    const sub = [
+      item.organization || item.subtitle,
+      onMap && timesSeen(item) > 0 ? seenWords(item) : null,
+      onMap ? MAP_FOLD_WORDS.mark : null
+    ].filter(Boolean).join(" \xB7 ");
     if (sub) el.createDiv({ cls: "myu-quiet", text: sub });
   }
   onChooseItem(entity) {
@@ -11096,8 +15051,8 @@ var LookupModal = class extends import_obsidian22.FuzzySuggestModal {
 };
 
 // src/views/WeeklyReviewModal.ts
-var import_obsidian23 = require("obsidian");
-var WeeklyReviewModal = class extends import_obsidian23.Modal {
+var import_obsidian25 = require("obsidian");
+var WeeklyReviewModal = class extends import_obsidian25.Modal {
   constructor(app, onDecision) {
     super(app);
     this.onDecision = onDecision;
@@ -11105,20 +15060,20 @@ var WeeklyReviewModal = class extends import_obsidian23.Modal {
   onOpen() {
     const { contentEl } = this;
     contentEl.addClass("myu-power-down");
-    contentEl.createEl("h2", { text: "Write a weekly review into your vault?" });
+    contentEl.createEl("h2", { text: "Write a weekly review to your vault?" });
     contentEl.createEl("p", {
       cls: "myu-prose",
-      text: "Once a week, Myu can add a short section to your Periodic Notes weekly note \u2014 the movement it saw across your relationships, as counts. It goes between two markers and replaces itself each week; the rest of the note stays yours."
+      text: "Once a week, Myu can add a short section to your Periodic Notes weekly note: counts of what changed across your relationships. The section sits between two markers and is replaced each week. The rest of the note is not touched."
     });
     contentEl.createEl("p", {
       cls: "myu-prose",
-      text: "Worth knowing before you say yes: this is the only thing Myu ever writes into your vault. Vault files sync through whatever you use \u2014 Dropbox, iCloud, Obsidian Sync \u2014 and land wherever that takes them. Anything written here leaves our reach permanently."
+      text: "Before you say yes: vault files sync through whatever service you use \u2014 Dropbox, iCloud, Obsidian Sync \u2014 and end up wherever that takes them. Once written, Myu cannot change or delete it."
     });
     contentEl.createEl("p", {
       cls: "myu-prose myu-quiet",
-      text: "It writes counts, not names. Turning this off stops future writes; anything already written is yours to keep or delete."
+      text: "It writes counts, not names. Turning this off stops future updates. Anything already written stays in your vault for you to keep or delete."
     });
-    new import_obsidian23.Setting(contentEl).addButton(
+    new import_obsidian25.Setting(contentEl).addButton(
       (b) => b.setButtonText("No, keep it out of my vault").onClick(() => {
         void this.onDecision(false);
         this.close();
@@ -11136,8 +15091,8 @@ var WeeklyReviewModal = class extends import_obsidian23.Modal {
 };
 
 // src/views/BackfillModal.ts
-var import_obsidian24 = require("obsidian");
-var BackfillModal = class extends import_obsidian24.Modal {
+var import_obsidian26 = require("obsidian");
+var BackfillModal = class extends import_obsidian26.Modal {
   constructor(app, plugin, files, oldest) {
     super(app);
     this.plugin = plugin;
@@ -11162,18 +15117,18 @@ var BackfillModal = class extends import_obsidian24.Modal {
     const { contentEl } = this;
     contentEl.empty();
     contentEl.addClass("myu-power-down");
-    contentEl.createEl("h2", { text: "Bring in what you have already written?" });
+    contentEl.createEl("h2", { text: "Share the notes you have already written?" });
     const chosen = this.inRange();
     const folders = new Set(this.files.map((f) => f.path.split("/").slice(0, -1).join("/") || "/"));
     contentEl.createEl("p", { cls: "myu-prose", text: describeScope(this.files.length, folders.size, this.oldest) });
     const line = this.people === null ? "Looking at your links\u2026" : surveyLine(this.people);
     if (line) contentEl.createEl("p", { cls: "myu-prose myu-quiet", text: line });
-    new import_obsidian24.Setting(contentEl).setName("How far back").setDesc(`${chosen.length} ${chosen.length === 1 ? "note" : "notes"} \xB7 ${backfillEstimate(chosen.length)}. Each note keeps its own date; every note is encrypted on this device before it leaves.`).addDropdown((d) => d.addOption("90d", "Last 90 days").addOption("1y", "Last year").addOption("all", "Everything").setValue(this.range).onChange((v) => {
+    new import_obsidian26.Setting(contentEl).setName("How far back").setDesc(`${chosen.length} ${chosen.length === 1 ? "note" : "notes"} \xB7 ${backfillEstimate(chosen.length)}. Each note keeps its own date. Every note is encrypted on this device before it is sent.`).addDropdown((d) => d.addOption("90d", "Last 90 days").addOption("1y", "Last year").addOption("all", "Everything").setValue(this.range).onChange((v) => {
       this.range = v;
       this.render();
     }));
-    contentEl.createEl("p", { cls: "myu-prose myu-quiet", text: "Nothing leaves before you start it. It runs in the background \u2014 progress in the status bar, and a command to cancel. You can share only what you write from now on instead." });
-    new import_obsidian24.Setting(contentEl).addButton((b) => b.setButtonText("Only from now on").onClick(() => {
+    contentEl.createEl("p", { cls: "myu-prose myu-quiet", text: "Nothing is sent until you start it. It runs in the background; progress shows in the status bar, and there is a command to cancel. Or you can share only what you write from now on." });
+    new import_obsidian26.Setting(contentEl).addButton((b) => b.setButtonText("Only from now on").onClick(() => {
       this.plugin.settings.backfill_done = true;
       void this.plugin.saveSettings();
       this.close();
@@ -11184,16 +15139,16 @@ var BackfillModal = class extends import_obsidian24.Modal {
     }));
   }
 };
-function describeScope(count, folders, oldest) {
-  if (count === 0) return "There is nothing in the folders you shared yet.";
-  const noun = count === 1 ? "note" : "notes";
-  const where = `${count} ${noun} across ${folders} ${folders === 1 ? "folder" : "folders"}`;
+function describeScope(count2, folders, oldest) {
+  if (count2 === 0) return "There is nothing in the folders you shared yet.";
+  const noun = count2 === 1 ? "note" : "notes";
+  const where = `${count2} ${noun} across ${folders} ${folders === 1 ? "folder" : "folders"}`;
   if (!oldest) return `${where}.`;
   return `${where}, oldest ${new Date(oldest).getFullYear()}.`;
 }
 
 // src/transport/index.ts
-var import_obsidian25 = require("obsidian");
+var import_obsidian27 = require("obsidian");
 
 // src/transport/assertEncrypted.ts
 var PlaintextRefusedError = class extends Error {
@@ -11206,8 +15161,8 @@ var PlaintextRefusedError = class extends Error {
 };
 function assertEncrypted(payload) {
   const carrier = payload;
-  if ("content" in carrier || "text" in carrier || "body" in carrier) {
-    throw new PlaintextRefusedError("it carries a plaintext field (content/text/body)");
+  if ("content" in carrier || "text" in carrier || "body" in carrier || "pasted_blocks" in carrier) {
+    throw new PlaintextRefusedError("it carries a plaintext field (content/text/body/pasted_blocks)");
   }
   if (typeof payload.encrypted_content !== "string" || payload.encrypted_content.length === 0) {
     throw new PlaintextRefusedError("encrypted_content is missing or empty");
@@ -11457,7 +15412,7 @@ var Transport = class {
     const authed = !opts.anonymous && !!this.opts.authToken;
     return this.exchange(
       path,
-      () => (0, import_obsidian25.requestUrl)({
+      () => (0, import_obsidian27.requestUrl)({
         url: `${this.opts.baseUrl}${path}`,
         method: "POST",
         headers: this.headersFor({ "Content-Type": "application/json", ...opts.headers ?? {} }, authed),
@@ -11476,7 +15431,7 @@ var Transport = class {
     const authed = !!this.opts.authToken;
     return this.exchange(
       path,
-      () => (0, import_obsidian25.requestUrl)({ url: `${this.opts.baseUrl}${path}`, method: "POST", headers: this.headersFor({ "Content-Type": contentType }, authed), body, throw: false }),
+      () => (0, import_obsidian27.requestUrl)({ url: `${this.opts.baseUrl}${path}`, method: "POST", headers: this.headersFor({ "Content-Type": contentType }, authed), body, throw: false }),
       authed
     );
   }
@@ -11488,7 +15443,7 @@ var Transport = class {
     const authed = !!this.opts.authToken;
     return this.exchange(
       path,
-      () => (0, import_obsidian25.requestUrl)({ url: `${this.opts.baseUrl}${path}`, method: "GET", headers: this.headersFor({ ...opts?.headers }, authed), throw: false }),
+      () => (0, import_obsidian27.requestUrl)({ url: `${this.opts.baseUrl}${path}`, method: "GET", headers: this.headersFor({ ...opts?.headers }, authed), throw: false }),
       authed
     );
   }
@@ -11528,7 +15483,7 @@ function ok(data) {
 function fail(status, error) {
   return { status, ok: false, data: null, error };
 }
-var MockApi = class {
+var _MockApi = class _MockApi {
   constructor() {
     this.state = {
       revokedTokens: /* @__PURE__ */ new Set(),
@@ -11537,7 +15492,6 @@ var MockApi = class {
       meetings: /* @__PURE__ */ new Map(),
       journals: /* @__PURE__ */ new Map(),
       offline: false,
-      linkedPrepSubjects: /* @__PURE__ */ new Set(),
       interactions: [],
       feedback: [],
       autoApproveAfterMs: 8e3
@@ -11550,6 +15504,167 @@ var MockApi = class {
      */
     this.accountMDEK = randomBase64(32);
     this.accountRecoveryWrapped = null;
+    /** The password for new devices (2026-10-26): the account key wrapped under it, as `setDevicePassword` puts it. */
+    this.accountPasswordWrapped = null;
+    /** 429 on the next read of the password door, as the server's rate limit answers. */
+    this.passwordDoorRateLimited = false;
+    /**
+     * Every message sent to Myu, in order (pasted text, 2026-10-06): the path, the typed words and the pasted blocks,
+     * the blocks only when there were some, as on the wire. Tests read what went.
+     */
+    this.sends = [];
+    /** Every capture payload sent (`POST /journal/add` with `external_id`), as sent. */
+    this.upserts = [];
+    // ── people Myu isn't keeping track of yet, folded away (2026-10-03) ──
+    /** People who were only on some emails: out of the list, in the fold (most recently seen first) and in search, marked. */
+    this.mapPeople = [
+      { relationship_id: "map-1", primary_name: "Carla Moss", email_primary: "carla@brightpath.io", company_name: "Brightpath Recruiting", last_seen: "2026-10-02 09:12:00", on_map: true, times_seen: 1 },
+      { relationship_id: "map-2", primary_name: "Wen Li", email_primary: "wenli.design@gmail.com", last_seen: "2026-09-11 08:00:00", on_map: true, times_seen: 1 },
+      { relationship_id: "map-3", primary_name: "Mark Delaney", email_primary: "mark.d@datastream.io", company_name: "Datastream", last_seen: "2026-05-14 16:40:00", on_map: true, times_seen: 2 }
+    ];
+    /** The pronouns the person card's header carries for them, when known (the card's sentence reads them). */
+    this.mapPronouns = { "map-1": "she/her", "map-3": "he/him" };
+    /** Kept track of: ordinary people now, listed with everyone else. */
+    this.keptPeople = [];
+    /** What Keep track was pressed for, in order. */
+    this.keeps = [];
+    /** How many times the people list was read — the fold reads it again after a Keep track. */
+    this.peopleListReads = 0;
+    /** How many times a card was read — the person's card reads again after a Keep track. */
+    this.cardReads = 0;
+    /** How many times search was asked — the look-up asks only from two characters on. */
+    this.searchReads = 0;
+    /** Myu's lines outside a space (Today, a person's chat); none by default. A test sets them. */
+    this.dayLines = [];
+    /** What answering a day line says back, by line id; "Okay." (nothing for a Skip) otherwise. */
+    this.dayAnswers = {};
+    /** Every answer to a day line, in order: which line and the body sent. */
+    this.dayAnswered = [];
+    /**
+     * Send feedback with files (2026-10-14): the body, files included, lands in `state.feedback`. By default the server
+     * answers `files_attached` as the count it was given; `feedbackServerBeforeFiles` answers none (a server from
+     * before files), and `feedbackRefusal` answers that refusal instead (a 413 `attachment_too_large`).
+     */
+    this.feedbackServerBeforeFiles = false;
+    this.feedbackRefusal = null;
+    /**
+     * The menu's marks (2026-10-06): a demo day — something new on Today and in a space, questions waiting on Today, a
+     * person and the space. `null` stands for a server without the door (404); a test sets either.
+     */
+    this.menuMarks = {
+      day: (/* @__PURE__ */ new Date()).toISOString().slice(0, 10),
+      marks: {
+        home: { new: 3, waiting: 2 },
+        people: { new: 0, waiting: 1 },
+        calendar: { new: 0, waiting: 0 },
+        spaces: { new: 2, waiting: 1 },
+        conversations: { new: 0, waiting: 0 },
+        canvas: { new: 0, waiting: 0 }
+      },
+      opened: {}
+    };
+    /** Every place told it was opened, in order. */
+    this.menuOpened = [];
+    /**
+     * "Seen" (2026-10-06): every report, in order, and the lines the server has recorded so far (it records a line the
+     * first time and ignores it after). `linesSeenDoor = false` stands for a server without the door (404).
+     */
+    this.linesSeenDoor = true;
+    this.linesSeenReports = [];
+    this.linesSeen = /* @__PURE__ */ new Set();
+    /** The commitments between people (`GET /commitments`); none by default. A test sets them. */
+    this.myuCommitments = [];
+    /** The spaces this example account belongs to; a test can empty it or fail the call (`spacesFail`). */
+    this.spaces = [{ space_id: "s1", name: "Door team", kind: "small_team", status: "active", member_count: 4 }];
+    this.spacesFail = false;
+    /** The team's retro as the example account sees it; a test can replace it. */
+    this.retroRead = {
+      success: true,
+      retro: { retro_id: "r1", number: 1, state: "asking", first_retro: true, reflects: { pushed: 4, members: 4 } },
+      how_it_works: "The retro is every other week, on Friday at 2pm. Each person tells Myu privately what to bring up. Only what you approve goes up, with or without your name. You meet only if the team can't agree. Each retro hands out three tasks at most.",
+      pinned: {},
+      threads: [
+        {
+          thread_id: "t1",
+          position: 1,
+          kind: "question",
+          author_kind: "team_myu",
+          text: "Reviews pile up before a release. What would make reviews faster without slowing the work?",
+          state: "settled",
+          state_text: "Everyone accepts this.",
+          reply_count: 2,
+          replies: [
+            { reply_id: "rp1", participant: { participant_id: "p1", name: "Dana Okafor" }, text: "Reviews wait because nobody owns the queue." },
+            { reply_id: "rp2", participant: { participant_id: "p2", name: "Sam Reyes" }, text: "I would rather review the same day than batch them." }
+          ],
+          merged: { wording_id: "w1", text: "Review capacity, not engineering capacity, is what slips the release." }
+        }
+      ],
+      todos: [
+        { todo_id: "td1", text: "When a pull request is opened, the assigned reviewer starts the review that day.", state: "drafted" },
+        { todo_id: "td2", text: "Add a review slot to the weekly plan when more than five reviews wait.", state: "taken", owner: { name: "Dana Okafor" }, status_text: "taken by Dana \xB7 Myu checks on Wednesday" }
+      ]
+    };
+    // ── Space mode (R14): one space, getting ready, one ask at a time ───────────────
+    // A small stand-in for the backend's state machine, enough for dev mode and the tests:
+    // typed words first, then "how should this go to the team", then "anything else", the
+    // readback with its bullets, and sharing. The sentences are the backend's fixed copy.
+    /** Seeded thin (hints under the box) unless a test says otherwise. */
+    this.spaceMode = {
+      step: "open",
+      thin: true,
+      locked: false,
+      agent: false,
+      turns: [],
+      open: null,
+      own: [],
+      n: 0,
+      earlierAsked: 0
+    };
+    // ── The interview debrief (2026-09-29): a debrief space's conversation ─────────
+    // A small stand-in for the backend's debrief asks (V093), in its words: the scorecard one ask at a time (what did
+    // you see, typed or "Didn't come up"; then yes or no), the overall call, then locked. `start: 'cv'` opens instead
+    // with the one-time "Add Jordan's CV or LinkedIn" ask, whose first two buttons stay open and send an effect.
+    // The space is not on the list until a test or the shot adds it (`spaces.push(debriefSpace)`).
+    this.debriefSpace = { space_id: "d1", name: "Jordan Reyes", kind: "small_team", kind_label: "Small team", status: "active", member_count: 3, work: "debrief" };
+    this.debriefMode = {
+      start: "saw",
+      topics: [
+        { topic: "System design", yes: "Breaks a vague problem into parts and names the trade-offs.", no: "Jumps to one design and defends it." },
+        { topic: "Ownership", yes: "Talks about what they shipped and what broke after.", no: "Talks only about what the team did." }
+      ],
+      at: 0,
+      step: "",
+      turns: [],
+      open: null,
+      payload: null,
+      n: 0,
+      answers: [],
+      added: []
+    };
+    // ── the meeting's card, version 2 (2026-09-30), and the meeting's own conversation ─────────────
+    // A small stand-in for the backend: the card with its question before and its arc, and the
+    // meeting's conversation where typed words answer the question that is up, "Anything you didn't
+    // say in there?" is followed by the Yes/No, and the arc's Now opens it. The sentences are the
+    // backend's fixed copy (lines_config).
+    /** Cards a test puts in place of the mock's own, by event id. */
+    this.meetingPreps = {};
+    /** Every card read, by event id. */
+    this.prepReads = [];
+    /** Every conversation read: which subject, and the occurrence it named. */
+    this.conversationReads = [];
+    /** Every typed turn into a subject's conversation. */
+    this.subjectTurns = [];
+    /** Every button pressed on the meeting's conversation or the mock card's arc: which line, which choice. */
+    this.meetingAnswered = [];
+    /** One meeting's conversation: its turns, the ask that is up, and whether the arc was answered. */
+    this.meetingMode = {
+      event_id: null,
+      turns: [],
+      open: null,
+      n: 0,
+      arcAnswered: false
+    };
     /**
      * What changed since `since`: the mock has no clock of its own, so a first
      * sync (since 0) returns everything and a later one returns nothing —
@@ -11559,6 +15674,8 @@ var MockApi = class {
     this.mockChangedAt = 17e11;
     /** The mock's magic email: request "sends" a token, validate accepts it once. */
     this.pendingMagicToken = null;
+    /** A meeting's notes a test puts in place, by meeting id (the card's "Open the notes ▸"); empty otherwise. */
+    this.meetingDetails = {};
     // ── account surfaces (parity review 2026-08-26) ──────────────────────────
     // Enough shape to drive the settings UI offline, including the states that
     // are awkward to reach live: a second device you can revoke, and an
@@ -11571,6 +15688,8 @@ var MockApi = class {
       { email: "you@example.com", verified: true, is_primary: true },
       { email: "work@example.com", verified: false, is_primary: false }
     ];
+    /** The saved zone, as the server keeps it (null until a client sends one; the brief then uses America/New_York). */
+    this.savedTimeZone = null;
     // ── P10: onboarding twins. State lives in-memory; the classifier is a word
     // counter (>= 8 words reads as a real answer) so both branches are drivable.
     this.mockAccountState = {
@@ -11580,6 +15699,12 @@ var MockApi = class {
   }
   guard() {
     return this.state.offline ? fail(0, "offline") : null;
+  }
+  /** Record one send; the blocks it carried, or undefined when it carried none. */
+  recordSend(path, content, pasted) {
+    const blocks = pasted?.length ? pasted : void 0;
+    this.sends.push({ path, content, ...blocks ? { pasted_blocks: blocks } : {} });
+    return blocks;
   }
   async exchangeToken(token, _deviceId) {
     const offline = this.guard();
@@ -11656,9 +15781,21 @@ var MockApi = class {
     if (!this.accountRecoveryWrapped) return fail(404, "no_recovery_key");
     return ok({ wrapped_mdek_recovery: this.accountRecoveryWrapped });
   }
+  async fetchPasswordWrappedMDEK() {
+    const offline = this.guard();
+    if (offline) return offline;
+    if (this.passwordDoorRateLimited) return fail(429, "rate_limit_exceeded");
+    if (!this.accountPasswordWrapped) return fail(404, "no_password");
+    return ok({ success: true, has_password: true, wrapped_mdek_password: this.accountPasswordWrapped.wrapped_mdek_password, kdf: this.accountPasswordWrapped.kdf, set_at: "2026-10-26T00:00:00Z" });
+  }
+  /** A test's account key, wrapped under `password` the way the web's sheet does it. */
+  async setDevicePassword(mdek, password) {
+    this.accountPasswordWrapped = await wrapWithPassword(mdek, password);
+  }
   async upsertJournal(payload) {
     const offline = this.guard();
     if (offline) return offline;
+    this.upserts.push(payload);
     const existing = this.state.journals.get(payload.external_id);
     if (existing) {
       existing.revision += 1;
@@ -11746,14 +15883,45 @@ var MockApi = class {
         ]
       });
     }
+    this.peopleListReads++;
     return ok({
       entities: [
         { entity_type: "person", entity_id: "rel-1", display_name: "Marcus Webb", organization: "Acme", item_count: 3, top_urgency: "medium" },
-        { entity_type: "person", entity_id: "rel-2", display_name: "Priya Raman", organization: "Northwind", item_count: 1, top_urgency: "low" }
-      ]
+        { entity_type: "person", entity_id: "rel-2", display_name: "Priya Raman", organization: "Northwind", item_count: 1, top_urgency: "low" },
+        ...this.keptPeople
+      ],
+      map: this.mapFoldOf()
     });
   }
+  /** `{count, line}` as the server writes it from the lines copy (`map_fold`). */
+  mapFoldOf() {
+    const n = this.mapPeople.length;
+    return { count: n, line: n === 0 ? null : `${n} more people from your mail` };
+  }
+  /** The one way back: Keep track makes the person an ordinary relationship. Opening their card does nothing. */
+  leaveMap(relationshipId) {
+    const i = this.mapPeople.findIndex((r) => r.relationship_id === relationshipId);
+    if (i < 0) return false;
+    const [row] = this.mapPeople.splice(i, 1);
+    this.keptPeople.push({ entity_type: "person", entity_id: row.relationship_id, display_name: row.primary_name, organization: row.company_name ?? void 0, item_count: 0, top_urgency: "info" });
+    return true;
+  }
+  async listMapPeople(limit, offset) {
+    const offline = this.guard();
+    if (offline) return offline;
+    const sorted = [...this.mapPeople].sort((a, b) => (b.last_seen ?? "").localeCompare(a.last_seen ?? "") || a.relationship_id.localeCompare(b.relationship_id));
+    const page = sorted.slice(offset, offset + limit);
+    return ok({ relationships: page, count: page.length, map: this.mapFoldOf(), limit, offset });
+  }
+  async keepRelationship(relationshipId) {
+    const offline = this.guard();
+    if (offline) return offline;
+    this.keeps.push(relationshipId);
+    if (!this.leaveMap(relationshipId)) return fail(404, "not_found");
+    return ok({ success: true, relationship_id: relationshipId, on_map: false });
+  }
   async getCard(entityType, entityId) {
+    this.cardReads++;
     const res = await this.getCardBase(entityType, entityId);
     const card = res.ok ? res.data?.card : void 0;
     if (entityType === "person" && card) {
@@ -11772,6 +15940,460 @@ var MockApi = class {
     }
     return res;
   }
+  async getCardDeep(entityType, entityId) {
+    const res = await this.getCard(entityType, entityId);
+    const offline = this.guard();
+    if (offline) return offline;
+    const card = res.ok ? res.data?.card : void 0;
+    if (card && entityType === "person") {
+      card.sections = [
+        ...card.sections ?? [],
+        {
+          section_type: "spaces_shared",
+          title: "Spaces you share",
+          is_new: true,
+          data: { items: [{ space_id: "sp1", name: "Platform team", line: "Retro Friday, two things need you." }] }
+        },
+        {
+          section_type: "commitments_between",
+          title: "Commitments between you",
+          is_new: true,
+          data: { items: [{ commitment_id: "c1", what: "Review the migration plan", owner: "them", status: "open", how_myu_knows: "You said so in the sync." }] }
+        },
+        {
+          section_type: "partner_readings",
+          title: "Their reading next to yours",
+          is_new: true,
+          is_experiment: true,
+          data: { rows: [{ dimension: "Initiation", words: "alike" }, { dimension: "Reply speed", words: "differently" }], numbers_need_both: true }
+        },
+        {
+          section_type: "emissions",
+          title: "What your Myu said about them in rooms",
+          is_new: true,
+          note: "Nothing yet.",
+          data: { items: [] }
+        }
+      ];
+    }
+    return ok({ card });
+  }
+  async getMyuLines(_scope) {
+    const offline = this.guard();
+    if (offline) return offline;
+    return ok({ success: true, day: (/* @__PURE__ */ new Date()).toISOString().slice(0, 10), budget: { released: 0, limit: 3 }, lines: this.dayLines.map((l) => ({ ...l })) });
+  }
+  async getMenuMarks() {
+    if (this.state.offline) throw new Error("menu marks: offline");
+    return this.menuMarks ? readMenuMarks(this.menuMarks) : null;
+  }
+  async markMenuOpened(item) {
+    if (this.state.offline) throw new Error("menu marks opened: offline");
+    if (!this.menuMarks) return null;
+    this.menuOpened.push(item);
+    this.menuMarks = withOpened(this.menuMarks, item);
+    return readMenuMarks(this.menuMarks);
+  }
+  async markLinesSeen(lineIds) {
+    if (this.state.offline) throw new Error("lines seen: offline");
+    if (!lineIds.length || !this.linesSeenDoor) return null;
+    this.linesSeenReports.push([...lineIds]);
+    const fresh = lineIds.filter((id) => !this.linesSeen.has(id));
+    for (const id of fresh) this.linesSeen.add(id);
+    return { success: true, seen: fresh };
+  }
+  async getCommitments() {
+    const offline = this.guard();
+    if (offline) return offline;
+    return ok({ success: true, items: this.myuCommitments.map((c) => ({ ...c })) });
+  }
+  async getMyuLog() {
+    const offline = this.guard();
+    if (offline) return offline;
+    return ok({ success: true, items: [] });
+  }
+  async getRetro(_spaceId) {
+    const offline = this.guard();
+    if (offline) return offline;
+    return ok(this.retroRead);
+  }
+  async listSpaces() {
+    const offline = this.guard();
+    if (offline) return offline;
+    if (this.spacesFail) return fail(404, "not found");
+    return ok({ spaces: this.spaces });
+  }
+  spaceAsk(spaceId, text, choices) {
+    const sm = this.spaceMode;
+    const at = (/* @__PURE__ */ new Date()).toISOString();
+    const line = {
+      line_id: `mock-line-${++sm.n}`,
+      subjects: [{ type: "space", id: spaceId, label: "Door team" }],
+      text,
+      needs_you: true,
+      ask_kind: "choice",
+      choices,
+      state: "released",
+      why: { fired_because: "The retro is getting ready" },
+      conversation: { subject_type: "space", subject_id: spaceId, conversation_id: `mock-conv-${spaceId}` },
+      provenance: { source: "retro", detail: "prep" },
+      created_at: at
+    };
+    sm.turns.push({ turn_id: `mock-turn-${++sm.n}`, from: "myu", at, text, choices, line_id: line.line_id });
+    sm.open = line;
+    return line;
+  }
+  spaceSay(from, text, extra = {}) {
+    this.spaceMode.turns.push({ turn_id: `mock-turn-${++this.spaceMode.n}`, from, at: (/* @__PURE__ */ new Date()).toISOString(), text, ...extra });
+  }
+  /** Mark the ask that is up as answered (a button's id, or "typed" when the person typed past it). */
+  spaceSettle(choiceId) {
+    const sm = this.spaceMode;
+    if (!sm.open) return;
+    const turn = sm.turns.find((t) => t.line_id === sm.open?.line_id && !t.readback);
+    if (turn) turn.answered = { choice_id: choiceId, at: (/* @__PURE__ */ new Date()).toISOString() };
+    sm.open = null;
+  }
+  isDebriefId(spaceId) {
+    return spaceId === this.debriefSpace.space_id;
+  }
+  debriefFirst() {
+    return (this.debriefSpace.name ?? "the candidate").split(/\s+/)[0] ?? "the candidate";
+  }
+  debriefAsk(type, step, text, choices, input) {
+    const dm = this.debriefMode;
+    const spaceId = this.debriefSpace.space_id;
+    const at = (/* @__PURE__ */ new Date()).toISOString();
+    const line = {
+      line_id: `mock-debrief-line-${++dm.n}`,
+      subjects: [{ type: "space", id: spaceId, label: this.debriefSpace.name ?? "" }],
+      text,
+      needs_you: true,
+      ask_kind: "choice",
+      choices,
+      state: "released",
+      why: { fired_because: "Your interview just ended" },
+      conversation: { subject_type: "space", subject_id: spaceId, conversation_id: `mock-conv-${spaceId}` },
+      provenance: { source: "debrief", detail: type },
+      created_at: at
+    };
+    dm.turns.push({ turn_id: `mock-debrief-turn-${++dm.n}`, from: "myu", at, text, choices, line_id: line.line_id });
+    dm.open = line;
+    dm.payload = { type, step, input };
+    dm.step = step;
+    return line;
+  }
+  debriefSay(from, text, extra = {}) {
+    this.debriefMode.turns.push({ turn_id: `mock-debrief-turn-${++this.debriefMode.n}`, from, at: (/* @__PURE__ */ new Date()).toISOString(), text, ...extra });
+  }
+  debriefSettle(choiceId) {
+    const dm = this.debriefMode;
+    if (!dm.open) return;
+    const turn = dm.turns.find((t) => t.line_id === dm.open?.line_id && !t.readback);
+    if (turn) turn.answered = { choice_id: choiceId, at: (/* @__PURE__ */ new Date()).toISOString() };
+    dm.open = null;
+    dm.payload = null;
+  }
+  /** The next ask of the scorecard: the next topic's "what did you see", else the overall call, else locked. */
+  debriefNext() {
+    const dm = this.debriefMode;
+    const t = dm.topics[dm.at];
+    if (t) {
+      this.debriefAsk("debrief_ask", `saw:${t.topic}`, `${t.topic}. What did you see?
+A yes: ${t.yes}
+A no: ${t.no}`, [{ id: "dcu", label: "Didn't come up" }], true);
+      return;
+    }
+    if (dm.step !== "call" && dm.step !== "locked") {
+      this.debriefAsk("debrief_ask", "call", "Your overall call: yes or no?", _MockApi.RATINGS, false);
+      return;
+    }
+    dm.step = "locked";
+    this.debriefSay("myu", "Done. Your scorecard is locked. Nobody sees anyone else's until everyone is in, or Friday at 5pm.");
+  }
+  debriefConversation() {
+    const dm = this.debriefMode;
+    const spaceId = this.debriefSpace.space_id;
+    if (!dm.open && dm.turns.length === 0) {
+      if (dm.start === "cv") {
+        dm.step = "cv";
+        this.debriefAsk("debrief_cv_ask", "cv", `Add ${this.debriefFirst()}'s CV or LinkedIn so the panel can read it first?`, [
+          { id: "addcv", label: "Add a CV" },
+          { id: "linkedin", label: "Paste a LinkedIn link" },
+          { id: "notnow", label: "Not now" }
+        ], false);
+      } else {
+        this.debriefSay("myu", `Your interview with ${this.debriefSpace.name} just ended. Two topics for you, before you see anyone else's.`);
+        this.debriefNext();
+      }
+    }
+    const step = dm.step;
+    const placeholder = step.startsWith("saw:") ? "What did you see?" : step.startsWith("rate:") || step === "call" ? "Or say it in words" : "Type to Myu about this interview debrief";
+    const done = dm.step === "locked" ? 1 : 0;
+    return {
+      success: true,
+      conversation_id: `mock-conv-${spaceId}`,
+      subject: { type: "space", id: spaceId, label: this.debriefSpace.name ?? "" },
+      history: dm.turns.map((t) => ({ ...t })),
+      open_line: dm.open ?? void 0,
+      open_lines: dm.open ? [dm.open] : [],
+      mode: "space",
+      stage: { work: "debrief", debrief_state: "sealed", step: step || void 0, first_line: `${done} of 3 in \xB7 reveal when everyone is in, or Friday at 5pm` },
+      input: { placeholder, hints: [], attach: true }
+    };
+  }
+  /** Typed words in a debrief space answer the ask that takes words (or say it in words for a yes or no). */
+  debriefTyped(content) {
+    const dm = this.debriefMode;
+    this.debriefSay("you", content);
+    const said = (text) => {
+      this.debriefSay("myu", text);
+      return ok({ role: "assistant", content: text, space_mode: { intent: "debrief", confidence: 0.9, handled: "answered" }, effects: [] });
+    };
+    const next = (answer) => {
+      dm.answers.push({ step: dm.step, answer });
+      this.debriefSettle("typed");
+      this.debriefNext();
+      const line = dm.open;
+      return ok({ role: "assistant", content: line?.text ?? "", space_mode: { intent: "debrief", confidence: 0.9, handled: line ? "confirm" : "answered", line_id: line?.line_id }, effects: [] });
+    };
+    const step = dm.step;
+    if (step.startsWith("saw:") && dm.payload?.input) {
+      const topic = step.slice(4);
+      dm.answers.push({ step, answer: content });
+      this.debriefSettle("typed");
+      const line = this.debriefAsk("debrief_ask", `rate:${topic}`, `${topic}: yes or no?`, _MockApi.RATINGS, false);
+      return ok({ role: "assistant", content: line.text, space_mode: { intent: "debrief", confidence: 0.9, handled: "confirm", line_id: line.line_id }, effects: [] });
+    }
+    if (step.startsWith("rate:") || step === "call") {
+      const rating = _MockApi.RATINGS.find((r) => r.label.toLowerCase() === content.trim().toLowerCase());
+      if (!rating) return said("Yes or no? Press one, or say it in words: strong no, no, yes or strong yes.");
+      if (step.startsWith("rate:")) dm.at++;
+      return next(rating.id);
+    }
+    if (step === "cv" && /linkedin\.com\//i.test(content)) {
+      dm.added.push(content.trim());
+      this.debriefSettle("added");
+      return said(`Added to ${this.debriefFirst()}'s page: the work history from that profile.`);
+    }
+    return said("I'll keep that with your notes on this interview debrief.");
+  }
+  debriefAnswer(open, choice) {
+    const dm = this.debriefMode;
+    const step = dm.step;
+    const done = (readback, effects = [], lineOpen = false) => {
+      if (!lineOpen) this.debriefSettle(choice);
+      if (readback) this.debriefSay("myu", readback, { readback: true, line_id: open.line_id });
+      return ok({ success: true, line: { ...open, state: lineOpen ? "released" : "answered" }, readback: { text: readback }, effects, line_open: lineOpen });
+    };
+    if (step === "cv") {
+      if (choice === "addcv") return done("", [{ type: "attach_cv", space_id: this.debriefSpace.space_id }], true);
+      if (choice === "linkedin") return done(`Paste the link, and ${this.debriefFirst()}'s work history appears on the page.`, [{ type: "paste_linkedin", space_id: this.debriefSpace.space_id }], true);
+      return done("Okay.");
+    }
+    dm.answers.push({ step, answer: choice });
+    const r = done("");
+    if (step.startsWith("saw:") || step.startsWith("rate:")) dm.at++;
+    this.debriefNext();
+    return r;
+  }
+  async getSubjectConversation(subjectType, subjectId, opts) {
+    const offline = this.guard();
+    if (offline) return offline;
+    this.conversationReads.push({ subject_type: subjectType, subject_id: subjectId, ...opts?.occurrenceKey ? { occurrence_key: opts.occurrenceKey } : {} });
+    if (subjectType === "meeting") {
+      this.meetingSeed(subjectId);
+      return ok(this.meetingConversation(subjectId));
+    }
+    if (subjectType === "space" && this.isDebriefId(subjectId)) return ok(this.debriefConversation());
+    const sm = this.spaceMode;
+    if (subjectType !== "space") {
+      return ok({ success: true, conversation_id: `mock-conv-${subjectId}`, subject: { type: subjectType, id: subjectId }, history: [] });
+    }
+    if (opts?.earlier) sm.earlierAsked++;
+    if (sm.step === "open" && !sm.open && sm.turns.length === 0) {
+      this.spaceAsk(subjectId, "Retro Saturday at 2pm. What do you want to bring up? Nothing is shared until you say yes.", [{ id: "nothing", label: "Nothing this time" }]);
+    }
+    const asking = sm.step === "open" || sm.step === "words";
+    return ok({
+      success: true,
+      conversation_id: `mock-conv-${subjectId}`,
+      subject: { type: "space", id: subjectId, label: "Door team" },
+      history: sm.turns.map((t) => ({ ...t })),
+      open_line: sm.open ?? void 0,
+      open_lines: sm.open ? [sm.open] : [],
+      mode: "space",
+      stage: {
+        retro_id: "mock-retro-1",
+        retro_state: "preparing",
+        step: sm.step,
+        // R20: the lean line, as the backend sends it (the fact once, with the counts, no closing stop).
+        first_line: sm.step === "shared" ? `Retro Saturday \xB7 you shared ${Math.max(1, sm.own.length)} \xB7 1 of 4 shared` : "Retro Saturday at 2pm"
+      },
+      input: {
+        placeholder: asking ? "What do you want to bring up?" : "Write to Myu about this team",
+        hints: sm.thin && asking ? ["What happened in the last few weeks that the team should talk about?", "What is going well?", "Is there something you didn't say in a meeting?"] : []
+      },
+      history_from: "2026-09-15T00:00:00Z"
+    });
+  }
+  async addSubjectTurn(conversationId, content, pasted) {
+    const offline = this.guard();
+    if (offline) return offline;
+    const blocks = this.recordSend("/journal_chats/add", content, pasted);
+    this.subjectTurns.push({ conversation_id: conversationId, content, ...blocks ? { pasted_blocks: blocks } : {} });
+    const res = this.subjectTurnReply(conversationId, content, blocks);
+    return blocks && res.ok && res.data ? { ...res, data: Object.assign({}, res.data, { pasted_blocks_received: blocks.length }) } : res;
+  }
+  /** A typed turn's answer, by whose conversation it is. */
+  subjectTurnReply(conversationId, content, blocks) {
+    if (conversationId.startsWith("mock-meeting-conv-")) return this.meetingTyped(content);
+    const sm = this.spaceMode;
+    const spaceId = conversationId.replace(/^mock-conv-/, "");
+    if (sm.agent) return { status: 403, ok: false, data: { success: false, error: "scope_required", scope_required: "content" }, error: "scope_required" };
+    if (this.isDebriefId(spaceId)) return this.debriefTyped(content);
+    this.spaceSay("you", content, blocks ? { pasted_blocks: blocks } : {});
+    const answered = (intent, text, handled = "answered", effects = []) => {
+      this.spaceSay("myu", text);
+      return ok({ role: "assistant", content: text, space_mode: { intent, confidence: 0.9, handled }, effects });
+    };
+    if (/what do you think of|what do you make of/i.test(content)) {
+      return answered("about_person", "I don't see anyone else's private notes; I can tell you what the team shared.");
+    }
+    if (/what did we decide|last time/i.test(content)) {
+      if (sm.locked) return answered("results", "Unlock this space to read it.", "refused", [{ type: "consent_needed", provider: "space", reason: "locked" }]);
+      return answered("results", "Nothing has been decided here yet.");
+    }
+    if (/bigger|my whole career/i.test(content)) {
+      const line2 = this.spaceAsk(spaceId, "That's bigger than this retro. Want to take it to your journal?", [{ id: "journal", label: "Take it there" }, { id: "leave", label: "Not now" }]);
+      return ok({ role: "assistant", content: line2.text, space_mode: { intent: "bigger", confidence: 0.9, handled: "confirm", line_id: line2.line_id }, effects: [] });
+    }
+    if (/take (that|it) back/i.test(content)) {
+      if (sm.open) this.spaceSettle("typed");
+      const last = sm.own[sm.own.length - 1] ?? "";
+      const line2 = this.spaceAsk(spaceId, `Take this back? "${last}"`, [{ id: "take_back", label: "Take it back" }, { id: "leave", label: "Leave it" }]);
+      return ok({ role: "assistant", content: line2.text, space_mode: { intent: "take_back", confidence: 0.95, handled: "confirm", line_id: line2.line_id }, effects: [] });
+    }
+    if (sm.open) this.spaceSettle("typed");
+    sm.own.push(content);
+    sm.step = "words";
+    const line = this.spaceAsk(spaceId, "Got it. How should this go to the team?", [
+      { id: "named", label: "With my name" },
+      { id: "question", label: "As a question, no name" },
+      { id: "private", label: "Keep it private" }
+    ]);
+    return ok({ role: "assistant", content: line.text, space_mode: { intent: "bring_up", confidence: 0.9, handled: "confirm", line_id: line.line_id }, effects: [] });
+  }
+  async answerMyuLine(lineId, answer) {
+    const offline = this.guard();
+    if (offline) return offline;
+    const day = this.dayLines.find((l) => l.line_id === lineId);
+    if (day && day.state !== "released" && day.state !== "queued") return fail(409, "line_closed");
+    if (day) {
+      this.dayAnswered.push({ line_id: lineId, answer });
+      const reply = this.dayAnswers[lineId]?.(answer) ?? { success: true, readback: { text: answer.dismiss ? "" : "Okay." } };
+      if (!reply.line_open) day.state = "answered";
+      return ok(reply);
+    }
+    const meeting = this.meetingAnswer(lineId, answer.choice_id ?? "");
+    if (meeting) return meeting;
+    const dOpen = this.debriefMode.open;
+    if (dOpen && dOpen.line_id === lineId) return this.debriefAnswer(dOpen, answer.choice_id ?? "");
+    if (lineId.startsWith("mock-debrief-line-")) return fail(409, "line_closed");
+    const sm = this.spaceMode;
+    const open = sm.open;
+    if (!open || open.line_id !== lineId) return fail(409, "line_closed");
+    const spaceId = open.conversation?.subject_id ?? "";
+    const choice = answer.choice_id ?? "";
+    const last = sm.own[sm.own.length - 1] ?? "";
+    const done = (readback, effects = [], lineOpen = false) => {
+      if (!lineOpen) this.spaceSettle(choice);
+      if (readback) this.spaceSay("myu", readback, { readback: true, line_id: lineId });
+      return ok({ success: true, line: { ...open, state: lineOpen ? "released" : "answered" }, readback: { text: readback }, effects, line_open: lineOpen });
+    };
+    const anythingElse = () => this.spaceAsk(spaceId, "Anything else? Type it, or say you're done.", [{ id: "done", label: "I'm done" }]);
+    switch (choice) {
+      case "named": {
+        const r = done(`Okay. The team will see: "${last}" with your name on it.`);
+        anythingElse();
+        return r;
+      }
+      case "question": {
+        const r = done(`Okay. The team will see: "${last}" with no name.`);
+        anythingElse();
+        return r;
+      }
+      case "private": {
+        const r = done("Okay, kept private.");
+        this.spaceAsk(spaceId, "Want to talk it through? Sometimes there's a version of it worth bringing.", [{ id: "talk", label: "Talk it through" }, { id: "leave", label: "Leave it" }]);
+        return r;
+      }
+      case "talk": {
+        const r = done("");
+        this.spaceAsk(spaceId, `Here's a version that says only that: "I agreed to the date before the work was sized." Bring this?`, [
+          { id: "named", label: "Yes, with my name" },
+          { id: "question", label: "Yes, as a question, no name" },
+          { id: "private", label: "No, keep it private" },
+          { id: "leave", label: "Leave it" }
+        ]);
+        return r;
+      }
+      case "nothing":
+      case "done": {
+        const r = done("");
+        sm.step = "readback";
+        const bullets = sm.own.map((t) => `\u2022 "${t}" with your name`).join("\n");
+        this.spaceAsk(spaceId, `Here is what the team will see on Saturday:
+${bullets || "\u2022 nothing yet"}
+Nothing else is shared.
+Once the questions are up, a no-name question can't be taken back.`, [
+          { id: "push", label: "Share with the team" },
+          { id: "change", label: "Change something" },
+          { id: "hold", label: "Not yet" }
+        ]);
+        return r;
+      }
+      case "push": {
+        if (sm.locked) return done("Unlock this space to read it.", [{ type: "consent_needed", provider: "space", reason: "locked" }], true);
+        sm.step = "shared";
+        return done(`Shared with Door team: ${sm.own.length} things.`, [{ type: "pushed", pushed: sm.own.length }]);
+      }
+      case "change": {
+        sm.step = "words";
+        return done("Type it again, the way you want it.");
+      }
+      case "take_back": {
+        sm.own.pop();
+        return done("Taken back.");
+      }
+      case "journal":
+        return done("", [{ type: "open_journal", text: last }]);
+      default:
+        return done("Okay.");
+    }
+  }
+  async getRetroPrepMine(_spaceId) {
+    const offline = this.guard();
+    if (offline) return offline;
+    const sm = this.spaceMode;
+    return ok({
+      success: true,
+      retro_id: "mock-retro-1",
+      retro_state: "preparing",
+      prep_id: "mock-prep-1",
+      just_me: false,
+      step: sm.step,
+      own_items: sm.own.map((text, i) => ({ item_id: `own-${i}`, text, how: "named", shared: sm.step === "shared" })),
+      suggestions: [],
+      can_take_back: true,
+      items: [],
+      unanswered: [],
+      capacity_answered: false,
+      shared: sm.step === "shared",
+      share_line_open: sm.step === "readback",
+      open_asks: sm.open ? 1 : 0
+    });
+  }
   async getCardBase(entityType, entityId) {
     const offline = this.guard();
     if (offline) return offline;
@@ -11780,6 +16402,26 @@ var MockApi = class {
         { card_id: "lc-1", person_name: "Priya Raman", profile_headline: "Head of Platform at Northwind", linkedin_url: "https://linkedin.com/in/priya-raman-nw", confidence: 0.82 },
         { card_id: "lc-2", person_name: "Priya Raman", profile_headline: "Recruiter, Contoso", linkedin_url: "https://linkedin.com/in/priyaraman", confidence: 0.31 }
       ] });
+    }
+    const onMap = entityType === "person" ? this.mapPeople.find((r) => r.relationship_id === entityId) : void 0;
+    if (onMap) {
+      return ok({
+        card: {
+          entity_id: entityId,
+          header: { display_name: onMap.primary_name, subtitle: onMap.company_name ?? void 0, email_primary: onMap.email_primary, pronouns: this.mapPronouns[entityId] ?? null, on_map: true },
+          sections: []
+        }
+      });
+    }
+    const kept = entityType === "person" ? this.keptPeople.find((e) => e.entity_id === entityId) : void 0;
+    if (kept) {
+      return ok({
+        card: {
+          entity_id: entityId,
+          header: { display_name: kept.display_name, subtitle: kept.organization, pronouns: this.mapPronouns[entityId] ?? null },
+          sections: []
+        }
+      });
     }
     if (entityType === "company") {
       return ok({
@@ -11833,86 +16475,184 @@ var MockApi = class {
       ]
     });
   }
-  /**
-   * Two prep shapes, switched by event id, so BOTH card states demo offline:
-   * the default is a warm read (claims + notes captured); `mock-event-cold`
-   * exercises the cold/unlinked path — factual only, subject is a bare email,
-   * `who is this?` must appear and the searchEntities → linkPrepSubject loop
-   * must be walkable.
-   */
+  /** Open an ask in the meeting's conversation (the mock's own seeding, or a test's). */
+  meetingAsk(eventId, text, choices, detail) {
+    const mm = this.meetingMode;
+    mm.event_id = eventId;
+    const at = (/* @__PURE__ */ new Date()).toISOString();
+    const line = {
+      line_id: `mock-meeting-line-${++mm.n}`,
+      subjects: [{ type: "meeting", id: eventId, label: "Marcus / 1:1" }],
+      text,
+      needs_you: true,
+      ask_kind: "choice",
+      choices,
+      state: "released",
+      conversation: { subject_type: "meeting", subject_id: eventId, conversation_id: `mock-meeting-conv-${eventId}` },
+      provenance: { source: "calendar", detail },
+      created_at: at
+    };
+    mm.turns.push({ turn_id: `mock-meeting-turn-${++mm.n}`, from: "myu", at, text, choices, line_id: line.line_id });
+    mm.open = line;
+    return line;
+  }
+  meetingSay(from, text, extra = {}) {
+    this.meetingMode.turns.push({ turn_id: `mock-meeting-turn-${++this.meetingMode.n}`, from, at: (/* @__PURE__ */ new Date()).toISOString(), text, ...extra });
+  }
+  meetingSettle(choiceId) {
+    const mm = this.meetingMode;
+    const open = mm.open;
+    if (!open) return null;
+    const turn = mm.turns.find((t) => t.line_id === open.line_id && !t.readback);
+    if (turn) turn.answered = { choice_id: choiceId, at: (/* @__PURE__ */ new Date()).toISOString() };
+    mm.open = null;
+    return open;
+  }
+  /** The mock's first read of a meeting: the question before it is up. */
+  meetingSeed(eventId) {
+    const mm = this.meetingMode;
+    if (mm.event_id === eventId) return;
+    this.meetingMode = { event_id: eventId, turns: [], open: null, n: mm.n, arcAnswered: false };
+    this.meetingAsk(eventId, "What do you want out of Thursday with Marcus?", [{ id: "skip", label: "Skip" }], "ask");
+  }
+  meetingConversation(eventId) {
+    const mm = this.meetingMode;
+    return {
+      success: true,
+      conversation_id: `mock-meeting-conv-${eventId}`,
+      subject: { type: "meeting", id: eventId, label: "Marcus / 1:1" },
+      history: mm.turns.map((t) => ({ ...t })),
+      open_line: mm.open ?? void 0,
+      open_lines: mm.open ? [mm.open] : []
+    };
+  }
+  /** Words typed in the meeting's conversation: the answer to the ask that is up. */
+  meetingTyped(content) {
+    this.meetingSay("you", content);
+    const answered = this.meetingSettle("typed");
+    const eventId = this.meetingMode.event_id ?? "";
+    const reply = (text) => {
+      this.meetingSay("myu", text);
+      return ok({ role: "assistant", content: text });
+    };
+    if (answered?.provenance?.detail === "unsaid") {
+      const r = reply("Kept with this meeting. Only you can see it.");
+      this.meetingAsk(eventId, "If someone else in that meeting has the same thing unsaid, want it on the list for the next one, without names?", [{ id: "yes", label: "Yes" }, { id: "no", label: "No" }], "converge");
+      return r;
+    }
+    return reply(answered ? "Thanks. I\u2019ll keep that in mind going in." : "Noted.");
+  }
+  /** A button on the meeting's ask that is up, or on the card's arc. */
+  meetingAnswer(lineId, choice) {
+    const mm = this.meetingMode;
+    const eventId = mm.event_id ?? "";
+    if (lineId === `mock-arc-${eventId}` && !mm.arcAnswered) {
+      this.meetingAnswered.push({ line_id: lineId, choice_id: choice });
+      mm.arcAnswered = true;
+      const start = String(Date.parse(this.mockPrepCard(eventId).starts_at));
+      if (choice === "hold_time") {
+        return ok({ success: true, readback: { text: "Here's the hold. Its link opens the session." }, effects: [{ type: "invite_ready", handoff_url: "https://calendar.google.com/calendar/render?action=TEMPLATE&text=Get+ready%3A+Thursday", source: "google" }] });
+      }
+      if (choice === "now") {
+        this.meetingSay("myu", "Here's what I have for Thursday's 1:1:\n- Agreed the beta ships Oct 1 (Your notes, Sep 25)");
+        return ok({ success: true, readback: { text: "" }, effects: [{ type: "open_conversation", subject_type: "meeting", subject_id: eventId, occurrence_key: start }] });
+      }
+      return ok({ success: true, readback: { text: "Okay, I'll leave this one." } });
+    }
+    const open = mm.open;
+    if (!open || open.line_id !== lineId) return null;
+    this.meetingAnswered.push({ line_id: lineId, choice_id: choice });
+    const detail = open.provenance?.detail;
+    this.meetingSettle(choice);
+    const said = (text) => {
+      if (text) this.meetingSay("myu", text, { readback: true, line_id: lineId });
+      return ok({ success: true, line: { ...open, state: "answered" }, readback: { text } });
+    };
+    if (detail === "converge" && choice === "yes") {
+      const r = said("Okay. Only the topic goes, never your words or your name.");
+      this.meetingAsk(eventId, "It's in, as a topic with no names. You can take it back until the next meeting starts.", [{ id: "take_back", label: "Take it back" }], "take_back");
+      return r;
+    }
+    if (detail === "converge") return said("It stays with you.");
+    if (detail === "take_back") return said("Taken back. Nothing of it goes anywhere.");
+    return said("");
+  }
+  /** The card the mock serves: a one-on-one in two days, with the question before it and the arc. */
+  mockPrepCard(eventId) {
+    const starts = new Date(Date.now() + 2 * 864e5);
+    starts.setUTCMinutes(0, 0, 0);
+    const mm = this.meetingMode;
+    const ask = mm.event_id === eventId && mm.open?.provenance?.detail === "ask" ? { line_id: mm.open.line_id, text: mm.open.text, choices: [{ id: "skip", label: "Skip" }] } : null;
+    return {
+      version: 2,
+      event_id: eventId,
+      kind: "one_on_one",
+      title: "Marcus / 1:1",
+      starts_at: starts.toISOString(),
+      built_at: (/* @__PURE__ */ new Date()).toISOString(),
+      thin: false,
+      partial: false,
+      top: [
+        { part: "purpose", text: "This 1:1 is to settle the headcount proposal.", evidence_ids: ["meeting:m1"] },
+        { part: "since_last", text: "Marcus asked for the numbers by Friday; the proposal is still open.", evidence_ids: ["email:e1", "meeting:m1"] },
+        { part: "moves", text: "", evidence_ids: [], items: [{ text: "You could send Marcus the numbers before Thursday.", evidence_ids: ["email:e1"] }] },
+        { part: "watch", text: "Watch for the reorg coming up again.", evidence_ids: ["memory:j1"] }
+      ],
+      people: [
+        {
+          relationship_id: "rel-1",
+          name: "Marcus Webb",
+          thin: false,
+          to_you: "Your manager.",
+          stands: "Marcus is your manager, with the headcount proposal open between you.",
+          works_best: null,
+          you_owe: ["The headcount numbers"],
+          they_owe: [],
+          stance: "In 4 of 6 emails Marcus wrote as the one deciding.",
+          last_time: "You last met Sep 25.",
+          evidence_ids: ["email:e1"]
+        },
+        { relationship_id: null, name: "Reid Park", thin: true, to_you: "Nothing in your notes about Reid yet.", stands: null, works_best: null, you_owe: [], they_owe: [], stance: null, last_time: null, evidence_ids: [] }
+      ],
+      room: { team: null, lines: [] },
+      before_you_go: {
+        agenda: null,
+        documents: [{ title: "Headcount plan", url: "https://docs.google.com/document/d/mock" }],
+        set_up_email: { subject: "Re: headcount", from: "Marcus Webb", at: new Date(Date.now() - 5 * 864e5).toISOString() },
+        last_notes: { summary: "Agreed to revisit headcount once the budget lands.", meeting_id: "m1" },
+        not_replied: ["Reid Park"]
+      },
+      afterwards: "Note whether the headcount is agreed.",
+      interview: null,
+      evidence: {
+        "meeting:m1": { source: "calendar", label: "Your notes, Sep 25", at: "2026-09-25T11:00:00Z", open: { kind: "meeting", id: "m1" } },
+        "email:e1": { source: "email", label: "Email, Sep 26: Re: headcount", at: "2026-09-26T09:00:00Z", open: { kind: "email", id: "e1" } },
+        "memory:j1": { source: "user_stated", label: "You said, Sep 28", at: "2026-09-28T18:00:00Z", open: { kind: "journal", id: "mock-j-1" } }
+      },
+      ask,
+      arc: mm.arcAnswered ? null : { line_id: `mock-arc-${eventId}`, text: "Thursday with Marcus matters. Want to get ready together?", choices: [{ id: "hold_time", label: "Hold time" }, { id: "now", label: "Now" }, { id: "skip", label: "Skip" }], hold_link: "https://calendar.google.com/calendar/render?action=TEMPLATE&text=Get+ready%3A+Thursday" }
+    };
+  }
+  /** `GET /prep/meeting` — a test's card when it set one; `mock-event-unknown` is not on the calendar (404). */
   async getMeetingPrep(eventId) {
     const offline = this.guard();
     if (offline) return offline;
-    if (this.state.linkedPrepSubjects.has(eventId) || !eventId.includes("cold")) {
-      const now = Date.now();
-      return ok({
-        prep: {
-          prep_id: `mock-prep-${eventId}`,
-          subject: { entity_type: "person", entity_id: "rel-1", display_name: "Marcus Webb" },
-          meeting: { meeting_id: eventId, title: "Marcus / 1:1", starts_at: now + 90 * 60 * 1e3 },
-          data_tier: "medium",
-          generated_at: now,
-          watch: {
-            text: "'process' has come up in his last three messages \u2014 twice unprompted.",
-            last_updated: now - 3 * 864e5,
-            evidence_refs: [
-              { evidence_id: "ev-1", label: "Slack \u2014 #platform, Aug 14" },
-              { evidence_id: "ev-2", label: "Email \u2014 re: sync cadence, Aug 12" }
-            ]
-          },
-          stand: {
-            text: "Steadier than last month \u2014 a read, worth testing: the reorg pressure seems to have eased.",
-            last_updated: now - 5 * 864e5,
-            evidence_refs: [{ evidence_id: "ev-3", label: "1:1 notes \u2014 Aug 5" }]
-          },
-          thread: {
-            text: "The headcount proposal is still open between you \u2014 three weeks now.",
-            last_updated: now - 21 * 864e5,
-            evidence_refs: []
-          },
-          move: { text: "Name the question you both keep circling.", last_updated: now - 3 * 864e5 },
-          capture_hook: true,
-          notes_captured: true,
-          notes_summary: "Platform sync \u2014 ownership split agreed; two follow-ups assigned.",
-          notes_decision_count: 1,
-          notes_action_count: 2,
-          notes_meeting_id: "mock-meeting-1"
-        }
-      });
-    }
-    return ok({
-      prep: {
-        prep_id: `mock-prep-${eventId}`,
-        subject: { entity_type: "person", entity_id: "jim@northwind.example", display_name: "jim" },
-        meeting: { meeting_id: eventId, title: "Daily Sync", starts_at: Date.now() + 45 * 60 * 1e3 },
-        data_tier: "cold",
-        generated_at: Date.now(),
-        stand: null,
-        thread: null,
-        watch: null,
-        move: null,
-        factual: {
-          role_line: "Engineering \u2014 Northwind",
-          why_meeting: "Recurring sync on the shared invite.",
-          no_history: true
-        },
-        capture_hook: true
-      }
-    });
-  }
-  async linkPrepSubject(eventId) {
-    const offline = this.guard();
-    if (offline) return offline;
-    this.state.linkedPrepSubjects.add(eventId);
-    return ok({});
+    this.prepReads.push(eventId);
+    if (eventId in this.meetingPreps) return ok({ prep: this.meetingPreps[eventId] });
+    if (eventId === "mock-event-unknown") return fail(404, "not_found");
+    this.meetingSeed(eventId);
+    return ok({ prep: this.mockPrepCard(eventId) });
   }
   async searchEntities(query) {
     const offline = this.guard();
     if (offline) return offline;
+    this.searchReads++;
     const all = [
       { entity_type: "person", entity_id: "rel-1", display_name: "Marcus Webb", organization: "Acme", item_count: 3, top_urgency: "medium" },
       { entity_type: "person", entity_id: "rel-2", display_name: "Priya Raman", organization: "Northwind", item_count: 1, top_urgency: "low" },
-      { entity_type: "person", entity_id: "rel-3", display_name: "Jim Halvorsen", organization: "Northwind", item_count: 0, top_urgency: "info" }
+      { entity_type: "person", entity_id: "rel-3", display_name: "Jim Halvorsen", organization: "Northwind", item_count: 0, top_urgency: "info" },
+      ...this.keptPeople,
+      ...this.mapPeople.map((r) => ({ entity_type: "person", entity_id: r.relationship_id, display_name: r.primary_name, organization: r.company_name ?? void 0, item_count: 0, top_urgency: "info", on_map: true, times_seen: r.times_seen }))
     ];
     const q = query.toLowerCase();
     return ok({ results: all.filter((e) => e.display_name.toLowerCase().includes(q)) });
@@ -11933,11 +16673,13 @@ var MockApi = class {
     this.state.meetings.set(payload.external_id, { meeting_id, hash });
     return ok({ meeting_id, created: true, reextracted: false });
   }
-  async createChatEntry(_accountId, content, context, _templateType, canvas) {
+  async createChatEntry(_accountId, content, context, _templateType, canvas, pasted) {
     const offline = this.guard();
     if (offline) return offline;
+    const blocks = this.recordSend("/journal/add", content, pasted);
     const out = { journal_id: `mock-journal-${generateDeviceId().slice(0, 8)}`, blocks: this.reply(content, context) };
     if (canvas?.continuesCompositionId) out.canvas = this.canvasSide(canvas.continuesCompositionId, content);
+    if (blocks) out.pasted_blocks_received = blocks.length;
     return ok(out);
   }
   /** The backend's canvas side (CreateJournalEntry / CreateJournalChat): a named canvas is mutated. */
@@ -11948,11 +16690,13 @@ var MockApi = class {
       surface_mutations: [{ op: "add", target_id: "", position: "end", components: [{ id: `chat-${Date.now()}`, type: "text_block", label: "From the thread", data: { text: `You asked: \u201C${content.slice(0, 80)}\u201D \u2014 noted on the canvas.` } }] }]
     };
   }
-  async addChatTurn(_accountId, journalId, content, context, canvas) {
+  async addChatTurn(_accountId, journalId, content, context, canvas, pasted) {
     const offline = this.guard();
     if (offline) return offline;
+    const blocks = this.recordSend("/journal_chats/add", content, pasted);
     const out = { journal_id: journalId, blocks: this.reply(content, context) };
     if (canvas?.continuesCompositionId) out.canvas = this.canvasSide(canvas.continuesCompositionId, content);
+    if (blocks) out.pasted_blocks_received = blocks.length;
     return ok(out);
   }
   /** Canned but state-aware enough to demo: "team" earns a composition offer. */
@@ -12174,8 +16918,10 @@ var MockApi = class {
   async submitFeedback(body) {
     const offline = this.guard();
     if (offline) return offline;
+    if (this.feedbackRefusal) return fail(this.feedbackRefusal.status, this.feedbackRefusal.error);
     this.state.feedback.push(body);
-    return ok({ success: true, message: "Feedback submitted successfully" });
+    const files = body.attachments?.files?.length ?? 0;
+    return ok({ success: true, message: "Feedback submitted successfully", ...this.feedbackServerBeforeFiles ? {} : { files_attached: files } });
   }
   async refreshComposition(compositionId) {
     const offline = this.guard();
@@ -12436,20 +17182,24 @@ var MockApi = class {
   async getRelationshipMemories() {
     return ok({ memories: { email: [{ content: "Prefers early-morning meetings; mentioned a move to Osaka.", memory_date: "2026-08-01" }], journal: {} } });
   }
-  async getSelfCard() {
-    return ok({ card: { known_facts: [
-      { key: "title", value: "Founder, askMyu", source: "linkedin", kind: "fact" },
-      { key: "career", value: "Twelve years in product, now building the second company.", source: "read", kind: "read" },
-      { key: "people", value: "Marcus Webb, Priya Natarajan", source: "you", kind: "fact" },
-      { key: "week", value: "4 meetings in the next 7 days", source: "calendar", kind: "fact" },
-      { key: "mail", value: "Where you and the people you named left off", source: "mail", kind: "not_yet" }
-    ] } });
+  async getSelfCard(level) {
+    const deep = level === "deep_dive";
+    return ok({ card: {
+      known_facts: [
+        { key: "you", value: "Founder, askMyu", source: "linkedin", kind: "fact" },
+        { key: "read", value: "You\u2019ve spent twelve years in product. You\u2019re building the second company now.", ...deep ? { full: "You\u2019ve spent twelve years in product. You\u2019re building the second company now. Alongside it: advisor at Northwind." } : {}, source: "read", kind: "read" },
+        { key: "week", value: "4 meetings in the next 7 days", source: "calendar", kind: "fact" },
+        { key: "not_yet", value: "Where you and the people you named left off", source: "mail", kind: "not_yet" }
+      ],
+      tiles: [{ label: "Burnout risk", value: "Low" }],
+      hot_item: { text: "Your board update is due Friday.", urgency: "medium" }
+    } });
   }
   async listMeetings() {
     return ok({ meetings: [], total: 0 });
   }
-  async getMeetingDetail() {
-    return ok({ meeting: {} });
+  async getMeetingDetail(meetingId = "") {
+    return ok(this.meetingDetails[meetingId] ?? { meeting: {} });
   }
   // Past conversations, so the chat browser and the export have rows to show.
   async getJournalEntries() {
@@ -12553,9 +17303,10 @@ var MockApi = class {
     return ok({});
   }
   async getAccountPreferences() {
-    return ok({ preferences: { preferred_address: "", coaching_preference: "auto" } });
+    return ok({ preferences: { preferred_address: "", coaching_preference: "auto", timezone: this.savedTimeZone } });
   }
-  async updateAccountPreferences(_body) {
+  async updateAccountPreferences(body) {
+    if (typeof body.timezone === "string") this.savedTimeZone = body.timezone;
     return ok({});
   }
   async updateRelationshipProfile(_id, _fields) {
@@ -12630,14 +17381,22 @@ var MockApi = class {
   async saveResumeId() {
     return ok({});
   }
-  async classifyCareerMoment(_accountId, content) {
-    const words = content.trim().split(/\s+/).length;
+  async classifyCareerMoment(_accountId, content, pasted) {
+    const blocks = this.recordSend("/onboard/classify_career_moment", content, pasted);
+    const words = [content, ...(blocks ?? []).map((b) => b.text)].join("\n\n").trim().split(/\s+/).length;
     const scripts = this.mockAccountState.myu_scripts;
     scripts.onboard_moment_attempt_count = (scripts.onboard_moment_attempt_count ?? 0) + 1;
     if (words >= 8) return ok({ confidence: 0.9, moment_captured: true });
     return ok({ confidence: 0.1, moment_captured: false });
   }
 };
+_MockApi.RATINGS = [
+  { id: "strong_no", label: "Strong no" },
+  { id: "no", label: "No" },
+  { id: "yes", label: "Yes" },
+  { id: "strong_yes", label: "Strong yes" }
+];
+var MockApi = _MockApi;
 function randomBase64(bytes) {
   const buf = new Uint8Array(bytes);
   crypto.getRandomValues(buf);
@@ -12701,6 +17460,9 @@ var UnlockMachine = class {
     this.approvalObservers = /* @__PURE__ */ new Set();
     /** Device id captured between the door and the ceremony. */
     this.pendingGenesisDeviceId = null;
+    // ── the password for new devices (2026-10-26) ─────────────────────────────
+    /** The door's copy, read once per connect window; null when the account has none. */
+    this.passwordCopy = void 0;
   }
   get current() {
     return this.state;
@@ -13108,6 +17870,43 @@ var UnlockMachine = class {
       return "invalid_phrase";
     }
   }
+  /**
+   * Whether the account has a password for new devices: the door's copy is read once and kept, so every attempt
+   * after that is an unwrap here and never another read (the door is rate-limited). 'rate_limited' carries the
+   * seconds the server asks for, when it says.
+   */
+  async hasDevicePassword() {
+    if (this.passwordCopy !== void 0) return { has: this.passwordCopy !== null };
+    let res;
+    try {
+      res = await this.deps.api.fetchPasswordWrappedMDEK();
+    } catch {
+      return { has: false };
+    }
+    if (res.ok && res.data?.has_password && res.data.wrapped_mdek_password && validPasswordKdf(res.data.kdf)) {
+      this.passwordCopy = res.data;
+      return { has: true };
+    }
+    if (res.status === 429) {
+      const body = res.data;
+      return { has: false, rateLimited: true, retryAfter: typeof body?.retry_after === "number" ? body.retry_after : void 0 };
+    }
+    this.passwordCopy = null;
+    return { has: false };
+  }
+  /** The typed password opens the copy; this device then holds the key as the phrase path leaves it. */
+  async unlockWithPassword(password) {
+    if (!password) return "wrong_password";
+    const known2 = await this.hasDevicePassword();
+    if (!known2.has || !this.passwordCopy?.wrapped_mdek_password || !this.passwordCopy.kdf) return known2.rateLimited ? "error" : "no_password";
+    let mdek;
+    try {
+      mdek = await unwrapWithPassword(this.passwordCopy.wrapped_mdek_password, password, this.passwordCopy.kdf);
+    } catch {
+      return "wrong_password";
+    }
+    return await this.adoptMDEK(mdek) ? "ok" : "error";
+  }
   // ── shared tail of both onboarding paths ──────────────────────────────────
   /**
    * Establish split custody for a freshly obtained mDEK, then unlock.
@@ -13230,7 +18029,7 @@ var UnlockMachine = class {
 };
 
 // src/capture/CaptureService.ts
-var import_obsidian26 = require("obsidian");
+var import_obsidian28 = require("obsidian");
 
 // src/capture/wikilinks.ts
 var WIKILINK = /\[\[([^\]|#^]+)(?:[#^][^\]|]*)?(?:\|[^\]]*)?\]\]/g;
@@ -13260,7 +18059,19 @@ function readNoteMeta(app, file) {
   const cache = app.metadataCache.getFileCache(file);
   const fm = cache?.frontmatter;
   const vetoed = fm?.myu === false || fm?.myu === "false";
-  return { occurredAt: resolveOccurredAt(fm, file), vetoed };
+  return { occurredAt: resolveOccurredAt(fm, file), vetoed, myuGenerated: isMyuGenerated(fm), webClipping: isWebClipping(fm) };
+}
+function isMyuGenerated(fm) {
+  const value = fm?.["myu-generated"];
+  return value === true || value === "true";
+}
+function isWebClipping(fm) {
+  const tags = fm?.tags;
+  const list2 = Array.isArray(tags) ? tags : typeof tags === "string" ? tags.split(/[\s,]+/) : [];
+  if (list2.some((t) => typeof t === "string" && t.trim().replace(/^#/, "").toLowerCase() === "clippings")) return true;
+  const source = fm?.source;
+  const first = Array.isArray(source) ? source.find((s2) => typeof s2 === "string") : source;
+  return typeof first === "string" && /^https?:\/\//i.test(first.trim());
 }
 function resolveOccurredAt(fm, file) {
   for (const key of ["date", "created", "created_at"]) {
@@ -13297,6 +18108,9 @@ async function hashContent(content) {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(content));
   return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, "0")).join("");
 }
+function captureHash(body, webClipping) {
+  return webClipping ? hashContent(body + "\0web_clipping") : hashContent(body);
+}
 function stripFrontmatter(content) {
   if (!content.startsWith("---")) return content;
   const end = content.indexOf("\n---", 3);
@@ -13331,10 +18145,10 @@ var CaptureService = class {
     }
     if (!this.everRegistered) {
       const onChange = (file) => {
-        if (this.active && file instanceof import_obsidian26.TFile) this.scheduleCapture(file);
+        if (this.active && file instanceof import_obsidian28.TFile) this.scheduleCapture(file);
       };
       const onRename = (file, oldPath) => {
-        if (this.active && file instanceof import_obsidian26.TFile) this.scheduleCapture(file, oldPath);
+        if (this.active && file instanceof import_obsidian28.TFile) this.scheduleCapture(file, oldPath);
       };
       register("modify", onChange);
       register("create", onChange);
@@ -13393,12 +18207,13 @@ var CaptureService = class {
   async capture(file, previousPath) {
     const meta = readNoteMeta(this.deps.app, file);
     if (meta.vetoed) return "vetoed";
+    if (meta.myuGenerated) return "generated";
     const raw = await this.deps.app.vault.cachedRead(file);
     const body = stripFrontmatter(raw);
     if (body.trim().length === 0) return "skipped";
     const settings = this.deps.settings();
     const externalId = this.externalId(file.path);
-    const hash = await hashContent(body);
+    const hash = await captureHash(body, meta.webClipping);
     if (settings.capture_hashes[externalId] === hash) return "skipped";
     const key = this.deps.keys.get();
     if (!key) {
@@ -13413,7 +18228,9 @@ var CaptureService = class {
       occurred_at: meta.occurredAt,
       entity_hints: extractEntityHints(body),
       no_response: true,
-      ...previousPath ? { previous_external_id: this.externalId(previousPath) } : {}
+      ...previousPath ? { previous_external_id: this.externalId(previousPath) } : {},
+      // A Web Clipper note is sent marked (beside the ciphertext, never inside it).
+      ...meta.webClipping ? { web_clipping: true } : {}
     };
     const res = await this.deps.api.upsertJournal(payload);
     if (res.ok) {
@@ -13438,6 +18255,7 @@ var CaptureService = class {
       occurred_at: payload.occurred_at,
       entity_hints: payload.entity_hints ?? [],
       previous_external_id: payload.previous_external_id,
+      ...payload.web_clipping ? { web_clipping: true } : {},
       queued_at: Date.now(),
       attempts: 0
     };
@@ -13478,7 +18296,8 @@ var CaptureService = class {
         occurred_at: entry.occurred_at,
         entity_hints: entry.entity_hints,
         no_response: true,
-        ...entry.previous_external_id ? { previous_external_id: entry.previous_external_id } : {}
+        ...entry.previous_external_id ? { previous_external_id: entry.previous_external_id } : {},
+        ...entry.web_clipping ? { web_clipping: true } : {}
       });
       if (res.ok) {
         settings.queue.shift();
@@ -13498,9 +18317,9 @@ var CaptureService = class {
     return { sent, remaining: settings.queue.length };
   }
   // ── backfill ──────────────────────────────────────────────────────────────
-  /** What a backfill would cover, for the scope confirmation. Reads no content. */
+  /** What a backfill would cover, for the scope confirmation. Reads no content. Notes Myu wrote are left out. */
   surveyBackfill() {
-    const files = this.deps.app.vault.getMarkdownFiles().filter((f) => this.isShared(f));
+    const files = this.deps.app.vault.getMarkdownFiles().filter((f) => this.isShared(f) && !this.isMyuGenerated(f));
     const oldest = files.reduce((min, f) => min === null || f.stat.mtime < min ? f.stat.mtime : min, null);
     return { files, oldest };
   }
@@ -13529,7 +18348,14 @@ var CaptureService = class {
     }
     return { sent, skipped, stopped };
   }
-  /** The shared notes' text + mtime, for the link survey. Reads from Obsidian's cache; capped so a huge vault stays quick. */
+  /** Myu wrote this note (`myu-generated: true`), by the metadata cache. */
+  isMyuGenerated(file) {
+    return isMyuGenerated(this.deps.app.metadataCache.getFileCache(file)?.frontmatter);
+  }
+  /**
+   * The shared notes' text + mtime, for the link survey. Reads from Obsidian's cache; capped so a huge vault stays
+   * quick. Notes Myu wrote are left out (the backfill's list leaves them out).
+   */
   async sharedNotesForSurvey(limit = 600) {
     const files = this.surveyBackfill().files.sort((a, b) => b.stat.mtime - a.stat.mtime).slice(0, limit);
     const out = [];
@@ -13743,7 +18569,7 @@ function deriveSseUrl(baseUrl, accountId) {
 }
 
 // src/capture/MeetingCapture.ts
-var import_obsidian27 = require("obsidian");
+var import_obsidian29 = require("obsidian");
 var FILENAME_DATE2 = /(\d{4})[-_.](\d{2})[-_.](\d{2})/;
 var MeetingCapture = class {
   constructor(deps) {
@@ -13763,7 +18589,7 @@ var MeetingCapture = class {
     if (this.registered) return true;
     if (this.deps.settings().meeting_folders.length === 0) return false;
     const onChange = (file) => {
-      if (file instanceof import_obsidian27.TFile) this.schedule(file);
+      if (file instanceof import_obsidian29.TFile) this.schedule(file);
     };
     register("modify", onChange);
     register("create", onChange);
@@ -13775,9 +18601,10 @@ var MeetingCapture = class {
     this.timers.clear();
     this.registered = false;
   }
-  /** Folder allowlist OR the per-note frontmatter opt-in. */
+  /** Folder allowlist OR the per-note frontmatter opt-in. Never a note Myu wrote (its Myu/Meetings notes). */
   qualifies(file) {
     if (file.extension !== "md") return false;
+    if (isMyuGenerated(this.deps.app.metadataCache.getFileCache(file)?.frontmatter)) return false;
     for (const folder of this.deps.settings().meeting_folders) {
       if (file.path === folder || file.path.startsWith(`${folder}/`)) return true;
     }
@@ -13901,7 +18728,7 @@ var MeetingCapture = class {
 };
 
 // src/people/PersonPageIndex.ts
-var import_obsidian28 = require("obsidian");
+var import_obsidian30 = require("obsidian");
 var PersonPageIndex = class {
   constructor(app, folders) {
     this.app = app;
@@ -13947,7 +18774,7 @@ var PersonPageIndex = class {
     }
   }
   isCandidate(file) {
-    if (!(file instanceof import_obsidian28.TFile) || file.extension !== "md") return false;
+    if (!(file instanceof import_obsidian30.TFile) || file.extension !== "md") return false;
     for (const folder of this.folders()) {
       if (file.path === folder || file.path.startsWith(`${folder}/`)) return true;
     }
@@ -13978,7 +18805,7 @@ function aliasesFrom(cache) {
 }
 
 // src/vault/CanvasExporter.ts
-var import_obsidian29 = require("obsidian");
+var import_obsidian31 = require("obsidian");
 var CONTENT_KEYS = ["type", "text", "file", "url", "label"];
 var COLUMN_WIDTH = 360;
 var GUTTER = 40;
@@ -14190,7 +19017,7 @@ var CanvasExporter = class {
   async writeMarkdown(spec, resolvePersonName, webUrl) {
     const date = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
     const subject = (spec.summary_text ?? "composition").replace(/[\\/:*?"<>|#^[\]]/g, "").slice(0, 60).trim();
-    const path = (0, import_obsidian29.normalizePath)(`Myu/Canvas/${date} ${subject || "composition"}.md`);
+    const path = (0, import_obsidian31.normalizePath)(`Myu/Canvas/${date} ${subject || "composition"}.md`);
     try {
       if (!this.app.vault.getAbstractFileByPath("Myu")) await this.app.vault.createFolder("Myu");
       if (!this.app.vault.getAbstractFileByPath("Myu/Canvas")) await this.app.vault.createFolder("Myu/Canvas");
@@ -14206,7 +19033,7 @@ var CanvasExporter = class {
   async write(spec, resolvePersonPath, webUrl) {
     const date = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
     const subject = (spec.summary_text ?? "composition").replace(/[\\/:*?"<>|]/g, "").slice(0, 60).trim();
-    const base = (0, import_obsidian29.normalizePath)(`Myu/Canvas/${date} ${subject}`);
+    const base = (0, import_obsidian31.normalizePath)(`Myu/Canvas/${date} ${subject}`);
     try {
       const folder = "Myu/Canvas";
       if (!this.app.vault.getAbstractFileByPath("Myu")) await this.app.vault.createFolder("Myu");
@@ -14223,7 +19050,7 @@ var CanvasExporter = class {
           await this.app.vault.createFolder(assetsFolder);
         }
         const assetPath = await this.freePath(
-          (0, import_obsidian29.normalizePath)(`${assetsFolder}/${date} ${component.id}`),
+          (0, import_obsidian31.normalizePath)(`${assetsFolder}/${date} ${component.id}`),
           "svg"
         );
         await this.app.vault.create(assetPath, svg);
@@ -14238,7 +19065,7 @@ var CanvasExporter = class {
       const existingPath = this.findExistingCanvas(spec.id);
       if (existingPath) {
         const existingFile = this.app.vault.getAbstractFileByPath(existingPath);
-        if (existingFile instanceof import_obsidian29.TFile) {
+        if (existingFile instanceof import_obsidian31.TFile) {
           const merged = mergeCanvas(await this.app.vault.cachedRead(existingFile), canvas);
           await this.app.vault.process(existingFile, () => JSON.stringify(merged, null, 2));
           return { status: "written", canvasPath: existingPath };
@@ -14382,7 +19209,7 @@ function registerLiveNotices(subscribe, deps) {
 }
 
 // src/views/MergeIntoModal.ts
-var import_obsidian30 = require("obsidian");
+var import_obsidian32 = require("obsidian");
 
 // src/views/personActions.ts
 function mergeCandidates(entities, sourceId) {
@@ -14391,20 +19218,20 @@ function mergeCandidates(entities, sourceId) {
 var PERSON_ACTION_COPY = {
   merge: (source, target) => ({
     title: `Merge ${source} into ${target}?`,
-    body: `Everything Myu knows about ${source} \u2014 memories, threads, history \u2014 moves to ${target}. ${source} is removed from your people, and their note here goes to the trash. This cannot be undone from the vault.`,
+    body: `Everything Myu knows about ${source} (memories, open items, history) moves to ${target}. ${source} is removed from your people, and their note in the Myu folder goes to the trash. This cannot be undone here.`,
     cta: "Merge"
   }),
   self: (name) => ({
-    title: `${name} is you?`,
+    title: `Is ${name} you?`,
     // Backend folds the person into the self (memories, threads, names) as of
     // 2026-08-29. The earlier wording that said it did NOT is gone.
-    body: `Everything Myu knows about ${name} becomes part of you \u2014 memories, threads, and the name itself, so future mentions are recognised as you. ${name} is removed from your people, and their note here goes to the trash.`,
+    body: `Everything Myu knows about ${name} (memories, open items, and the name itself) is added to your own profile, so future mentions of ${name} are recognised as you. ${name} is removed from your people, and their note in the Myu folder goes to the trash.`,
     cta: "Yes, that\u2019s me"
   })
 };
 
 // src/views/MergeIntoModal.ts
-var MergeIntoModal = class extends import_obsidian30.FuzzySuggestModal {
+var MergeIntoModal = class extends import_obsidian32.FuzzySuggestModal {
   constructor(app, plugin, sourceId, sourceName, onPick) {
     super(app);
     this.plugin = plugin;
@@ -14436,8 +19263,8 @@ var MergeIntoModal = class extends import_obsidian30.FuzzySuggestModal {
 };
 
 // src/views/CanvasExportModal.ts
-var import_obsidian31 = require("obsidian");
-var CanvasExportModal = class extends import_obsidian31.Modal {
+var import_obsidian33 = require("obsidian");
+var CanvasExportModal = class extends import_obsidian33.Modal {
   constructor(app, plugin, compositionId) {
     super(app);
     this.plugin = plugin;
@@ -14453,25 +19280,25 @@ var CanvasExportModal = class extends import_obsidian31.Modal {
   onOpen() {
     const { contentEl } = this;
     contentEl.addClass("myu-power-down");
-    contentEl.createEl("h2", { text: "Save this composition into your vault?" });
+    contentEl.createEl("h2", { text: "Save this canvas to your vault?" });
     contentEl.createEl("p", {
       cls: "myu-prose",
-      text: "Two forms, both into Myu/Canvas/. A CANVAS keeps the spatial layout and opens in Obsidian\u2019s own canvas editor. A NOTE is ordinary markdown \u2014 prose, lists, tables, a mermaid diagram \u2014 greppable, diffable, and readable in any editor long after this plugin is gone."
+      text: "You can save it two ways, both into Myu/Canvas/. As a canvas: keeps the layout and opens in Obsidian\u2019s own canvas editor. As a note: plain markdown (text, lists, tables, diagrams) that any editor can open, even without this plugin."
     });
     contentEl.createEl("p", {
       cls: "myu-prose myu-quiet",
-      text: "Either way, people link to their pages in your vault when you keep them."
+      text: "Either way, people mentioned in it link to their pages in your vault."
     });
     contentEl.createEl("p", {
       cls: "myu-prose myu-quiet",
-      text: "Worth knowing: vault files sync through whatever you use, and anything written here leaves Myu\u2019s reach permanently. Charts are saved as a dated snapshot \u2014 a table in a note, a picture on a canvas \u2014 never as something pretending to be live."
+      text: "Note: files in your vault sync with whatever sync service you use, and Myu cannot change or delete them once written. Charts are saved as a dated snapshot (a table in a note, a picture on a canvas); they do not update."
     });
     if (!this.compositionId) {
-      contentEl.createEl("h3", { text: "Which composition?" });
+      contentEl.createEl("h3", { text: "Which canvas?" });
       this.listEl = contentEl.createDiv({ cls: "myu-pick-list" });
-      this.listEl.createEl("p", { cls: "myu-quiet myu-thinking", text: "Finding your compositions" });
+      this.listEl.createEl("p", { cls: "myu-quiet myu-thinking", text: "Finding your canvases" });
       this.ready = this.loadRows();
-      new import_obsidian31.Setting(contentEl).setName("Or paste a web canvas URL").setDesc("If you are looking at one on the web right now.").addText(
+      new import_obsidian33.Setting(contentEl).setName("Or paste a web canvas URL").setDesc("If you are looking at one on the web right now.").addText(
         (t) => t.setPlaceholder("https://myu.askmyu.com/\u2026 or an id").onChange((v) => {
           this.input = v.trim();
           this.clearProblem();
@@ -14479,7 +19306,7 @@ var CanvasExportModal = class extends import_obsidian31.Modal {
       );
     }
     this.problemEl = contentEl.createDiv({ cls: "myu-problem" });
-    new import_obsidian31.Setting(contentEl).addButton((b) => b.setButtonText("Not now").onClick(() => this.close())).addButton((b) => b.setButtonText("As a note").onClick(() => this.go("markdown"))).addButton((b) => b.setButtonText("As a canvas").setCta().onClick(() => this.go("canvas")));
+    new import_obsidian33.Setting(contentEl).addButton((b) => b.setButtonText("Not now").onClick(() => this.close())).addButton((b) => b.setButtonText("As a note").onClick(() => this.go("markdown"))).addButton((b) => b.setButtonText("As a canvas").setCta().onClick(() => this.go("canvas")));
   }
   async loadRows() {
     const res = await this.plugin.backend.getCompositionHistory(20).catch(() => null);
@@ -14495,7 +19322,7 @@ var CanvasExportModal = class extends import_obsidian31.Modal {
     if (this.rows.length === 0) {
       host.createEl("p", {
         cls: "myu-quiet",
-        text: "No compositions yet. Ask Myu for a canvas in chat \u2014 the offer there saves it directly."
+        text: "No canvases yet. Ask Myu for a canvas in chat. When Myu offers one, you can save it from there."
       });
       return;
     }
@@ -14503,9 +19330,9 @@ var CanvasExportModal = class extends import_obsidian31.Modal {
       const id = String(row.composition_id ?? row.id);
       const item = host.createEl("button", {
         cls: "myu-pick-row" + (this.selected === id ? " is-selected" : ""),
-        text: row.summary_text || row.subject_name || "Untitled composition"
+        text: row.summary_text || row.subject_name || "Untitled canvas"
       });
-      const meta = [row.subject_name && row.summary_text ? row.subject_name : "", whenOf(row.created_at)].filter(Boolean).join(" \xB7 ");
+      const meta = [row.subject_name && row.summary_text ? row.subject_name : "", whenOf2(row.created_at)].filter(Boolean).join(" \xB7 ");
       if (meta) item.createSpan({ cls: "myu-whisper", text: meta });
       item.onclick = () => {
         this.selected = id;
@@ -14518,7 +19345,7 @@ var CanvasExportModal = class extends import_obsidian31.Modal {
     const id = this.compositionId ?? this.selected ?? extractId(this.input);
     if (!id) {
       this.problemEl?.setText(
-        this.rows && this.rows.length > 0 ? "Pick a composition above first." : "Nothing to save yet \u2014 ask Myu for a canvas in chat, then save it from the offer there."
+        this.rows && this.rows.length > 0 ? "Pick a canvas above first." : "Nothing to save yet. Ask Myu for a canvas in chat, then save it from there."
       );
       return;
     }
@@ -14532,7 +19359,7 @@ var CanvasExportModal = class extends import_obsidian31.Modal {
     this.contentEl.empty();
   }
 };
-function whenOf(value) {
+function whenOf2(value) {
   const n = typeof value === "number" ? value : typeof value === "string" ? Date.parse(value) : NaN;
   return Number.isFinite(n) ? new Date(n).toISOString().slice(0, 10) : "";
 }
@@ -14550,10 +19377,10 @@ function extractId(input) {
 }
 
 // src/views/ChatView.ts
-var import_obsidian35 = require("obsidian");
+var import_obsidian37 = require("obsidian");
 
 // src/views/chatBlocks.ts
-var import_obsidian32 = require("obsidian");
+var import_obsidian34 = require("obsidian");
 function renderReferences(parent, references) {
   if (!references?.length) return;
   const box = parent.createDiv({ cls: "myu-chat-sources" });
@@ -14597,7 +19424,7 @@ function renderChatBlock(parent, block, host) {
   if (!md) return;
   const cls = block.type === "conversational" ? "myu-voice myu-chat-block myu-md markdown-rendered" : `myu-claim myu-chat-block myu-md markdown-rendered myu-block-${block.type}`;
   const el = parent.createDiv({ cls });
-  void import_obsidian32.MarkdownRenderer.render(host.app, md, el, "", host.component);
+  void import_obsidian34.MarkdownRenderer.render(host.app, md, el, "", host.component);
 }
 function s(v) {
   return typeof v === "string" ? v.trim() : "";
@@ -14696,6 +19523,8 @@ function chatBlockMarkdown(block) {
 > ${s(b.gut_check)}`);
       return out.length > 1 ? out.join("\n") : null;
     }
+    case "support_actions":
+      return null;
     default: {
       if (s(b.text)) return s(b.text);
       const { type, id, ...data } = b;
@@ -14724,14 +19553,14 @@ function canvasAsksLine(spec) {
   for (const c of spec?.components ?? []) {
     if (c.type === "offer_block") {
       const options = c.data?.options ?? [];
-      parts.push(options.some((o) => (o.id ?? "").startsWith("calendar")) ? "connect a calendar" : "an offer to answer");
+      parts.push(options.some((o) => (o.id ?? "").startsWith("calendar")) ? "connect a calendar" : "an offer to accept or decline");
     } else if (c.type === "decision_frame") decisions++;
     else if (c.type === "reflection_prompt" || c.type === "inline_chat") questions++;
   }
-  if (decisions) parts.push(decisions === 1 ? "a decision to weigh" : `${decisions} decisions to weigh`);
+  if (decisions) parts.push(decisions === 1 ? "a decision to make" : `${decisions} decisions to make`);
   if (questions) parts.push(questions === 1 ? "a question to answer" : `${questions} questions to answer`);
   if (parts.length === 0) return null;
-  return `Needs you on the canvas: ${parts.join(" \xB7 ")}`;
+  return `This canvas needs your input: ${parts.join(" \xB7 ")}`;
 }
 
 // src/views/calloutBox.ts
@@ -14743,7 +19572,7 @@ function calloutBox(parent, kind, title, cls) {
 }
 
 // src/views/inlineCanvas.ts
-var import_obsidian33 = require("obsidian");
+var import_obsidian35 = require("obsidian");
 
 // src/views/offerActions.ts
 async function runOfferOption(plugin, option, params) {
@@ -14753,15 +19582,15 @@ async function runOfferOption(plugin, option, params) {
     const opts = { scopeSet: init.scope_set, returnTo: init.return_to };
     const res = init.provider === "google" ? await plugin.backend.googleOAuthInit(opts).catch(() => null) : await plugin.backend.microsoftOAuthInit(opts).catch(() => null);
     const url = res?.data?.auth_url;
-    if (!res?.ok || !url) return { ok: false, message: "The consent screen did not answer. Try again in a moment." };
+    if (!res?.ok || !url) return { ok: false, message: "Could not open the sign-in page. Try again in a moment." };
     window.open(url, "_blank");
-    return { ok: true, message: "Finish in your browser \u2014 Myu starts reading when you come back." };
+    return { ok: true, message: "Finish in your browser. Myu starts reading once you are done." };
   }
   if (option === "stop_asking") {
     const accountId = plugin.settings.account_id;
     if (accountId) await plugin.backend.updateAccountState(accountId, { myuScripts: { offer_all_stopped: true } }).catch(() => void 0);
     plugin.welcomeOfferAnswered = true;
-    const ack = typeof params?.stopped_ack === "string" && params.stopped_ack ? params.stopped_ack : "Done \u2014 Myu won\u2019t bring this up again. Settings stays the door.";
+    const ack = typeof params?.stopped_ack === "string" && params.stopped_ack ? params.stopped_ack : "Done. Myu won\u2019t ask again. You can still connect from Settings.";
     return { ok: true, done: "dismissed", ackText: ack, message: ack };
   }
   if (moment2) {
@@ -14772,11 +19601,11 @@ async function runOfferOption(plugin, option, params) {
     if (option === "not_now") {
       const journalId = typeof params?.journal_id === "string" ? params.journal_id : "";
       if (journalId) await answer({ offer_snoozed_journal: journalId });
-      return { ok: true, done: "dismissed", message: "Noted." };
+      return { ok: true, done: "dismissed", message: "Okay." };
     }
     if (option === "notes_none" || option === "notes_transcripts") {
       await answer({ offer_notes_state: option === "notes_none" ? "none" : "transcripts" });
-      return { ok: true, done: "dismissed", message: "Noted." };
+      return { ok: true, done: "dismissed", message: "Okay." };
     }
     return { ok: false, message: "Not an option here." };
   }
@@ -14784,14 +19613,14 @@ async function runOfferOption(plugin, option, params) {
     const opts = { scopeSet: "calendar", returnTo: "dashboard" };
     const init2 = option === "calendar_google" ? await plugin.backend.googleOAuthInit(opts).catch(() => null) : await plugin.backend.microsoftOAuthInit(opts).catch(() => null);
     const url = init2?.data?.auth_url;
-    if (!init2?.ok || !url) return { ok: false, message: `${option === "calendar_google" ? "Google" : "Microsoft"} did not answer. Try again, or paste a calendar link.` };
+    if (!init2?.ok || !url) return { ok: false, message: `Could not reach ${option === "calendar_google" ? "Google" : "Microsoft"}. Try again, or paste a calendar link.` };
     window.open(url, "_blank");
-    return { ok: true, message: "Finish in your browser \u2014 your week starts painting in Today when you come back." };
+    return { ok: true, message: "Finish in your browser. Your meetings will show in Today once you are done." };
   }
   if (option === "calendar_ical") {
     const url = String(params?.url ?? "").trim();
     const res = await plugin.backend.addIcalUrl(url).catch(() => null);
-    if (!res?.ok || res.data?.success === false) return { ok: false, message: res?.data?.error || "That address did not read as a calendar. Check it ends with .ics and try again." };
+    if (!res?.ok || res.data?.success === false) return { ok: false, message: res?.data?.error || "That link is not a calendar. Check it ends with .ics and try again." };
     if (!moment2) plugin.welcomeOfferAnswered = true;
     void plugin.refreshTodayNow();
     return { ok: true, done: "connected", message: `${res.data?.events_stored ?? 0} events read \u2713` };
@@ -14800,7 +19629,7 @@ async function runOfferOption(plugin, option, params) {
     const picked = await pickFile(".ics,text/calendar");
     if (!picked) return { ok: false, message: "No file chosen." };
     const res = await plugin.backend.uploadIcs(picked.bytes).catch(() => null);
-    if (!res?.ok || res.data?.success === false) return { ok: false, message: res?.data?.error || "That file did not read as a calendar export. Export an .ics and try again." };
+    if (!res?.ok || res.data?.success === false) return { ok: false, message: res?.data?.error || "That file is not a calendar export. Export an .ics file and try again." };
     if (!moment2) plugin.welcomeOfferAnswered = true;
     void plugin.refreshTodayNow();
     return { ok: true, done: "connected", message: `${res.data?.events_stored ?? 0} events read \u2713` };
@@ -14809,7 +19638,7 @@ async function runOfferOption(plugin, option, params) {
     const accountId = plugin.settings.account_id;
     if (accountId) await plugin.backend.updateAccountState(accountId, { myuScripts: { offer_dismissed_at: (/* @__PURE__ */ new Date()).toISOString() } }).catch(() => void 0);
     plugin.welcomeOfferAnswered = true;
-    return { ok: true, done: "dismissed", message: "Noted \u2014 just tell Myu as you go." };
+    return { ok: true, done: "dismissed", message: "Okay. You can tell Myu about your meetings as you go." };
   }
   return { ok: false, message: "Not an option here." };
 }
@@ -14886,7 +19715,7 @@ function renderInlineCanvas(parent, compositionId, spec, host) {
       if (open) details.setAttr("open", "");
       details.createEl("summary", { text: foldLabel(component, markdown) });
       const body2 = details.createDiv({ cls: "markdown-rendered" });
-      if (markdown) void import_obsidian33.MarkdownRenderer.render(host.app, markdown, body2, "", host.component);
+      if (markdown) void import_obsidian35.MarkdownRenderer.render(host.app, markdown, body2, "", host.component);
       details.addEventListener("toggle", () => {
         if (details.hasAttribute("open")) host.expanded.add(component.id);
         else host.expanded.delete(component.id);
@@ -14895,7 +19724,7 @@ function renderInlineCanvas(parent, compositionId, spec, host) {
     }
     const box = calloutBox(holder, component.type === "offer_block" ? "tip" : "question", foldLabel(component, markdown), "myu-inline-ask");
     const body = box.createDiv({ cls: "markdown-rendered" });
-    if (markdown) void import_obsidian33.MarkdownRenderer.render(host.app, markdown, body, "", host.component);
+    if (markdown) void import_obsidian35.MarkdownRenderer.render(host.app, markdown, body, "", host.component);
     renderComponentActions(box, component, { run, interact });
   }
   const doors = region.createDiv({ cls: "myu-canvas-actions" });
@@ -14920,7 +19749,72 @@ function canvasAfterTurn(canvas, openId) {
 }
 
 // src/views/ReplyRatingModal.ts
-var import_obsidian34 = require("obsidian");
+var import_obsidian36 = require("obsidian");
+
+// src/feedbackTranscript.ts
+var DEFAULT_MAX_CHARS = 2e6;
+var SHORTENED_TO = 2e3;
+var INDENT = "  ";
+var AGENT = "agent";
+function blockHeader(n, block) {
+  const lines = countLines(block.text);
+  return `${INDENT}[pasted text ${n} \xB7 ${formatCount(block.text.length)} chars \xB7 ${formatCount(lines)} ${lines === 1 ? "line" : "lines"} \xB7 ${block.source}]`;
+}
+function blockBody(text) {
+  return text.split("\n").map((line) => line ? `${INDENT}| ${line}` : `${INDENT}|`).join("\n");
+}
+var textOf2 = (value) => typeof value === "string" ? value : "";
+function shortenedBody(text) {
+  return `${blockBody(text.slice(0, SHORTENED_TO))}
+${INDENT}| [pasted text shortened for this attachment: ${formatCount(SHORTENED_TO)} of ${formatCount(text.length)} chars]`;
+}
+function formatConversationTranscript(input, opts) {
+  const maxChars = opts?.maxChars ?? DEFAULT_MAX_CHARS;
+  const now = opts?.now ?? (() => (/* @__PURE__ */ new Date()).toISOString());
+  const parts = [];
+  const bodies = [];
+  const pushBlocks = (blocks) => {
+    (blocks ?? []).forEach((block, i) => {
+      parts.push(blockHeader(i + 1, block));
+      bodies.push({ at: parts.length, text: block.text });
+      parts.push(blockBody(block.text));
+    });
+  };
+  const { entry, chats } = input;
+  if (entry) {
+    parts.push("--- Journal Entry ---", `ID: ${entry.id}`, `Timestamp: ${entry.ts}`, "");
+    const typed = textOf2(entry.typed);
+    if (typed.trim()) {
+      for (const line of typed.split("\n")) parts.push(INDENT + line);
+    } else if (!entry.blocks?.length) {
+      parts.push(`${INDENT}(empty content)`);
+    }
+    pushBlocks(entry.blocks);
+  }
+  if (chats.length > 0) {
+    if (entry) parts.push("");
+    parts.push("--- Journal Chat ---");
+    for (const turn of chats) {
+      const typed = textOf2(turn.typed);
+      const lines = typed.trim() ? typed.split("\n") : [];
+      const first = lines.shift() ?? "";
+      parts.push(`[${turn.chatter} ${turn.ts || now()}]${first ? ` ${first}` : ""}`);
+      const agent = turn.chatter === AGENT;
+      for (const line of lines) parts.push(agent ? line : INDENT + line);
+      pushBlocks(turn.blocks);
+    }
+  }
+  let total = parts.reduce((sum, part) => sum + part.length, 0) + Math.max(0, parts.length - 1);
+  for (const body of bodies) {
+    if (total <= maxChars) break;
+    if (body.text.length <= SHORTENED_TO) continue;
+    const shortened = shortenedBody(body.text);
+    if (shortened.length >= parts[body.at].length) continue;
+    total -= parts[body.at].length - shortened.length;
+    parts[body.at] = shortened;
+  }
+  return parts.join("\n");
+}
 
 // src/views/feedbackAttachment.ts
 function turnText(turn) {
@@ -14939,21 +19833,22 @@ function formatCompositionAttachment(canvas) {
   return lines.join("\n");
 }
 function formatConversationAttachment(turns, journalId, now = /* @__PURE__ */ new Date(), canvases = []) {
-  const opening = turns[0]?.role === "user" ? turnText(turns[0]) : "";
-  const rest = turns[0]?.role === "user" ? turns.slice(1) : turns;
-  const lines = ["--- Journal Entry ---", `ID: ${journalId}`, `Timestamp: ${now.toISOString()}`, "", opening || "(empty content)"];
-  if (rest.length > 0) {
-    lines.push("", "--- Journal Chat ---");
-    for (const t of rest) lines.push(`[${t.role === "myu" ? "agent" : "user"}] ${turnText(t)}`);
-  }
+  const first = turns[0]?.role === "user" ? turns[0] : null;
+  const opening = first ? turnText(first) : "";
+  const rest = first ? turns.slice(1) : turns;
+  const ts = (turn) => turn?.at || now.toISOString();
+  const transcript = formatConversationTranscript({
+    entry: { id: journalId, ts: ts(first), typed: opening, ...first?.pasted?.length ? { blocks: first.pasted } : {} },
+    chats: rest.map((t) => ({ chatter: t.role === "myu" ? "agent" : "user", ts: ts(t), typed: turnText(t), ...t.role === "user" && t.pasted?.length ? { blocks: t.pasted } : {} }))
+  });
   const entry = opening.trim() || "(empty entry)";
   const summary = [`Journal entry (${now.toLocaleString()}):`, entry.length > 2e3 ? entry.slice(0, 2e3) + "\u2026" : entry, "", `${rest.length} chat turn${rest.length === 1 ? "" : "s"} attached in full.${canvases.length ? ` ${canvases.length} canvas${canvases.length === 1 ? "" : "es"} attached (${canvases.map((c) => c.id).join(", ")}).` : ""}`];
-  const parts = [lines.join("\n"), ...canvases.map(formatCompositionAttachment)];
+  const parts = [transcript, ...canvases.map(formatCompositionAttachment)];
   return { attached_content: parts.join("\n\n"), attached_summary: summary.join("\n") };
 }
 
 // src/views/ReplyRatingModal.ts
-var ReplyRatingModal = class extends import_obsidian34.Modal {
+var ReplyRatingModal = class extends import_obsidian36.Modal {
   constructor(app, plugin, rating, journalId, turns, onSubmitted) {
     super(app);
     this.plugin = plugin;
@@ -14973,17 +19868,17 @@ var ReplyRatingModal = class extends import_obsidian34.Modal {
     const { contentEl } = this;
     contentEl.empty();
     contentEl.addClass("myu-power-down");
-    contentEl.createEl("h2", { text: this.rating === 1 ? "What worked?" : "What was off?" });
+    contentEl.createEl("h2", { text: this.rating === 1 ? "What was helpful?" : "What went wrong?" });
     const box = contentEl.createEl("textarea", { cls: "myu-chat-input", attr: { rows: "4", placeholder: "Optional \u2014 anything to add?", "aria-label": "Your note" } });
     box.value = this.note;
     box.oninput = () => {
       this.note = box.value;
     };
-    new import_obsidian34.Setting(contentEl).setName("Attach this conversation and its canvas").setDesc(`${this.turns.length} turn${this.turns.length === 1 ? "" : "s"} as text \u2014 decrypted, so the team can read what you rated \u2014 plus the canvas this conversation made. Off: only the rating and your optional comments.`).addToggle((t) => t.setValue(this.attach).onChange((v) => {
+    new import_obsidian36.Setting(contentEl).setName("Attach this conversation and its canvas").setDesc(`${this.turns.length} message${this.turns.length === 1 ? "" : "s"} as plain text (decrypted, so the team can read what you rated), plus the canvas from this conversation. When off, only the rating and your note are sent.`).addToggle((t) => t.setValue(this.attach).onChange((v) => {
       this.attach = v;
     }));
     if (this.problem) contentEl.createDiv({ cls: "myu-problem", text: this.problem });
-    new import_obsidian34.Setting(contentEl).addButton((b) => b.setButtonText("Not now").onClick(() => this.close())).addButton((b) => b.setButtonText(this.busy ? "Sending\u2026" : "Send").setCta().setDisabled(this.busy).onClick(() => void this.send()));
+    new import_obsidian36.Setting(contentEl).addButton((b) => b.setButtonText("Not now").onClick(() => this.close())).addButton((b) => b.setButtonText(this.busy ? "Sending\u2026" : "Send").setCta().setDisabled(this.busy).onClick(() => void this.send()));
   }
   async send() {
     this.busy = true;
@@ -14998,7 +19893,7 @@ var ReplyRatingModal = class extends import_obsidian34.Modal {
       this.close();
       return;
     }
-    this.problem = res?.data?.error === "attachment_too_large" ? "Attachment too large \u2014 try without the conversation." : res?.data?.error === "Rate limit exceeded" ? `Too many in a row \u2014 try again in ${res.data.retry_after_minutes ?? 60} minutes.` : res?.error || "Something went wrong. Please try again.";
+    this.problem = res?.data?.error === "attachment_too_large" ? "Attachment too large \u2014 try without the conversation." : res?.data?.error === "Rate limit exceeded" ? `Too many messages in a row. Try again in ${res.data.retry_after_minutes ?? 60} minutes.` : res?.error || "Something went wrong. Please try again.";
     this.render();
   }
   /** Only the canvas this conversation made — the web's linked composition (operator, 2026-08-30: not the pane's). */
@@ -15014,6 +19909,11 @@ var ReplyRatingModal = class extends import_obsidian34.Modal {
 };
 
 // src/conversations.ts
+function previewOf(typed, pasted) {
+  const words = typed.trim();
+  if (words) return words.slice(0, 90);
+  return pasted[0] ? cardLabel(pasted[0]) : "";
+}
 async function readText(enc, plain, key) {
   if (typeof enc === "string" && enc && key) {
     try {
@@ -15034,38 +19934,317 @@ async function listConversations(deps) {
     if (!journalId) continue;
     const created = parseWhen(firstPresent(entry.timestamp, entry.occurred_at, entry.created_at, entry.created));
     const text = await readText(entry.encrypted_content, entry.content, deps.key);
-    if (text === null || !text.trim()) continue;
-    out.push({ journalId, day: created ? created.toISOString().slice(0, 10) : "", preview: text.trim().slice(0, 90) });
+    if (text === null) continue;
+    const pasted = readPastedBlocks(entry.pasted_blocks);
+    if (!text.trim() && pasted.length === 0) continue;
+    out.push({ journalId, day: created ? created.toISOString().slice(0, 10) : "", preview: previewOf(text, pasted), ...pasted.length ? { pasted } : {} });
   }
   out.sort((a, b) => b.day.localeCompare(a.day));
   return out;
 }
 async function loadConversation(deps, journalId, opening, onOffer) {
   const turns = [];
-  if (opening) turns.push({ role: "user", text: `(${opening.day}) ${opening.preview}` });
+  if (opening) {
+    const pasted = opening.pasted ?? [];
+    const typed = pasted.length > 0 && opening.preview === previewOf("", pasted) ? "" : opening.preview;
+    turns.push({ role: "user", text: typed ? `(${opening.day}) ${typed}` : `(${opening.day})`, ...pasted.length ? { pasted } : {} });
+  }
   const res = await deps.backend.getJournalChats(journalId);
   if (onOffer && res.data?.offer) onOffer(res.data.offer);
   const chats = Array.isArray(res.data?.chats) ? res.data.chats : [];
   for (const chat of chats) {
     const content = await readText(chat.encrypted_content, chat.content, deps.key);
-    if (content === null || !content.trim()) continue;
+    if (content === null) continue;
+    const pasted = readPastedBlocks(chat.pasted_blocks);
+    if (!content.trim() && pasted.length === 0) continue;
     const parsed = parseChatTurn({ content });
     if (parsed.blocks.length > 0 && content.trim().startsWith("{")) {
       turns.push({ role: "myu", blocks: parsed.blocks, references: parsed.references });
     } else {
-      turns.push({ role: "user", text: content });
+      const at = parseWhen(chat.timestamp);
+      turns.push({ role: "user", text: content, ...pasted.length ? { pasted } : {}, ...at ? { at: at.toISOString() } : {} });
     }
   }
   return turns;
 }
 
+// src/views/spaceConversationPane.ts
+function renderWords(host, text, parts, cls) {
+  if (!parts) {
+    host.createDiv({ cls: `${cls} myu-space-words`, text });
+    return;
+  }
+  const box = host.createDiv({ cls: `${cls} myu-space-readback` });
+  for (const l of parts.lead) box.createDiv({ text: l });
+  const list2 = box.createEl("ul", { cls: "myu-space-bullets" });
+  for (const b of parts.bullets) list2.createEl("li", { text: b });
+  for (const l of parts.closing) box.createDiv({ text: l });
+  for (const l of parts.warning) box.createDiv({ cls: "myu-space-warning myu-quiet", text: l });
+}
+function renderSpaceStatus(host, status) {
+  if (!status) return;
+  const strip = host.createDiv({ cls: "myu-space-status myu-quiet" });
+  strip.createDiv({ cls: "myu-space-status-words", text: status });
+}
+function renderAskButtons(acts, ask, busy, on) {
+  const toggle = (label, pressed, press) => {
+    const b = acts.createEl("button", { cls: "myu-aff myu-pick", text: label, attr: { "aria-pressed": String(pressed) } });
+    b.disabled = busy;
+    b.onclick = press;
+  };
+  const plain = (label, press, cls = "myu-aff") => {
+    const b = acts.createEl("button", { cls, text: label });
+    b.disabled = busy;
+    b.onclick = press;
+  };
+  const typed = ask.typed;
+  if (ask.picks) {
+    for (const p of ask.picks.picks) toggle(p.label, p.on, () => on.pick(p.id));
+    if (typed) toggle(typed.label, typed.on, () => on.choose(typed.id));
+    if (ask.kept) {
+      const kept = acts.createSpan({ cls: "myu-space-kept" });
+      kept.createSpan({ cls: "myu-space-kept-name", text: ask.kept });
+      const drop = kept.createEl("button", { cls: "myu-aff myu-space-kept-drop", text: "\xD7", attr: { "aria-label": LINE_CONVERSATION_WORDS.removeName } });
+      drop.disabled = busy;
+      drop.onclick = () => on.dropTyped();
+    }
+    const send = ask.picks.send;
+    if (send) {
+      const b = acts.createEl("button", { cls: "myu-aff myu-pick-send", text: send.label, attr: { "aria-disabled": String(!send.ready) } });
+      b.disabled = busy || !send.ready;
+      b.onclick = () => on.choose(send.id);
+    }
+    for (const c of ask.picks.singles) plain(c.label, () => on.choose(c.id));
+  } else {
+    for (const c of ask.choices) {
+      if (typed && c.id === typed.id) toggle(typed.label, typed.on, () => on.choose(typed.id));
+      else plain(c.label, () => on.choose(c.id));
+    }
+  }
+  if (ask.quiet) {
+    const quiet = ask.quiet;
+    plain(quiet.label, () => on.choose(quiet.id), "myu-affordance myu-space-quiet");
+  }
+  for (const w of ask.waysOut) plain(w.label, () => on.choose(w.id), "myu-affordance myu-space-quiet myu-space-way-out");
+}
+function renderSpaceConversation(thread, composer, screen, on) {
+  if (screen.loading) thread.createEl("p", { cls: "myu-quiet myu-thinking", text: "Opening the conversation" });
+  if (screen.failed) thread.createEl("p", { cls: "myu-quiet", text: screen.failed });
+  if (screen.earlier === "link") {
+    const earlier = thread.createEl("button", { cls: "myu-affordance myu-space-earlier", text: SPACE_MODE_WORDS.earlier });
+    earlier.onclick = () => on.earlier();
+  } else if (screen.earlier === "loading") {
+    thread.createEl("p", { cls: "myu-quiet myu-thinking", text: SPACE_MODE_WORDS.earlier.replace(" \u25B8", "") });
+  } else if (screen.earlier === "none") {
+    thread.createEl("p", { cls: "myu-quiet myu-space-earlier", text: SPACE_MODE_WORDS.nothingEarlier });
+  }
+  const drawTurn = (turn) => {
+    if (turn.from === "you") {
+      const you = thread.createDiv({ cls: "myu-chat-user", text: turn.text });
+      if (turn.pasted?.length) renderPastedCards(you, turn.pasted, on.pasted?.expanded(turn.key) ?? /* @__PURE__ */ new Set(), (id, open) => on.pasted?.toggle(turn.key, id, open));
+      return;
+    }
+    const myu = thread.createDiv({ cls: "myu-chat-myu" });
+    myu.createDiv({ cls: "myu-whisper", text: "myu" });
+    renderWords(myu, turn.text, turn.parts, "myu-voice");
+  };
+  for (const turn of screen.turns) drawTurn(turn);
+  if (screen.ask) {
+    const ask = thread.createDiv({ cls: "myu-chat-myu myu-space-ask", attr: lineIdAttr(screen.ask.line_id) });
+    ask.createDiv({ cls: "myu-whisper", text: "myu" });
+    renderWords(ask, screen.ask.text, screen.ask.parts, "myu-voice");
+    const busy = screen.answering || screen.reading;
+    const a = screen.ask;
+    if (a.choices.length > 0 || a.picks || a.quiet || a.waysOut.length > 0) {
+      renderAskButtons(ask.createDiv({ cls: "myu-mrow-acts myu-space-choices" }), a, busy, on);
+    }
+  }
+  for (const turn of screen.after) drawTurn(turn);
+  if (screen.note) thread.createEl("p", { cls: "myu-voice myu-quiet myu-space-note", text: screen.note });
+  if (screen.empty) thread.createEl("p", { cls: "myu-quiet myu-space-empty", text: screen.empty });
+  if (screen.unlock.show) {
+    const notSpace = screen.kind !== void 0 && screen.kind !== "space";
+    const row2 = thread.createDiv({ cls: "myu-space-unlock" });
+    const b = row2.createEl("button", { cls: "myu-aff", text: screen.unlock.busy ? SPACE_MODE_WORDS.unlocking : notSpace ? MEETING_CONVERSATION_WORDS.unlock : SPACE_MODE_WORDS.unlock });
+    b.disabled = screen.unlock.busy;
+    b.onclick = () => on.unlock();
+    if (screen.unlock.failed) row2.createEl("p", { cls: "myu-quiet", text: notSpace ? MEETING_CONVERSATION_WORDS.unlockFailed : SPACE_MODE_WORDS.unlockFailed });
+  }
+  if (screen.reading) thread.createEl("p", { cls: "myu-quiet myu-thinking myu-space-reading", text: SPACE_MODE_WORDS.reading });
+  if (!screen.box.show) return null;
+  const paste = on.pasted;
+  const row = paste ? composer.createDiv({ cls: "myu-pasted-row" }) : null;
+  const input = composer.createEl("textarea", {
+    cls: "myu-chat-input myu-space-input",
+    attr: { rows: "3", placeholder: screen.box.placeholder, "aria-label": screen.box.placeholder }
+  });
+  input.value = screen.box.draft;
+  const send = composer.createEl("button", { cls: "myu-affordance", text: "Send" });
+  send.disabled = screen.reading;
+  send.onclick = () => on.send(input.value);
+  const drawRow = () => {
+    if (!paste || !row) return;
+    renderPastedRow(row, paste.chips(), {
+      open: (id) => paste.open(id, (value) => {
+        if (value !== null) input.value = value;
+        drawRow();
+        input.focus();
+        if (value !== null) input.setSelectionRange(value.length, value.length);
+      }),
+      remove: (id) => {
+        paste.remove(id);
+        drawRow();
+        input.focus();
+      },
+      undo: paste.canUndo() ? undo : null,
+      note: paste.note()
+    });
+    send.disabled = screen.reading || !!pastedBlocksProblem(paste.chips());
+  };
+  const undo = () => {
+    const out = paste?.undo(input.value) ?? null;
+    if (out) input.value = out.value;
+    drawRow();
+    if (out) {
+      input.focus();
+      input.setSelectionRange(out.caret, out.caret);
+    }
+  };
+  input.oninput = () => {
+    on.draft(input.value);
+    if (paste?.typedInBox()) drawRow();
+  };
+  input.onkeydown = (event) => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      on.send(input.value);
+      return;
+    }
+    if (paste?.canUndo() && isUndoKey(event)) {
+      event.preventDefault();
+      undo();
+    }
+  };
+  if (paste) {
+    attachPasteListeners(input, {
+      addPasted: (text, source, at) => {
+        paste.add(text, source, at, input.value);
+        drawRow();
+      },
+      isTyping: () => paste.typing()
+    });
+    drawRow();
+  }
+  if (screen.box.hints.length > 0) {
+    const hints = composer.createDiv({ cls: "myu-space-hints myu-quiet" });
+    hints.createDiv({ cls: "myu-space-hints-lead", text: screen.box.hintsLead });
+    for (const h of screen.box.hints) hints.createDiv({ cls: "myu-space-hint", text: h });
+  }
+  return input;
+}
+function renderSpaceTabs(host, retroShowing, on) {
+  const tabs = host.createDiv({ cls: "myu-space-tabs", attr: { role: "tablist" } });
+  const tab = (text, selected, press) => {
+    const b = tabs.createEl("button", { cls: `myu-space-tab${selected ? " is-active" : ""}`, text, attr: { role: "tab", "aria-selected": String(selected) } });
+    b.onclick = () => {
+      if (!selected) press();
+    };
+  };
+  tab(SPACE_RETRO_WORDS.tabConversation, !retroShowing, on.conversation);
+  tab(SPACE_RETRO_WORDS.tabRetro, retroShowing, on.retro);
+}
+function renderHowThisWorks(page, how, open, toggle) {
+  if (!how) return;
+  const fold = page.createDiv({ cls: "myu-space-retro-how" });
+  const b = fold.createEl("button", {
+    cls: "myu-affordance myu-space-retro-how-toggle",
+    text: `${SPACE_RETRO_WORDS.howThisWorks} ${open ? "\u25BE" : "\u25B8"}`,
+    attr: { "aria-expanded": String(open) }
+  });
+  b.onclick = () => toggle();
+  if (open) fold.createDiv({ cls: "myu-quiet myu-space-retro-how-words", text: how });
+}
+function renderSpaceRetro(host, panel, on) {
+  const page = host.createDiv({ cls: "myu-space-retro" });
+  if (panel.loading) {
+    page.createEl("p", { cls: "myu-quiet myu-thinking", text: SPACE_RETRO_WORDS.loading });
+    return;
+  }
+  if (panel.failed && !panel.view) {
+    page.createEl("p", { cls: "myu-quiet", text: SPACE_RETRO_WORDS.failed });
+    return;
+  }
+  const view = panel.view;
+  if (!view) return;
+  const toggleHow = () => on.how?.();
+  if (view.none) {
+    page.createEl("p", { cls: "myu-quiet", text: view.none });
+    renderHowThisWorks(page, view.how, panel.howOpen, toggleHow);
+    return;
+  }
+  const head = page.createDiv({ cls: "myu-space-retro-head" });
+  if (view.top) head.createDiv({ cls: "myu-space-retro-title", text: view.top });
+  renderHowThisWorks(head, view.how, panel.howOpen, toggleHow);
+  if (view.locked) {
+    const locked = page.createDiv({ cls: "myu-space-retro-section" });
+    locked.createDiv({ cls: "myu-quiet", text: SPACE_RETRO_WORDS.locked });
+    const unlock = locked.createEl("button", { cls: "myu-affordance", text: SPACE_MODE_WORDS.unlock });
+    unlock.onclick = () => on.unlock();
+  }
+  if (view.results) {
+    const res = page.createDiv({ cls: "myu-space-retro-section" });
+    res.createDiv({ cls: "myu-space-retro-heading", text: SPACE_RETRO_WORDS.results });
+    if (view.results.text) res.createDiv({ cls: "myu-space-retro-text", text: view.results.text });
+    if (view.results.items.length) {
+      const list2 = res.createEl("ul", { cls: "myu-space-bullets" });
+      for (const it of view.results.items) list2.createEl("li", { text: it });
+    }
+  }
+  for (const q of view.questions) {
+    const box = page.createDiv({ cls: "myu-space-retro-section" });
+    const heading = box.createDiv({ cls: "myu-space-retro-heading", text: q.title });
+    if (q.from) heading.createSpan({ cls: "myu-space-retro-from", text: `${SPACE_RETRO_WORDS.from} ${q.from}` });
+    if (q.text) box.createDiv({ cls: "myu-space-retro-text", text: q.text });
+    if (q.state) box.createDiv({ cls: "myu-quiet myu-space-retro-state", text: q.state });
+    if (q.text) {
+      box.createDiv({ cls: "myu-whisper myu-space-retro-sub", text: SPACE_RETRO_WORDS.replies });
+      if (q.replies.length === 0) box.createDiv({ cls: "myu-quiet", text: SPACE_RETRO_WORDS.noReplies });
+      for (const r of q.replies) {
+        const reply = box.createDiv({ cls: "myu-space-retro-reply" });
+        if (r.name) reply.createDiv({ cls: "myu-space-retro-who", text: r.name });
+        reply.createDiv({ text: r.text });
+      }
+    }
+    if (q.summary) {
+      box.createDiv({ cls: "myu-whisper myu-space-retro-sub", text: SPACE_RETRO_WORDS.summary });
+      box.createDiv({ cls: "myu-space-retro-summary myu-voice", text: q.summary });
+    }
+  }
+  if (view.tasks.length) {
+    const tasks = page.createDiv({ cls: "myu-space-retro-section" });
+    tasks.createDiv({ cls: "myu-space-retro-heading", text: SPACE_RETRO_WORDS.tasks });
+    for (const t of view.tasks) {
+      const row = tasks.createDiv({ cls: "myu-space-retro-task" });
+      row.createDiv({ text: t.text });
+      row.createDiv({ cls: "myu-quiet", text: t.standing });
+    }
+  }
+  const foot = page.createDiv({ cls: "myu-space-retro-foot" });
+  if (view.questions.length > 0 || view.tasks.length > 0) foot.createDiv({ cls: "myu-quiet", text: SPACE_RETRO_WORDS.howToAct });
+  const back = foot.createEl("button", { cls: "myu-affordance", text: SPACE_RETRO_WORDS.goToConversation });
+  back.onclick = () => on.conversation();
+}
+
 // src/views/ChatView.ts
 var CHAT_VIEW_TYPE = "askmyu-chat";
-var ChatView = class extends import_obsidian35.ItemView {
+var ChatView = class extends import_obsidian37.ItemView {
   constructor(leaf, plugin) {
     super(leaf);
     this.plugin = plugin;
     this.turns = [];
+    /** The question this conversation opened with, answered here with a tap (2026-09-25). */
+    this.openingLine = null;
+    this.openingUi = {};
     /** P8.10 — the conversations browser: past entries, resumable in place. */
     this.browsing = false;
     /** Panel behavior (2026-08-25): the chat FOLLOWS the active note like the
@@ -15082,6 +20261,30 @@ var ChatView = class extends import_obsidian35.ItemView {
     this.pendingTemplateType = null;
     this.busy = false;
     this.draft = "";
+    /** Pasted text in the box, as chips (2026-10-06): sent beside the draft, cleared with it. */
+    this.pasted = [];
+    /** The last paste that became a chip, while Undo can put it back inline (the hint shows until the next change). */
+    this.undo = null;
+    /** Words under the chips until the next change: the lost words after a send. */
+    this.pastedNote = null;
+    /** The sent cards opened, by turn index and block id — kept across renders. */
+    this.expanded = /* @__PURE__ */ new Map();
+    /** The same for a subject's conversation, by turn key. */
+    this.spaceExpanded = /* @__PURE__ */ new Map();
+    /** The box, its chip row and Send, as drawn last: a chip redraws the row in place, never the pane. */
+    this.inputEl = null;
+    this.pastedRowEl = null;
+    this.sendEl = null;
+    /** The pane's live region: outside contentEl, which every render empties. */
+    this.liveEl = null;
+    /**
+     * Space mode (R14): when set, this pane is a SPACE's own conversation, not a
+     * journal thread. Typed words go into that conversation (`conversation_id`),
+     * where Myu reads them as this team's retro; a journal thread would not.
+     */
+    this.space = null;
+    /** The team's retro for that space, behind one quiet line under the title. */
+    this.spaceRetro = null;
     // ── the cold-start calendar offer, inline (canonical in the thread) ────────
     // The web's AssistantOutput: the offer_block arrives server-composed inside
     // the welcome composition; presence of the component IS the gate, the panel
@@ -15117,9 +20320,12 @@ var ChatView = class extends import_obsidian35.ItemView {
   async onOpen() {
     queueMicrotask(() => this.contentEl.querySelector("textarea.myu-chat-input")?.focus());
     this.contentEl.addClass("myu-today");
+    this.liveEl = pastedLiveRegion(this.containerEl);
+    this.plugin.linesSeen?.watch(this.contentEl);
     this.render();
   }
   async onClose() {
+    this.plugin.linesSeen?.unwatch(this.contentEl);
     this.contentEl.empty();
   }
   /**
@@ -15129,21 +20335,191 @@ var ChatView = class extends import_obsidian35.ItemView {
    * attribute the old conversation to the new subject.
    */
   seed(seed) {
-    this.turns = [];
+    this.space = null;
+    this.spaceRetro = null;
+    this.turns = seed.opening?.trim() ? [{ role: "myu", text: seed.opening.trim() }] : [];
+    this.openingLine = seed.opening?.trim() && seed.openingLine ? seed.openingLine : null;
+    this.openingUi = {};
     this.journalId = null;
     this.pendingContext = seed.context ?? null;
     this.pendingTemplateType = seed.templateType ?? null;
     this.draft = seed.send ? "" : seed.text;
+    this.pasted = seed.pasted ? [...seed.pasted] : [];
+    this.undo = null;
+    this.pastedNote = null;
+    this.expanded = /* @__PURE__ */ new Map();
     this.render();
-    if (seed.send && seed.text.trim()) void this.send(seed.text);
+    if (seed.send && (seed.text.trim() || this.pasted.length > 0)) void this.send(seed.text);
+  }
+  /**
+   * Open a space's own conversation here (space mode). Returns false when the
+   * backend does not say `mode: "space"` for it (an older stack), so the caller
+   * can fall back. A read that FAILED stays here and says so: a space's words
+   * never fall through to a journal thread.
+   */
+  async openSpace(spaceId, label, opts = {}) {
+    const space = new SpaceConversation(spaceId, label, this.conversationDeps(() => space));
+    const retro = new SpaceRetroPanel(spaceId, {
+      backend: this.plugin.backend,
+      onChange: () => {
+        if (this.spaceRetro === retro) this.render();
+      },
+      // R20: "How this works" opens the first time this account sees a retro page, and is closed after.
+      howSeen: {
+        seen: () => {
+          const account = this.plugin.settings.account_id;
+          return !!account && !!this.plugin.settings.retro_how_seen[howThisWorksKey(account)];
+        },
+        markSeen: () => {
+          const account = this.plugin.settings.account_id;
+          if (!account) return;
+          this.plugin.settings.retro_how_seen[howThisWorksKey(account)] = true;
+          void this.plugin.saveSettings();
+        }
+      }
+    });
+    this.browsing = false;
+    this.space = space;
+    this.spaceExpanded = /* @__PURE__ */ new Map();
+    this.spaceRetro = opts.debrief ? null : retro;
+    this.openingLine = null;
+    this.openingUi = {};
+    const ok2 = await space.open();
+    if (!ok2 && space.opened && !space.isSpace) {
+      if (this.space === space) {
+        this.space = null;
+        this.spaceRetro = null;
+      }
+      return false;
+    }
+    if (space.isDebrief && this.space === space && this.spaceRetro) {
+      this.spaceRetro = null;
+      this.render();
+    }
+    if (opts.retro && this.spaceRetro === retro) void retro.show();
+    return true;
+  }
+  /** What a subject's conversation needs from the pane: the backend, the unlock, the journal, a repaint. */
+  conversationDeps(self2) {
+    return {
+      backend: this.plugin.backend,
+      // The same re-escrow the transport uses when a call is refused for the key.
+      unlock: () => this.plugin.unlock.onEncryptionBlocked(),
+      // "Take it there": a blank journal conversation with the text in the box, unsent.
+      openJournal: (text) => {
+        this.startNew();
+        this.draft = text;
+        this.render();
+      },
+      onChange: () => {
+        if (this.space === self2()) this.render();
+      },
+      apiBase: this.plugin.settings.base_url,
+      openPage: (url) => window.open(url, "_blank"),
+      openConversation: (ref) => void this.plugin.openConversationRef(ref, self2().screen().title),
+      // An ask settled here leaves its row on Today: read the list again.
+      onAnswered: () => this.plugin.requestTodayRefresh()
+    };
+  }
+  /**
+   * Open a line's own conversation here (2026-10-03): the account's "About you" question, whose second half takes
+   * several picks and whose "Someone else" takes a typed name — or any other line answered that way about a
+   * person or a company. One ask at a time with its buttons, as a meeting's conversation. The account's own has
+   * no conversation door; its asks come from the lines list, and what Myu says back is said in place.
+   */
+  async openSubject(type, id, label) {
+    if (type === "space") return this.openSpace(id, label);
+    if (type === "meeting") return this.openMeeting(id, label);
+    const subject = new SpaceConversation(id, label, this.conversationDeps(() => subject), { type });
+    this.browsing = false;
+    this.space = subject;
+    this.spaceExpanded = /* @__PURE__ */ new Map();
+    this.spaceRetro = null;
+    this.openingLine = null;
+    this.openingUi = {};
+    return subject.open();
+  }
+  /**
+   * Open a meeting's own conversation here (2026-09-30): the question before it, the arc's session
+   * (Myu's first turn: the homework and one question), "Anything you didn't say in there?" and the
+   * Yes/No after it. One ask at a time with its buttons; typed words go into this conversation
+   * (`POST /journal_chats/add` with its id), where Myu reads them as the answer. `occurrenceKey`
+   * is the occurrence's start in ms, when the door knows it (a line, the arc's Now).
+   */
+  async openMeeting(eventId, label, occurrenceKey) {
+    const meeting = new SpaceConversation(eventId, label, this.conversationDeps(() => meeting), {
+      type: "meeting",
+      ...occurrenceKey ? { occurrenceKey } : {}
+    });
+    this.browsing = false;
+    this.space = meeting;
+    this.spaceExpanded = /* @__PURE__ */ new Map();
+    this.spaceRetro = null;
+    this.openingLine = null;
+    this.openingUi = {};
+    return meeting.open();
+  }
+  /**
+   * Which of Myu's places this pane is showing, for the menu's marks (2026-10-06): a space's own conversation is
+   * Spaces; anything else here (a conversation, the list of past ones, even when reached from a space, a meeting's or
+   * a line's own) is Conversations.
+   */
+  menuItem() {
+    return this.space?.isSpaceSubject && !this.browsing ? "spaces" : "conversations";
+  }
+  /** What this pane shows changed in place: the plugin tells the server that place was opened, if the pane is in front. */
+  moved() {
+    this.plugin.chatPaneMoved(this);
+  }
+  /** A line changed on the server: a space's (or meeting's) conversation reads again. */
+  refreshSpace(spaceId) {
+    if (this.space && (!spaceId || this.space.spaceId === spaceId)) {
+      void this.space.refresh();
+      void this.spaceRetro?.refresh();
+    }
+  }
+  /**
+   * The opening question's button: the answer (`POST /myu/lines/answer`), the pages it opens, what
+   * Myu said back under the question, then Today again (the same question leaves its row there).
+   */
+  async pressOpening(line, button) {
+    if (this.openingUi.busy) return;
+    this.openingUi = { busy: true };
+    this.render();
+    const out = await pressLineButton({ answer: (lineId, answer) => this.plugin.backend.answerMyuLine(lineId, answer), apiBase: this.plugin.settings.base_url }, line, button);
+    for (const url of out.open) window.open(url, "_blank");
+    if (out.conversation) {
+      void this.plugin.openConversationRef(out.conversation, line.subjects?.[0]?.label ?? "");
+      this.plugin.requestTodayRefresh();
+      return;
+    }
+    if (this.openingLine?.line_id !== line.line_id) return;
+    if (out.closed) {
+      this.openingLine = null;
+      this.openingUi = {};
+      this.render();
+      this.plugin.requestTodayRefresh();
+      return;
+    }
+    this.openingUi = out.ui;
+    this.render();
+    if (out.settled) this.plugin.requestTodayRefresh();
   }
   /** A blank thread: this conversation is finished, the next one starts clean. */
   startNew() {
+    this.space = null;
+    this.spaceRetro = null;
     this.turns = [];
+    this.openingLine = null;
+    this.openingUi = {};
     this.journalId = null;
     this.pendingContext = null;
     this.pendingTemplateType = null;
     this.draft = "";
+    this.pasted = [];
+    this.undo = null;
+    this.pastedNote = null;
+    this.expanded = /* @__PURE__ */ new Map();
     this.browsing = false;
     this.canvasSpecs.clear();
     this.canvasFetching.clear();
@@ -15155,35 +20531,68 @@ var ChatView = class extends import_obsidian35.ItemView {
     this.linkedinAsk = null;
     this.ratings.clear();
     this.render();
+    this.moved();
   }
   async send(text) {
+    if (this.busy) return;
     const content = text.trim();
-    if (!content || this.busy) return;
+    const pasted = [...this.pasted];
+    if (!content && pasted.length === 0) return;
     const accountId = this.plugin.settings.account_id;
     if (!accountId) return;
+    if (pastedBlocksProblem(pasted)) {
+      if (!this.draft.trim() && content) {
+        this.draft = text;
+        this.render();
+      } else {
+        this.drawPasted();
+      }
+      return;
+    }
+    this.busy = true;
+    this.draft = "";
+    this.pasted = [];
+    this.undo = null;
+    this.pastedNote = null;
+    if (this.inputEl) this.inputEl.value = "";
+    this.drawPasted();
     if (!this.pendingContext && this.followActive && !this.journalId) {
       const active = this.app.workspace.getActiveFile();
       if (active && active.extension === "md") {
-        this.pendingContext = await this.plugin.chatContextForFile(active) ?? null;
+        try {
+          this.pendingContext = await this.plugin.chatContextForFile(active) ?? null;
+        } catch {
+          this.pendingContext = null;
+        }
       }
     }
-    this.turns.push({ role: "user", text: content });
-    this.draft = "";
-    this.busy = true;
+    const mine = { role: "user", text: content, ...pasted.length ? { pasted } : {}, at: (/* @__PURE__ */ new Date()).toISOString() };
+    this.turns.push(mine);
     this.render();
     const context = this.pendingContext ?? void 0;
     this.pendingContext = null;
     const openId = this.plugin.openCanvasId();
     const canvasOpts = { surfaceMode: openId ? "dual" : "journal", ...openId ? { continuesCompositionId: openId } : {} };
-    const res = this.journalId ? await this.plugin.backend.addChatTurn(accountId, this.journalId, content, context, canvasOpts) : await this.plugin.backend.createChatEntry(accountId, content, context, this.pendingTemplateType ?? void 0, canvasOpts);
+    const res = this.journalId ? await this.plugin.backend.addChatTurn(accountId, this.journalId, content, context, canvasOpts, pasted) : await this.plugin.backend.createChatEntry(accountId, content, context, this.pendingTemplateType ?? void 0, canvasOpts, pasted);
     this.busy = false;
     if (!res.ok || !res.data) {
+      if (!this.draft.trim() && this.pasted.length === 0) {
+        this.turns = this.turns.filter((t) => t !== mine);
+        this.draft = text;
+        this.pasted = pasted;
+      }
       this.turns.push({
         role: "myu",
-        text: res.error === "offline" ? "You're offline \u2014 this didn't send. Try again when you're back." : "That didn't reach Myu. Try again in a moment."
+        text: res.error === PASTED_TEXT_TOO_LONG && res.message ? res.message : res.error === "offline" ? "You're offline. This message was not sent. Try again when you're back online." : "Could not send this to Myu. Try again in a moment."
       });
       this.render();
       return;
+    }
+    if (pastedTextLost(pasted.length, res.data)) {
+      delete mine.pasted;
+      this.pasted = chipsBack(pasted, this.pasted);
+      this.undo = null;
+      this.pastedNote = PASTE_WORDS.lost;
     }
     if (res.data.journal_id) this.journalId = res.data.journal_id;
     if (res.data.offer) this.adoptDeliveredOffer(res.data.offer);
@@ -15370,14 +20779,14 @@ var ChatView = class extends import_obsidian35.ItemView {
       const data2 = component.data;
       if (data2?.triggered !== true) {
         const mine = offerSource(data2?.moment, component);
-        const shown = [this.plugin.canvasView()?.currentSpec(), ...this.canvasSpecs.values()].flatMap((s2) => s2?.components ?? []).filter((c) => c.type === "offer_block").map((c) => offerSource(c.data?.moment, c));
-        if (shown.includes(mine)) return;
+        const shown2 = [this.plugin.canvasView()?.currentSpec(), ...this.canvasSpecs.values()].flatMap((s2) => s2?.components ?? []).filter((c) => c.type === "offer_block").map((c) => offerSource(c.data?.moment, c));
+        if (shown2.includes(mine)) return;
       }
       if (compositionId && this.canvasSpecs.has(compositionId)) return;
     }
-    const box = calloutBox(parent, "tip", "Myu needs a source", "myu-chat-offer");
+    const box = calloutBox(parent, "tip", "A request from Myu", "myu-chat-offer");
     if (this.offerDone) {
-      box.createDiv({ cls: "myu-voice", text: this.offerDoneText ?? "Calendar\u2019s in. Your week starts painting in Today." });
+      box.createDiv({ cls: "myu-voice", text: this.offerDoneText ?? "Calendar connected. Your meetings will start showing in Today." });
       return;
     }
     const data = component.data ?? {};
@@ -15415,12 +20824,12 @@ var ChatView = class extends import_obsidian35.ItemView {
     const given = this.ratings.get(index);
     const row = parent.createDiv({ cls: "myu-chat-rating" });
     if (given) {
-      row.createSpan({ cls: "myu-whisper", text: given === 1 ? "thanks \u2014 noted as a good read" : "thanks \u2014 noted as off the mark" });
+      row.createSpan({ cls: "myu-whisper", text: given === 1 ? "Thanks. Marked as helpful." : "Thanks. Marked as not helpful." });
       return;
     }
-    for (const [rating, icon, label] of [[1, "thumbs-up", "Good read"], [-1, "thumbs-down", "Off the mark"]]) {
+    for (const [rating, icon, label] of [[1, "thumbs-up", "Helpful"], [-1, "thumbs-down", "Not helpful"]]) {
       const b = row.createEl("button", { cls: "myu-affordance myu-icon-button myu-rating-btn", attr: { "aria-label": `${label} \u2014 rate this reply` } });
-      (0, import_obsidian35.setIcon)(b, icon);
+      (0, import_obsidian37.setIcon)(b, icon);
       b.onclick = () => {
         if (!this.journalId) return;
         new ReplyRatingModal(this.app, this.plugin, rating, this.journalId, this.turns.slice(0, index + 1), () => {
@@ -15433,18 +20842,26 @@ var ChatView = class extends import_obsidian35.ItemView {
   // ── render ────────────────────────────────────────────────────────────────
   render() {
     const root = this.contentEl;
+    const before = this.inputEl;
+    this.inputEl = null;
+    this.pastedRowEl = null;
+    this.sendEl = null;
     root.empty();
     root.addClass("myu-chat");
+    if (this.space && !this.browsing) {
+      this.renderSpace(root, this.space);
+      return;
+    }
     const top = root.createDiv({ cls: "myu-chat-top" });
     const active = this.app.workspace.getActiveFile();
     if (active && active.extension === "md" && !this.browsing) {
       const listen = top.createSpan({ cls: "myu-chat-listen" });
-      listen.createSpan({ text: this.followActive ? `listening to ${active.basename}` : "not listening" });
+      listen.createSpan({ text: this.followActive ? `Using ${active.basename} as context` : "Not using the open note" });
       const mute = listen.createEl("button", { cls: this.followActive ? "myu-affordance myu-icon-button" : "myu-affordance" });
       if (this.followActive) {
-        (0, import_obsidian35.setIcon)(mute, "x");
-        mute.setAttr("aria-label", "Stop listening to this note");
-      } else mute.setText("Listen");
+        (0, import_obsidian37.setIcon)(mute, "x");
+        mute.setAttr("aria-label", "Stop using this note as context");
+      } else mute.setText("Use this note");
       mute.onclick = () => {
         this.followActive = !this.followActive;
         this.render();
@@ -15456,12 +20873,13 @@ var ChatView = class extends import_obsidian35.ItemView {
     }
     const browse = top.createEl("button", {
       cls: "myu-affordance",
-      text: this.browsing ? "\u2190 back to the conversation" : "Past conversations"
+      text: this.browsing ? "\u2190 Back to the conversation" : "Past conversations"
     });
     browse.onclick = () => {
       this.browsing = !this.browsing;
       if (this.browsing && !this.pastEntries) void this.loadPastEntries();
       this.render();
+      this.moved();
     };
     if (this.browsing) {
       this.renderBrowser(root);
@@ -15469,16 +20887,30 @@ var ChatView = class extends import_obsidian35.ItemView {
     }
     const thread = root.createDiv({ cls: "myu-chat-thread" });
     if (this.turns.length === 0 && !this.busy) {
-      thread.createEl("p", { cls: "myu-quiet", text: "Talk to Myu \u2014 about a note, a person, or the day." });
+      thread.createEl("p", { cls: "myu-quiet", text: "Write to Myu about a note, a person, or your day." });
     }
     for (const [index, turn] of this.turns.entries()) {
       if (turn.role === "user") {
-        thread.createDiv({ cls: "myu-chat-user", text: turn.text ?? "" });
+        if (!turn.text && !turn.pasted?.length) continue;
+        const you = thread.createDiv({ cls: "myu-chat-user", text: turn.text ?? "" });
+        if (turn.pasted?.length) {
+          renderPastedCards(you, turn.pasted, this.expanded.get(index) ?? /* @__PURE__ */ new Set(), (id, open) => {
+            const shown2 = this.expanded.get(index) ?? /* @__PURE__ */ new Set();
+            if (open) shown2.add(id);
+            else shown2.delete(id);
+            this.expanded.set(index, shown2);
+          });
+        }
         continue;
       }
       const myu = thread.createDiv({ cls: "myu-chat-myu" });
       myu.createDiv({ cls: "myu-whisper", text: "myu" });
-      if (turn.text) myu.createDiv({ cls: "myu-voice", text: turn.text });
+      const opening = index === 0 ? this.openingLine : null;
+      if (turn.text) myu.createDiv({ cls: "myu-voice", text: turn.text, ...opening ? { attr: lineIdAttr(opening.line_id) } : {} });
+      if (index === 0 && this.openingLine) {
+        const line = this.openingLine;
+        renderLineAsk(myu, line, this.openingUi, { press: (b) => void this.pressOpening(line, b) }, { showText: false });
+      }
       for (const block of turn.blocks ?? []) this.renderBlock(myu, block);
       renderReferences(myu, turn.references);
       renderRelatedEntries(myu, turn.related, (id) => void this.openPastConversation(id));
@@ -15494,23 +20926,202 @@ var ChatView = class extends import_obsidian35.ItemView {
       save.onclick = () => this.plugin.offerConversationSave([...this.turns]);
     }
     const composer = root.createDiv({ cls: "myu-chat-composer" });
+    const caret = before && before.value === this.draft ? before.selectionStart ?? this.draft.length : this.draft.length;
+    this.pastedRowEl = composer.createDiv({ cls: "myu-pasted-row" });
     const input = composer.createEl("textarea", {
       cls: "myu-chat-input",
-      attr: { rows: "3", placeholder: "Say it plainly\u2026" }
+      attr: { rows: "3", placeholder: "Write to Myu\u2026" }
     });
+    this.inputEl = input;
     input.value = this.draft;
     input.oninput = () => {
       this.draft = input.value;
+      if (this.undo || this.pastedNote) {
+        this.undo = null;
+        this.pastedNote = null;
+        this.drawPasted();
+      }
     };
     input.onkeydown = (event) => {
       if (event.key === "Enter" && !event.shiftKey) {
         event.preventDefault();
         void this.send(input.value);
+        return;
+      }
+      if (this.undo && isUndoKey(event)) {
+        event.preventDefault();
+        this.undoPaste();
       }
     };
+    attachPasteListeners(input, { addPasted: (text, source, at) => this.addPasted(text, source, at) });
     const send = composer.createEl("button", { cls: "myu-affordance", text: "Send" });
     send.onclick = () => void this.send(input.value);
-    if (this.draft) window.setTimeout(() => input.focus(), 0);
+    this.sendEl = send;
+    this.drawPasted();
+    if (this.draft || this.pasted.length > 0) {
+      window.setTimeout(() => {
+        input.focus();
+        input.setSelectionRange(caret, caret);
+      }, 0);
+    }
+  }
+  // ── pasted text in the box (2026-10-06) ─────────────────────────────────────
+  /** The chip row and Send's hold, redrawn in place: the box itself is never touched. */
+  drawPasted() {
+    if (this.pastedRowEl) {
+      renderPastedRow(this.pastedRowEl, this.pasted, {
+        open: (id) => this.openPasted(id),
+        remove: (id) => this.removePasted(id),
+        undo: this.undo ? () => this.undoPaste() : null,
+        note: this.pastedNote
+      });
+    }
+    if (this.sendEl) this.sendEl.disabled = !!pastedBlocksProblem(this.pasted);
+  }
+  /** A paste or a drop became a chip (the listener already took the selected text out of the box). */
+  addPasted(text, source, at) {
+    const out = chipAdded(this.pasted, text, source, at);
+    this.pasted = out.chips;
+    this.undo = out.undo;
+    this.pastedNote = null;
+    if (this.inputEl) this.draft = this.inputEl.value;
+    announce(this.liveEl, PASTE_WORDS.announce(out.chip.chars));
+    this.drawPasted();
+  }
+  /** Undo (Mod+Z or the hint's button): the last conversion goes back inline where it was pasted. */
+  undoPaste() {
+    const input = this.inputEl;
+    const undo = this.undo;
+    this.undo = null;
+    const out = input && undo ? undoChip(input.value, this.pasted, undo) : null;
+    if (input && out) {
+      this.pasted = out.chips;
+      input.value = out.value;
+      this.draft = out.value;
+    }
+    this.drawPasted();
+    if (input && out) {
+      input.focus();
+      input.setSelectionRange(out.caret, out.caret);
+    }
+  }
+  removePasted(id) {
+    this.pasted = this.pasted.filter((c) => c.id !== id);
+    this.undo = null;
+    this.pastedNote = null;
+    this.drawPasted();
+    this.inputEl?.focus();
+  }
+  /** A chip, opened: its text, Put back in message, Remove. */
+  openPasted(id) {
+    const at = this.pasted.findIndex((c) => c.id === id);
+    const chip = this.pasted[at];
+    if (!chip) return;
+    const n = this.pasted.length > 1 ? at + 1 : void 0;
+    new PastedTextModal(this.app, chip, n, this.draft, { putBack: () => this.putBackPasted(id), remove: () => this.removePasted(id) }).open();
+  }
+  /** Put back: the chip's text at the end of the typed words, the caret after it. */
+  putBackPasted(id) {
+    const chip = this.pasted.find((c) => c.id === id);
+    if (!chip || !canPutBack(this.draft, chip).ok) return;
+    this.draft = putBackText(this.draft, chip);
+    this.pasted = this.pasted.filter((c) => c !== chip);
+    this.undo = null;
+    this.pastedNote = null;
+    const input = this.inputEl;
+    if (input) input.value = this.draft;
+    this.drawPasted();
+    if (input) {
+      input.focus();
+      input.setSelectionRange(this.draft.length, this.draft.length);
+    }
+  }
+  /**
+   * A space's conversation. The open note is NOT context here (nothing of the
+   * vault rides along with words typed in a space), so the "Using … as context"
+   * strip is absent; the top names the space and keeps the two doors out.
+   */
+  renderSpace(root, space) {
+    const screen = space.screen();
+    const top = root.createDiv({ cls: "myu-chat-top myu-space-top" });
+    top.createDiv({ cls: "myu-space-title", text: screen.title });
+    const tools = top.createDiv({ cls: "myu-space-top-tools" });
+    const fresh = tools.createEl("button", { cls: "myu-space-top-tool", text: "New conversation" });
+    fresh.onclick = () => this.startNew();
+    const browse = tools.createEl("button", { cls: "myu-space-top-tool", text: "Past conversations" });
+    browse.onclick = () => {
+      this.browsing = true;
+      if (!this.pastEntries) void this.loadPastEntries();
+      this.render();
+      this.moved();
+    };
+    const retro = this.spaceRetro;
+    const unlockBoth = async () => {
+      await space.unlockSpace();
+      await retro?.refresh();
+    };
+    const retroShowing = !!retro && retro.screen().open;
+    if (retro) renderSpaceTabs(root, retroShowing, { conversation: () => retro.hide(), retro: () => void retro.show() });
+    if (retro && retroShowing) {
+      const pageHost = root.createDiv({ cls: "myu-chat-thread" });
+      renderSpaceRetro(pageHost, retro.screen(), { conversation: () => retro.hide(), unlock: () => void unlockBoth(), how: () => retro.toggleHow() });
+      return;
+    }
+    renderSpaceStatus(root, screen.status);
+    const thread = root.createDiv({ cls: "myu-chat-thread" });
+    const composer = root.createDiv({ cls: "myu-chat-composer" });
+    const input = renderSpaceConversation(thread, composer, screen, {
+      send: (text) => void space.send(text),
+      choose: (id) => void space.choose(id),
+      pick: (id) => space.pick(id),
+      dropTyped: () => space.dropTyped(),
+      earlier: () => void space.loadEarlier(),
+      unlock: () => void unlockBoth(),
+      draft: (text) => {
+        space.draft = text;
+      },
+      pasted: {
+        chips: () => space.pasted,
+        canUndo: () => !!space.undo,
+        note: () => space.pastedNote,
+        typing: () => space.typing,
+        add: (text, source, at, value) => {
+          const chip = space.addPasted(text, source, at, value);
+          announce(this.liveEl, PASTE_WORDS.announce(chip.chars));
+        },
+        undo: (value) => space.undoPasted(value),
+        remove: (id) => space.removePasted(id),
+        open: (id, after) => {
+          const at = space.pasted.findIndex((c) => c.id === id);
+          const chip = space.pasted[at];
+          if (!chip) return;
+          const n = space.pasted.length > 1 ? at + 1 : void 0;
+          new PastedTextModal(this.app, chip, n, space.draft, {
+            putBack: () => after(space.putBackPasted(id)),
+            remove: () => {
+              space.removePasted(id);
+              after(null);
+            }
+          }).open();
+        },
+        typedInBox: () => space.typedInBox(),
+        expanded: (key) => this.spaceExpanded.get(key) ?? /* @__PURE__ */ new Set(),
+        toggle: (key, id, open) => {
+          const shown2 = this.spaceExpanded.get(key) ?? /* @__PURE__ */ new Set();
+          if (open) shown2.add(id);
+          else shown2.delete(id);
+          this.spaceExpanded.set(key, shown2);
+        }
+      }
+    });
+    window.setTimeout(() => {
+      if (!thread.isConnected) return;
+      thread.scrollTop = thread.scrollHeight;
+      if (input && space.wantsFocus) {
+        space.wantsFocus = false;
+        input.focus();
+      }
+    }, 0);
   }
   /** The list: recent entries, decrypted previews, newest first. */
   renderBrowser(root) {
@@ -15520,7 +21131,7 @@ var ChatView = class extends import_obsidian35.ItemView {
       return;
     }
     if (this.pastEntries.length === 0) {
-      host.createEl("p", { cls: "myu-quiet", text: "No past conversations yet \u2014 the first one starts below." });
+      host.createEl("p", { cls: "myu-quiet", text: "No past conversations yet." });
       return;
     }
     const search = host.createEl("input", { cls: "myu-chat-search", attr: { type: "search", placeholder: "Search conversations\u2026", "aria-label": "Search past conversations" } });
@@ -15535,12 +21146,12 @@ var ChatView = class extends import_obsidian35.ItemView {
     host.querySelector(".myu-chat-past-rows")?.remove();
     const rows = host.createDiv({ cls: "myu-chat-past-rows" });
     const q = this.pastQuery.trim().toLowerCase();
-    const shown = (this.pastEntries ?? []).filter((e) => !q || e.preview.toLowerCase().includes(q) || e.day.includes(q));
-    if (shown.length === 0) {
+    const shown2 = (this.pastEntries ?? []).filter((e) => !q || e.preview.toLowerCase().includes(q) || e.day.includes(q));
+    if (shown2.length === 0) {
       rows.createEl("p", { cls: "myu-quiet", text: "Nothing matches." });
       return;
     }
-    for (const entry of shown) {
+    for (const entry of shown2) {
       const row = rows.createEl("button", { cls: "myu-row-tappable myu-chat-past", attr: { "aria-label": `Open the conversation from ${entry.day}` } });
       row.createSpan({ cls: "myu-whisper", text: entry.day });
       row.createSpan({ cls: "myu-chat-past-preview", text: entry.preview });
@@ -15631,16 +21242,22 @@ var ChatView = class extends import_obsidian35.ItemView {
       PUBLIC: the Journal notes' "continue this conversation ▸" deep links
       land here (obsidian://myu-chat?journal=…). */
   async openPastConversation(journalId, day = "") {
+    this.space = null;
+    this.spaceRetro = null;
     this.browsing = false;
     this.journalId = journalId;
+    this.openingLine = null;
+    this.openingUi = {};
     this.pendingContext = null;
+    this.moved();
     const entry = this.pastEntries?.find((e) => e.journalId === journalId);
     this.turns = await loadConversation(
       { backend: this.plugin.backend, key: this.plugin.keys.get(), accountId: this.plugin.settings.account_id },
       journalId,
-      entry ? { day, preview: entry.preview } : void 0,
+      entry ? { day, preview: entry.preview, ...entry.pasted ? { pasted: entry.pasted } : {} } : void 0,
       (offer) => this.adoptDeliveredOffer(offer)
     );
+    this.expanded = /* @__PURE__ */ new Map();
     void this.checkLinkedInAsk();
     this.render();
     const [liveRes, allRes] = await Promise.all([
@@ -15685,7 +21302,7 @@ var ChatView = class extends import_obsidian35.ItemView {
 };
 
 // src/views/CanvasView.ts
-var import_obsidian39 = require("obsidian");
+var import_obsidian41 = require("obsidian");
 
 // src/composition/applyMutations.ts
 function applyMutations(spec, mutations) {
@@ -15730,7 +21347,7 @@ function applyMutations(spec, mutations) {
 }
 
 // src/views/canvasFooter.ts
-var import_obsidian36 = require("obsidian");
+var import_obsidian38 = require("obsidian");
 function renderCanvasFooter(parent, state, host) {
   if (state.expired) {
     const bar = parent.createDiv({ cls: "myu-canvas-expired" });
@@ -15749,7 +21366,7 @@ function renderCanvasFooter(parent, state, host) {
     const history = tools.createEl("button", { cls: "myu-affordance myu-link-button", text: "Past canvases\u2026" });
     history.onclick = () => host.onHistory?.();
   }
-  const row = new import_obsidian36.Setting(parent).setName("Always keep in my vault").setDesc(state.autoKeep ? "Every canvas this pane shows is saved to Myu/Canvas/." : "Off \u2014 save each canvas yourself.").addToggle((t) => t.setValue(state.autoKeep).onChange((v) => host.onToggle(v)));
+  const row = new import_obsidian38.Setting(parent).setName("Always save to my vault").setDesc(state.autoKeep ? "Every canvas this pane shows is saved to Myu/Canvas/." : "Off. Save each canvas yourself with the button below.").addToggle((t) => t.setValue(state.autoKeep).onChange((v) => host.onToggle(v)));
   row.settingEl.addClass("myu-canvas-footer");
   if (!state.autoKeep) {
     const keep = parent.createEl("button", { cls: "myu-affordance", text: "Save to my vault" });
@@ -15757,12 +21374,12 @@ function renderCanvasFooter(parent, state, host) {
     return;
   }
   if (state.problem) parent.createDiv({ cls: "myu-problem", text: state.problem });
-  else if (state.keptPath) parent.createDiv({ cls: "myu-whisper", text: `kept in ${state.keptPath}` });
+  else if (state.keptPath) parent.createDiv({ cls: "myu-whisper", text: `Saved to ${state.keptPath}` });
 }
 
 // src/views/AutoKeepModal.ts
-var import_obsidian37 = require("obsidian");
-var AutoKeepModal = class extends import_obsidian37.Modal {
+var import_obsidian39 = require("obsidian");
+var AutoKeepModal = class extends import_obsidian39.Modal {
   constructor(app, onAnswer) {
     super(app);
     this.onAnswer = onAnswer;
@@ -15771,16 +21388,16 @@ var AutoKeepModal = class extends import_obsidian37.Modal {
   onOpen() {
     const { contentEl } = this;
     contentEl.addClass("myu-power-down");
-    contentEl.createEl("h2", { text: "Keep every canvas in your vault?" });
+    contentEl.createEl("h2", { text: "Save every canvas to your vault?" });
     contentEl.createEl("p", {
       cls: "myu-prose",
-      text: "While this is on, every canvas this pane shows is saved into Myu/Canvas/ \u2014 the same composition updates its file in place and keeps your layout; a new one gets a new file. Canvases Myu makes expire on the server within a day; the vault copy is the one that lasts."
+      text: "While this is on, every canvas shown in this pane is saved to Myu/Canvas/. When Myu updates a canvas, its file is updated in place and your layout stays. A new canvas gets a new file. Canvases expire on the server within a day; the copy in your vault does not."
     });
     contentEl.createEl("p", {
       cls: "myu-prose myu-quiet",
-      text: "Worth knowing: vault files sync through whatever you use, and anything written here leaves Myu\u2019s reach permanently. Turn the switch off any time; files already kept stay yours."
+      text: "Note: files in your vault sync with whatever sync service you use, and Myu cannot change or delete them once they are written. You can turn this off at any time. Files already saved stay in your vault."
     });
-    new import_obsidian37.Setting(contentEl).addButton((b) => b.setButtonText("Not now").onClick(() => this.answer(false))).addButton((b) => b.setButtonText("Keep every canvas").setCta().onClick(() => this.answer(true)));
+    new import_obsidian39.Setting(contentEl).addButton((b) => b.setButtonText("Not now").onClick(() => this.answer(false))).addButton((b) => b.setButtonText("Save every canvas").setCta().onClick(() => this.answer(true)));
   }
   answer(keep) {
     this.answered = true;
@@ -15797,12 +21414,12 @@ var AutoKeepModal = class extends import_obsidian37.Modal {
 };
 
 // src/views/CanvasHistoryModal.ts
-var import_obsidian38 = require("obsidian");
-function whenOf2(v) {
+var import_obsidian40 = require("obsidian");
+function whenOf3(v) {
   const n = typeof v === "number" ? v : typeof v === "string" ? Date.parse(v) : NaN;
   return Number.isFinite(n) ? new Date(n).toISOString().slice(0, 10) : "";
 }
-var CanvasHistoryModal = class extends import_obsidian38.FuzzySuggestModal {
+var CanvasHistoryModal = class extends import_obsidian40.FuzzySuggestModal {
   constructor(app, plugin) {
     super(app);
     this.plugin = plugin;
@@ -15819,12 +21436,12 @@ var CanvasHistoryModal = class extends import_obsidian38.FuzzySuggestModal {
     return this.rows;
   }
   getItemText(row) {
-    return [row.summary_text, row.subject_name, whenOf2(row.created_at)].filter(Boolean).join(" ");
+    return [row.summary_text, row.subject_name, whenOf3(row.created_at)].filter(Boolean).join(" ");
   }
   renderSuggestion(match, el) {
     const r = match.item;
     el.createDiv({ text: r.summary_text || r.subject_name || "Untitled canvas" });
-    const meta = [r.subject_name && r.summary_text ? r.subject_name : "", whenOf2(r.created_at), r.is_expired ? "expired on the server" : ""].filter(Boolean).join(" \xB7 ");
+    const meta = [r.subject_name && r.summary_text ? r.subject_name : "", whenOf3(r.created_at), r.is_expired ? "expired on the server" : ""].filter(Boolean).join(" \xB7 ");
     if (meta) el.createDiv({ cls: "myu-quiet", text: meta });
   }
   onChooseItem(row) {
@@ -15835,7 +21452,7 @@ var CanvasHistoryModal = class extends import_obsidian38.FuzzySuggestModal {
 
 // src/views/CanvasView.ts
 var CANVAS_VIEW_TYPE = "askmyu-canvas";
-var CanvasView = class extends import_obsidian39.ItemView {
+var CanvasView = class extends import_obsidian41.ItemView {
   constructor(leaf, plugin) {
     super(leaf);
     this.plugin = plugin;
@@ -16009,7 +21626,7 @@ var CanvasView = class extends import_obsidian39.ItemView {
       this.keptPath = outcome.canvasPath;
       this.keepProblem = null;
     } else {
-      this.keepProblem = `Couldn\u2019t keep this canvas: ${outcome.message}`;
+      this.keepProblem = `Couldn\u2019t save this canvas: ${outcome.message}`;
     }
     this.render();
   }
@@ -16038,7 +21655,7 @@ var CanvasView = class extends import_obsidian39.ItemView {
     const out = await runOfferOption(this.plugin, option, params);
     if (out.done === "connected" && this.spec) {
       this.snapshot();
-      this.spec = applyMutations(this.spec, [{ op: "update", target_id: componentId, data_patch: { lead: "Calendar\u2019s in. Your week starts painting in Today.", gap_line: "", options: [], trust_line: "", named_person: null } }]);
+      this.spec = applyMutations(this.spec, [{ op: "update", target_id: componentId, data_patch: { lead: "Calendar connected. Your meetings will start showing in Today.", gap_line: "", options: [], trust_line: "", named_person: null } }]);
       this.render();
     }
     if (out.done === "dismissed" && this.spec) {
@@ -16052,7 +21669,7 @@ var CanvasView = class extends import_obsidian39.ItemView {
     const root = this.contentEl;
     root.empty();
     if (this.state === "loading") {
-      root.createDiv({ cls: "myu-quiet", text: "reading\u2026" });
+      root.createDiv({ cls: "myu-quiet", text: "Loading\u2026" });
       return;
     }
     if (this.state === "error") {
@@ -16067,7 +21684,7 @@ var CanvasView = class extends import_obsidian39.ItemView {
     const body = root.createDiv({ cls: "myu-canvas-body" });
     if (this.spec.summary_text?.trim()) {
       const lead = body.createDiv({ cls: "myu-canvas-component markdown-rendered" });
-      void import_obsidian39.MarkdownRenderer.render(this.app, this.spec.summary_text.trim(), lead, "", this);
+      void import_obsidian41.MarkdownRenderer.render(this.app, this.spec.summary_text.trim(), lead, "", this);
     }
     for (const entry of compositionFlow(this.spec)) {
       if ("scene" in entry) {
@@ -16077,7 +21694,7 @@ var CanvasView = class extends import_obsidian39.ItemView {
       const { component, depth } = entry;
       const md = componentMarkdown(component, depth, this.resolvePerson, this.spec.components, "pane").trim();
       const host = body.createDiv({ cls: `myu-canvas-component myu-canvas-${component.type} markdown-rendered` });
-      if (md) void import_obsidian39.MarkdownRenderer.render(this.app, md, host, "", this);
+      if (md) void import_obsidian41.MarkdownRenderer.render(this.app, md, host, "", this);
       renderComponentActions(host, component, { run: this.runAction, interact: this.interact });
     }
     renderCanvasFooter(root, { autoKeep: this.plugin.settings.auto_keep_canvas, keptPath: this.keptPath, problem: this.keepProblem, canUndo: this.snapshots.length > 0, expired: this.expired }, {
@@ -16106,22 +21723,22 @@ var CanvasView = class extends import_obsidian39.ItemView {
     const index = rows.findIndex((h) => (h.composition_id ?? h.id) === this.compositionId);
     const total = rows.length;
     const older = row.createEl("button", { cls: "myu-affordance myu-icon-button", attr: { "aria-label": "Older canvas" } });
-    (0, import_obsidian39.setIcon)(older, "chevron-left");
+    (0, import_obsidian41.setIcon)(older, "chevron-left");
     older.disabled = index < 0 || index >= total - 1;
     older.onclick = () => void this.stepTo(rows, index + 1);
     const newerBtn = row.createEl("button", { cls: "myu-affordance myu-icon-button", attr: { "aria-label": "Newer canvas" } });
-    (0, import_obsidian39.setIcon)(newerBtn, "chevron-right");
+    (0, import_obsidian41.setIcon)(newerBtn, "chevron-right");
     newerBtn.disabled = index <= 0;
     newerBtn.onclick = () => void this.stepTo(rows, index - 1);
     row.createSpan({ cls: "myu-whisper", text: total > 1 ? `${index + 1} of ${total}` : "the only canvas so far" });
-    const pin = row.createEl("button", { cls: `myu-affordance myu-icon-button myu-canvas-pin${this.pinned ? " myu-cta" : ""}`, attr: { "aria-label": this.pinned ? "Pinned: this canvas stays put. A newer one waits, and says so here." : "Following the newest: a new canvas takes this pane. Pin to hold this one." } });
-    (0, import_obsidian39.setIcon)(pin, this.pinned ? "pin" : "pin-off");
+    const pin = row.createEl("button", { cls: `myu-affordance myu-icon-button myu-canvas-pin${this.pinned ? " myu-cta" : ""}`, attr: { "aria-label": this.pinned ? "Pinned: this canvas stays open. When a newer one arrives, a link to it appears here." : "Following the newest: a new canvas replaces this one. Pin to keep this one open." } });
+    (0, import_obsidian41.setIcon)(pin, this.pinned ? "pin" : "pin-off");
     pin.onclick = () => {
       this.pinned = !this.pinned;
       if (!this.pinned) this.newer = null;
       this.render();
     };
-    head.createDiv({ cls: "myu-whisper", text: this.pinned ? "pinned \u2014 a newer canvas will wait for you" : "following the newest canvas" });
+    head.createDiv({ cls: "myu-whisper", text: this.pinned ? "Pinned. A newer canvas will not replace this one." : "Showing the newest canvas" });
     const back = head.createEl("button", { cls: "myu-affordance myu-link-button", text: "Show in the conversation" });
     back.onclick = () => {
       if (this.compositionId) void this.plugin.showCanvasInChat(this.compositionId);
@@ -16183,7 +21800,7 @@ var CanvasView = class extends import_obsidian39.ItemView {
 };
 
 // src/vault/ConversationWriter.ts
-var import_obsidian40 = require("obsidian");
+var import_obsidian42 = require("obsidian");
 var ConversationWriter = class {
   constructor(app) {
     this.app = app;
@@ -16207,9 +21824,9 @@ var ConversationWriter = class {
       if (!this.app.vault.getAbstractFileByPath("Myu/Conversations")) {
         await this.app.vault.createFolder("Myu/Conversations");
       }
-      let path = (0, import_obsidian40.normalizePath)(`Myu/Conversations/${date} ${slug}.md`);
+      let path = (0, import_obsidian42.normalizePath)(`Myu/Conversations/${date} ${slug}.md`);
       for (let i = 2; this.app.vault.getAbstractFileByPath(path); i++) {
-        path = (0, import_obsidian40.normalizePath)(`Myu/Conversations/${date} ${slug} ${i}.md`);
+        path = (0, import_obsidian42.normalizePath)(`Myu/Conversations/${date} ${slug} ${i}.md`);
       }
       const head = ["---", "myu-generated: true", ...opts.journalId ? [`myu-journal-id: ${opts.journalId}`] : [], `date: ${date}`, "---"];
       await this.app.vault.create(path, [...head, "", lines, ""].join("\n"));
@@ -16223,8 +21840,11 @@ function renderConversation(turns) {
   const parts = [];
   for (const turn of turns) {
     const text = turn.text ?? (turn.blocks ?? []).map((b) => b.text ?? (b.type === "composition_offer" ? offerLine(b.composition_id, b.summary_text) : "")).filter(Boolean).join("\n\n");
-    if (!text) continue;
-    parts.push(`**${turn.role === "user" ? "You" : "Myu"}:** ${text}`);
+    const pasted = turn.role === "user" ? turn.pasted ?? [] : [];
+    if (!text && pasted.length === 0) continue;
+    const speaker = `**${turn.role === "user" ? "You" : "Myu"}:**`;
+    parts.push(text ? `${speaker} ${text}` : speaker);
+    pasted.forEach((block, i) => parts.push(pastedCallout(block, pasted.length > 1 ? i + 1 : void 0)));
     if (turn.references?.length) {
       parts.push(turn.references.map((r) => `> [${r.id}] ${r.url ? `[${r.title || r.url}](${r.url})` : r.title ?? "source"}`).join("\n"));
     }
@@ -16242,7 +21862,7 @@ function slugFrom(turns) {
 }
 
 // src/vault/ExportService.ts
-var import_obsidian41 = require("obsidian");
+var import_obsidian43 = require("obsidian");
 var ExportService = class {
   constructor(app, plugin) {
     this.app = app;
@@ -16270,7 +21890,7 @@ var ExportService = class {
         continue;
       }
       try {
-        const turns = await loadConversation(deps, head.journalId, { day: head.day, preview: head.preview });
+        const turns = await loadConversation(deps, head.journalId, { day: head.day, preview: head.preview, ...head.pasted ? { pasted: head.pasted } : {} });
         const outcome = await this.plugin.conversationWriter.write(turns, { journalId: head.journalId, date: head.day || date });
         if (outcome.status === "written") conversations.saved++;
         else if (outcome.status === "error") conversations.failed++;
@@ -16308,10 +21928,10 @@ var ExportService = class {
         "**Today / Week** \u2192 `Myu/Today.md`, `Myu/Week.md`"
       ]
     };
-    const path = (0, import_obsidian41.normalizePath)("Myu/Export.md");
+    const path = (0, import_obsidian43.normalizePath)("Myu/Export.md");
     const existing = this.app.vault.getAbstractFileByPath(path);
     const md = buildExportManifest(summary);
-    if (existing instanceof import_obsidian41.TFile) await this.app.vault.process(existing, () => md);
+    if (existing instanceof import_obsidian43.TFile) await this.app.vault.process(existing, () => md);
     else await this.app.vault.create(path, md);
     progress("");
     return summary;
@@ -16319,8 +21939,8 @@ var ExportService = class {
 };
 
 // src/views/DataExportModal.ts
-var import_obsidian42 = require("obsidian");
-var DataExportModal = class extends import_obsidian42.Modal {
+var import_obsidian44 = require("obsidian");
+var DataExportModal = class extends import_obsidian44.Modal {
   constructor(app, plugin) {
     super(app);
     this.plugin = plugin;
@@ -16341,7 +21961,7 @@ var DataExportModal = class extends import_obsidian42.Modal {
       contentEl.createEl("p", { cls: "myu-prose", text: "Save this passphrase. It unlocks the zip, it is shown only once, and it is never stored \u2014 not here, not on the server." });
       const box = contentEl.createDiv({ cls: "myu-code myu-passphrase" });
       for (const word of this.passphrase.split(/\s+/)) box.createSpan({ cls: "myu-passphrase-word", text: word });
-      new import_obsidian42.Setting(contentEl).addButton((b) => b.setButtonText("Copy passphrase").setCta().onClick(async () => {
+      new import_obsidian44.Setting(contentEl).addButton((b) => b.setButtonText("Copy passphrase").setCta().onClick(async () => {
         try {
           await navigator.clipboard.writeText(this.passphrase ?? "");
           b.setButtonText("Copied");
@@ -16354,7 +21974,7 @@ var DataExportModal = class extends import_obsidian42.Modal {
     contentEl.createEl("p", { cls: "myu-prose", text: "Everything the server holds about you \u2014 journal, people, memories, meetings, commitments, account details \u2014 as one encrypted zip." });
     contentEl.createEl("p", { cls: "myu-prose myu-quiet", text: "The link is emailed when the archive is ready. You will get a passphrase that unlocks it; it is shown once. One request per day." });
     if (this.problem) contentEl.createDiv({ cls: "myu-problem", text: this.problem });
-    new import_obsidian42.Setting(contentEl).addButton((b) => b.setButtonText("Not now").onClick(() => this.close())).addButton((b) => b.setButtonText(this.busy ? "Requesting\u2026" : "Request my archive").setCta().setDisabled(this.busy).onClick(() => void this.request()));
+    new import_obsidian44.Setting(contentEl).addButton((b) => b.setButtonText("Not now").onClick(() => this.close())).addButton((b) => b.setButtonText(this.busy ? "Requesting\u2026" : "Request my archive").setCta().setDisabled(this.busy).onClick(() => void this.request()));
   }
   async request() {
     this.busy = true;
@@ -16377,9 +21997,132 @@ var DataExportModal = class extends import_obsidian42.Modal {
 };
 
 // src/views/FeedbackModal.ts
-var import_obsidian43 = require("obsidian");
+var import_obsidian45 = require("obsidian");
+
+// src/feedbackFiles.ts
+var FEEDBACK_FILE_MAX_BYTES = 10 * 1024 * 1024;
+var FEEDBACK_FILES_TOTAL_MAX_BYTES = 15 * 1024 * 1024;
+var FEEDBACK_FILES_MAX = 5;
+var FEEDBACK_FILE_WORDS = {
+  addFile: "Add a file",
+  /** The chip before the picture is taken, and the preview's name after. */
+  pagePicture: "Picture of this page",
+  takingPicture: "Taking the picture\u2026",
+  takeAgain: "Take it again",
+  remove: "Remove",
+  removeFile: (name) => `Remove ${name}`,
+  /** Under the attach row. */
+  caps: "Any file, up to 10 MB each and 15 MB in all.",
+  byEmail: "Everything you attach goes by email to feedback@askmyu.com.",
+  pictureFailed: "The picture didn\u2019t come out. Try again, or send without it.",
+  /** The message went; the server took no files (one from before files). */
+  filesNotTaken: "Your message was sent, but the files didn\u2019t go through.",
+  /** 413 from the server. */
+  tooBigToSend: "That\u2019s too much to send at once. Try fewer or smaller files.",
+  /** A kept file that could not be read as the report went: named, and left out. */
+  couldNotRead: (names) => {
+    const list2 = names.length <= 2 ? names.join(" and ") : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+    return `Couldn\u2019t read ${list2}, so ${names.length === 1 ? "it isn\u2019t" : "they aren\u2019t"} going.`;
+  }
+};
+var MB = 1024 * 1024;
+var mb = (bytes) => `${Math.round(bytes / MB)} MB`;
+function fileSizeWords(bytes) {
+  if (!Number.isFinite(bytes) || bytes < 0) return "";
+  if (bytes >= MB) return `${(bytes / MB).toFixed(1).replace(/\.0$/, "")} MB`;
+  if (bytes >= 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${bytes} byte${bytes === 1 ? "" : "s"}`;
+}
+var BY_EXTENSION = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  gif: "image/gif",
+  webp: "image/webp",
+  heic: "image/heic",
+  svg: "image/svg+xml",
+  pdf: "application/pdf",
+  txt: "text/plain",
+  md: "text/markdown",
+  csv: "text/csv",
+  json: "application/json",
+  log: "text/plain",
+  zip: "application/zip",
+  mp4: "video/mp4",
+  mov: "video/quicktime",
+  m4a: "audio/mp4",
+  mp3: "audio/mpeg",
+  wav: "audio/wav",
+  doc: "application/msword",
+  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  xls: "application/vnd.ms-excel",
+  xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  ppt: "application/vnd.ms-powerpoint",
+  pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+};
+function contentTypeOf(name, type) {
+  if (type && type.trim()) return type.trim();
+  const ext = (name.split(".").pop() ?? "").toLowerCase();
+  return ext && ext !== name.toLowerCase() && BY_EXTENSION[ext] || "application/octet-stream";
+}
+function takeFiles(have, picked) {
+  const taken = [];
+  const refused = [];
+  let count2 = have.length;
+  let total = have.reduce((n, f) => n + Math.max(0, f.size || 0), 0);
+  for (const f of picked) {
+    const size = Math.max(0, f.size || 0);
+    if ([...have, ...taken].some((h) => h.name === f.name && h.size === f.size)) refused.push({ file: f, why: "already" });
+    else if (size > FEEDBACK_FILE_MAX_BYTES) refused.push({ file: f, why: "too_big" });
+    else if (count2 >= FEEDBACK_FILES_MAX) refused.push({ file: f, why: "too_many" });
+    else if (total + size > FEEDBACK_FILES_TOTAL_MAX_BYTES) refused.push({ file: f, why: "too_much" });
+    else {
+      taken.push(f);
+      count2 += 1;
+      total += size;
+    }
+  }
+  return { taken, refused };
+}
+function fileRefusalWords(refused) {
+  const names = (why) => refused.filter((r) => r.why === why).map((r) => r.file.name);
+  const list2 = (ns) => ns.length <= 2 ? ns.join(" and ") : `${ns.slice(0, -1).join(", ")} and ${ns[ns.length - 1]}`;
+  const out = [];
+  const big = names("too_big");
+  if (big.length) out.push(`${list2(big)} ${big.length === 1 ? "is" : "are"} over ${mb(FEEDBACK_FILE_MAX_BYTES)}, so ${big.length === 1 ? "it" : "they"} can\u2019t go.`);
+  const much = names("too_much");
+  if (much.length) out.push(`Files can be ${mb(FEEDBACK_FILES_TOTAL_MAX_BYTES)} in all, so ${list2(much)} didn\u2019t fit.`);
+  const many = names("too_many");
+  if (many.length) out.push(`Up to ${FEEDBACK_FILES_MAX} files, so ${list2(many)} ${many.length === 1 ? "was" : "were"} left out.`);
+  const already = names("already");
+  if (already.length) out.push(`${list2(already)} ${already.length === 1 ? "is" : "are"} already on it.`);
+  return out;
+}
+function filesAttached(body) {
+  const n = body && typeof body === "object" ? body.files_attached : void 0;
+  return typeof n === "number" && Number.isFinite(n) && n >= 0 ? n : null;
+}
+function filesWentThrough(sent, body) {
+  if (sent <= 0) return true;
+  const n = filesAttached(body);
+  return n !== null && n >= sent;
+}
+
+// src/views/FeedbackModal.ts
 var CATEGORIES = [["general", "General"], ["bug", "Something broke"], ["feature", "An idea"]];
-var FeedbackModal = class extends import_obsidian43.Modal {
+function readFileBase64(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onerror = () => reject(r.error ?? new Error("read failed"));
+    r.onload = () => {
+      const s2 = typeof r.result === "string" ? r.result : "";
+      const comma = s2.indexOf(",");
+      resolve(comma >= 0 ? s2.slice(comma + 1) : s2);
+    };
+    r.readAsDataURL(file);
+  });
+}
+var FeedbackModal = class extends import_obsidian45.Modal {
   constructor(app, plugin) {
     super(app);
     this.plugin = plugin;
@@ -16387,6 +22130,10 @@ var FeedbackModal = class extends import_obsidian43.Modal {
     this.message = "";
     this.problem = null;
     this.busy = false;
+    this.files = [];
+    /** The last pick's refusals, in words, under the list until the next pick. */
+    this.refusals = [];
+    this.filesEl = null;
   }
   onOpen() {
     this.render();
@@ -16396,8 +22143,8 @@ var FeedbackModal = class extends import_obsidian43.Modal {
     contentEl.empty();
     contentEl.addClass("myu-power-down");
     contentEl.createEl("h2", { text: "Send feedback to askMyu" });
-    contentEl.createEl("p", { cls: "myu-prose myu-quiet", text: "Goes to the team by email, with the plugin build number. Nothing from your vault is attached." });
-    new import_obsidian43.Setting(contentEl).setName("About").addDropdown((d) => {
+    contentEl.createEl("p", { cls: "myu-prose myu-quiet", text: "Goes to the team by email, with the plugin build number. Nothing from your vault is attached unless you add a file." });
+    new import_obsidian45.Setting(contentEl).setName("About").addDropdown((d) => {
       for (const [id, label] of CATEGORIES) d.addOption(id, label);
       d.setValue(this.category).onChange((v) => {
         this.category = v;
@@ -16408,26 +22155,89 @@ var FeedbackModal = class extends import_obsidian43.Modal {
     box.oninput = () => {
       this.message = box.value;
     };
+    this.filesEl = contentEl.createDiv({ cls: "myu-fb-files" });
+    this.paintFiles();
     if (this.problem) contentEl.createDiv({ cls: "myu-problem", text: this.problem });
-    new import_obsidian43.Setting(contentEl).addButton((b) => b.setButtonText("Not now").onClick(() => this.close())).addButton((b) => b.setButtonText(this.busy ? "Sending\u2026" : "Send").setCta().setDisabled(this.busy).onClick(() => void this.send()));
+    new import_obsidian45.Setting(contentEl).addButton((b) => b.setButtonText("Not now").onClick(() => this.close())).addButton((b) => b.setButtonText(this.busy ? "Sending\u2026" : "Send").setCta().setDisabled(this.busy).onClick(() => void this.send()));
+  }
+  /**
+   * The files block alone: each kept file with its size and its remove button, "Add a file", the caps, and the
+   * last pick's refusals. Drawn on its own so a pick never redraws the message box under the person's caret.
+   */
+  paintFiles() {
+    const el = this.filesEl;
+    if (!el) return;
+    el.empty();
+    for (const f of this.files) {
+      const row = el.createDiv({ cls: "myu-fb-file" });
+      row.createSpan({ cls: "myu-fb-file-name", text: f.name });
+      row.createSpan({ cls: "myu-fb-file-size", text: `\xB7 ${fileSizeWords(f.size)}` });
+      const remove = row.createEl("button", { cls: "myu-fb-file-remove", text: "\xD7", attr: { "aria-label": FEEDBACK_FILE_WORDS.removeFile(f.name) } });
+      remove.disabled = this.busy;
+      remove.onclick = () => this.removeFile(f);
+    }
+    const add2 = el.createEl("button", { cls: "myu-fb-add", text: FEEDBACK_FILE_WORDS.addFile });
+    add2.disabled = this.busy;
+    add2.onclick = () => this.pick();
+    el.createEl("p", { cls: "myu-prose myu-quiet", text: `${FEEDBACK_FILE_WORDS.caps} ${FEEDBACK_FILE_WORDS.byEmail}` });
+    for (const line of this.refusals) el.createEl("p", { cls: "myu-prose myu-quiet myu-fb-refused", text: line });
+  }
+  /** The computer's own picker, several files at a time, through an input that is never shown. */
+  pick() {
+    const input = this.contentEl.createEl("input", { type: "file", cls: "myu-fb-file-input", attr: { tabindex: "-1", "aria-hidden": "true" } });
+    input.multiple = true;
+    input.addEventListener("change", () => {
+      this.addPicked(Array.from(input.files ?? []));
+      input.remove();
+    });
+    input.addEventListener("cancel", () => input.remove());
+    input.click();
+  }
+  /** The files just picked: the ones that can go join the list, in the order picked; the others are said. */
+  addPicked(picked) {
+    const { taken, refused } = takeFiles(this.files, picked.map((file) => ({ file, name: file.name || "file", size: file.size, type: file.type || null })));
+    this.files = [...this.files, ...taken];
+    this.refusals = fileRefusalWords(refused);
+    this.paintFiles();
+  }
+  removeFile(f) {
+    this.files = this.files.filter((k) => k !== f);
+    this.refusals = [];
+    this.paintFiles();
+  }
+  /** The kept files as they go on the wire, and the names of those that would not read (left out). */
+  async readFiles() {
+    const files = [];
+    const unread = [];
+    for (const f of this.files) {
+      try {
+        files.push({ name: f.name, content_type: contentTypeOf(f.name, f.type), size_bytes: f.size, base64: await readFileBase64(f.file) });
+      } catch {
+        unread.push(f.name);
+      }
+    }
+    return { files, unread };
   }
   async send() {
     if (!this.message.trim()) {
-      this.problem = "Say something first.";
+      this.problem = "Write something first.";
       this.render();
       return;
     }
     this.busy = true;
     this.problem = null;
     this.render();
-    const res = await this.plugin.sendFeedback({ message: this.message.trim(), category: this.category, surface: "feedback_modal" }).catch(() => null);
+    const { files, unread } = await this.readFiles();
+    const res = await this.plugin.sendFeedback({ message: this.message.trim(), category: this.category, surface: "feedback_modal", ...files.length ? { attachments: { files } } : {} }).catch(() => null);
     this.busy = false;
     if (res?.ok) {
-      notifyStatus("Thank you \u2014 sent.");
+      if (filesWentThrough(files.length, res.data)) notifyStatus("Thank you \u2014 sent.");
+      else notifyError(FEEDBACK_FILE_WORDS.filesNotTaken);
+      if (unread.length) notifyError(FEEDBACK_FILE_WORDS.couldNotRead(unread));
       this.close();
       return;
     }
-    this.problem = res?.data?.error === "Rate limit exceeded" ? `Too many in a row \u2014 try again in ${res.data.retry_after_minutes ?? 60} minutes.` : res?.error || "Could not send right now.";
+    this.problem = res?.status === 413 || res?.error === "attachment_too_large" ? FEEDBACK_FILE_WORDS.tooBigToSend : res?.data?.error === "Rate limit exceeded" ? `Too many messages in a row. Try again in ${res.data.retry_after_minutes ?? 60} minutes.` : res?.error || "Could not send right now.";
     this.render();
   }
   onClose() {
@@ -16436,7 +22246,7 @@ var FeedbackModal = class extends import_obsidian43.Modal {
 };
 
 // src/vault/removeEverything.ts
-var import_obsidian44 = require("obsidian");
+var import_obsidian46 = require("obsidian");
 function findEverythingMyuWrote(app, registryPaths) {
   const seen = /* @__PURE__ */ new Map();
   let byFrontmatter = 0;
@@ -16450,7 +22260,7 @@ function findEverythingMyuWrote(app, registryPaths) {
   let byRegistry = 0;
   for (const path of registryPaths) {
     const f = app.vault.getAbstractFileByPath(path);
-    if (f instanceof import_obsidian44.TFile && !seen.has(f.path)) {
+    if (f instanceof import_obsidian46.TFile && !seen.has(f.path)) {
       seen.set(f.path, f);
       byRegistry++;
     }
@@ -16470,8 +22280,8 @@ async function trashEverythingMyuWrote(app, files) {
 }
 
 // src/views/FeedSearchModal.ts
-var import_obsidian45 = require("obsidian");
-var FeedSearchModal = class extends import_obsidian45.SuggestModal {
+var import_obsidian47 = require("obsidian");
+var FeedSearchModal = class extends import_obsidian47.SuggestModal {
   constructor(app, plugin) {
     super(app);
     this.plugin = plugin;
@@ -16487,7 +22297,7 @@ var FeedSearchModal = class extends import_obsidian45.SuggestModal {
     if (mine !== this.seq) return [];
     const r = res?.data?.results;
     if (!res?.ok || !r) {
-      this.emptyStateText = "Search is not answering right now.";
+      this.emptyStateText = "Search is not available right now.";
       return [];
     }
     const card = (kind) => (c) => c.entity_id ? { kind, id: c.entity_id, title: c.header?.display_name || "Unnamed", subtitle: c.header?.subtitle } : null;
@@ -16511,9 +22321,9 @@ var FeedSearchModal = class extends import_obsidian45.SuggestModal {
 };
 
 // src/views/HelpMyuView.ts
-var import_obsidian46 = require("obsidian");
+var import_obsidian48 = require("obsidian");
 var HELP_VIEW_TYPE = "askmyu-help";
-var HelpMyuView = class extends import_obsidian46.ItemView {
+var HelpMyuView = class extends import_obsidian48.ItemView {
   constructor(leaf, plugin) {
     super(leaf);
     this.plugin = plugin;
@@ -16544,16 +22354,16 @@ var HelpMyuView = class extends import_obsidian46.ItemView {
     root.empty();
     const top = root.createDiv({ cls: "myu-sync-bar" });
     const again = top.createEl("button", { cls: "myu-affordance myu-icon-button", attr: { "aria-label": "Check again" } });
-    (0, import_obsidian46.setIcon)(again, "refresh-cw");
+    (0, import_obsidian48.setIcon)(again, "refresh-cw");
     again.onclick = () => void this.refresh();
-    top.createSpan({ cls: "myu-whisper", text: this.loading ? "looking" : "people Myu cannot place" });
+    top.createSpan({ cls: "myu-whisper", text: this.loading ? "looking" : "people Myu cannot identify" });
     if (this.plugin.unlock.current !== "unlocked") {
       root.createEl("p", { cls: "myu-quiet", text: "Sign in to see who Myu needs help with." });
       return;
     }
     const items = this.plugin.helpQueue;
     if (!this.loading && items.length === 0) {
-      root.createEl("p", { cls: "myu-quiet", text: "Nothing needs you right now." });
+      root.createEl("p", { cls: "myu-quiet", text: "Nothing needs your attention right now." });
       return;
     }
     for (const item of items) {
@@ -16566,7 +22376,7 @@ var HelpMyuView = class extends import_obsidian46.ItemView {
           matches.empty();
           const sugs = suggestionsOf(res.data?.suggestions);
           if (!res.ok) {
-            matches.createDiv({ cls: "myu-quiet", text: "Could not fetch the matches." });
+            matches.createDiv({ cls: "myu-quiet", text: "Could not load the matches." });
             return;
           }
           renderLinkedInMatches(matches, sugs, { app: this.app, owner: this, plugin: this.plugin, relationshipId: item.relationship_id, personName: item.display_name, onResolved: () => void this.refresh() });
@@ -16574,10 +22384,10 @@ var HelpMyuView = class extends import_obsidian46.ItemView {
           open.onclick = () => void this.plugin.openCard("person", item.relationship_id, item.display_name);
         }).catch(() => {
           matches.empty();
-          matches.createDiv({ cls: "myu-quiet", text: "Could not fetch the matches." });
+          matches.createDiv({ cls: "myu-quiet", text: "Could not load the matches." });
         });
       } else {
-        row.createDiv({ cls: "myu-claim", text: `${item.source.display_name} and ${item.target.display_name} \u2014 the same person?` });
+        row.createDiv({ cls: "myu-claim", text: `Are ${item.source.display_name} and ${item.target.display_name} the same person?` });
         const why = [item.reason, item.target.subtitle].filter(Boolean).join(" \xB7 ");
         if (why) row.createDiv({ cls: "myu-quiet", text: why });
         const actions = row.createDiv({ cls: "myu-canvas-actions" });
@@ -16600,7 +22410,7 @@ var HelpMyuView = class extends import_obsidian46.ItemView {
 };
 
 // src/views/WeaveView.ts
-var import_obsidian47 = require("obsidian");
+var import_obsidian49 = require("obsidian");
 
 // src/vault/weaveRecipes.ts
 var WEAVE_NOTE = "Weave Myu in.md";
@@ -16615,10 +22425,10 @@ function weaveSnippets(folder) {
       lang: "markdown"
     },
     { id: "today", name: "The brief in your daily note", desc: "Add to your daily-note template; every daily note carries the morning brief.", text: `![[${f}/Today]]`, lang: "markdown" },
-    { id: "week", name: "The week, embedded", desc: "Same idea for your weekly note.", text: `![[${f}/Week]]`, lang: "markdown" },
+    { id: "week", name: "The week in your weekly note", desc: "Add to your weekly-note template.", text: `![[${f}/Week]]`, lang: "markdown" },
     { id: "tasks", name: "Myu commitments in a Tasks query", desc: "Anywhere you keep a Tasks block.", text: "```tasks\nnot done\npath includes " + f + "\n```", lang: "markdown" },
     { id: "uri", name: "A button to today", desc: "Works from any note, QuickAdd macro, or launcher.", text: "obsidian://myu", lang: "text" },
-    { id: "people-base", name: "The people table, inside any note", desc: "Bases embed \u2014 the live CRM table lands wherever you paste this.", text: `![[${f}/People.base]]`, lang: "markdown" },
+    { id: "people-base", name: "The people table, inside any note", desc: "A Bases embed. The live people table appears wherever you paste this.", text: `![[${f}/People.base]]`, lang: "markdown" },
     {
       id: "people-dataview",
       name: "Your people as a Dataview table",
@@ -16636,14 +22446,14 @@ ${text}
 ${ticks}`;
 }
 function weaveGuide(folder, opts = {}) {
-  const head = opts.asNote ? "---\nmyu-generated: true\n---\n\n" : "# Weave Myu in\n\n";
-  const intro = "Myu never edits your files. These are for you to paste into the things you already own \u2014 a daily-note template, a weekly note, a Tasks block, a launcher. Each block has a copy button; the command *Insert a Myu snippet\u2026* puts one at the cursor.";
+  const head = opts.asNote ? "---\nmyu-generated: true\n---\n\n" : "# Add Myu to your notes\n\n";
+  const intro = "Myu never edits your files. These snippets are for you to paste into notes you already own: a daily-note template, a weekly note, a Tasks block, a launcher. Each block has a copy button, and the command *Insert a Myu snippet\u2026* inserts one at the cursor.";
   const body = weaveSnippets(folder).map((s2) => `## ${s2.name}
 
 ${s2.desc}
 
 ${fence(s2.text, s2.lang)}`).join("\n\n");
-  const api = "## For scripts\n\n`app.plugins.plugins.askmyu.api` \u2014 `getBrief()`, `getPrep(id)`, `getPersonCard(name)`, `getWeeklyReview()`. Read-only; every call resolves null while the vault is locked, so a template never triggers a ceremony.";
+  const api = "## For scripts\n\n`app.plugins.plugins.askmyu.api` \u2014 `getBrief()`, `getPrep(id)`, `getPersonCard(name)`, `getWeeklyReview()`. Read-only. Every call returns null while the vault is locked, so a template never triggers a sign-in.";
   return `${head}${intro}
 
 ${body}
@@ -16654,7 +22464,7 @@ ${api}
 
 // src/views/WeaveView.ts
 var WEAVE_VIEW_TYPE = "askmyu-weave";
-var WeaveView = class extends import_obsidian47.ItemView {
+var WeaveView = class extends import_obsidian49.ItemView {
   constructor(leaf, plugin) {
     super(leaf);
     this.plugin = plugin;
@@ -16663,7 +22473,7 @@ var WeaveView = class extends import_obsidian47.ItemView {
     return WEAVE_VIEW_TYPE;
   }
   getDisplayText() {
-    return "Myu \u2014 weave Myu in";
+    return "Myu \u2014 add Myu to your notes";
   }
   getIcon() {
     return "puzzle";
@@ -16679,19 +22489,19 @@ var WeaveView = class extends import_obsidian47.ItemView {
     const folder = (s2.materialize_folder || "Myu").replace(/\/+$/, "");
     if (s2.materialize_consented && s2.materialize_enabled) {
       const top = root.createDiv({ cls: "myu-sync-bar" });
-      const keep = top.createEl("button", { cls: "myu-affordance", text: `Keep a copy in ${folder}/` });
+      const keep = top.createEl("button", { cls: "myu-affordance", text: `Save a copy in ${folder}/` });
       keep.onclick = async () => {
         const path = await this.plugin.materializer.writeGuide(weaveGuide(folder, { asNote: true }));
         if (path) {
           notifyStatus(`Saved \u2014 ${path}.`);
           void this.plugin.app.workspace.openLinkText(path, "", true);
         } else {
-          notifyError("Could not write the note \u2014 it may carry your own edits, which Myu will not overwrite.");
+          notifyError("Could not write the note. It may contain your own edits, and Myu will not overwrite them.");
         }
       };
     }
     const body = root.createDiv({ cls: "markdown-rendered myu-voice myu-weave-body" });
-    await import_obsidian47.MarkdownRenderer.render(this.plugin.app, weaveGuide(folder), body, "", this);
+    await import_obsidian49.MarkdownRenderer.render(this.plugin.app, weaveGuide(folder), body, "", this);
     addCopyButtons(body);
   }
 };
@@ -16784,8 +22594,8 @@ var LookInstaller = class {
 };
 
 // src/views/WeaveSnippetModal.ts
-var import_obsidian48 = require("obsidian");
-var WeaveSnippetModal = class extends import_obsidian48.FuzzySuggestModal {
+var import_obsidian50 = require("obsidian");
+var WeaveSnippetModal = class extends import_obsidian50.FuzzySuggestModal {
   constructor(app, folder, onPick) {
     super(app);
     this.folder = folder;
@@ -16808,13 +22618,13 @@ var WeaveSnippetModal = class extends import_obsidian48.FuzzySuggestModal {
 };
 
 // src/views/DriveImportModal.ts
-var import_obsidian49 = require("obsidian");
+var import_obsidian51 = require("obsidian");
 var FILE_ID_RE = /\/d\/([A-Za-z0-9_-]{10,})|[?&]id=([A-Za-z0-9_-]{10,})|^([A-Za-z0-9_-]{20,})$/;
 function driveFileId(input) {
   const m = FILE_ID_RE.exec(input.trim());
   return m ? m[1] || m[2] || m[3] || null : null;
 }
-var DriveImportModal = class extends import_obsidian49.Modal {
+var DriveImportModal = class extends import_obsidian51.Modal {
   constructor(app, plugin) {
     super(app);
     this.plugin = plugin;
@@ -16826,7 +22636,7 @@ var DriveImportModal = class extends import_obsidian49.Modal {
     this.render();
     const res = await this.plugin.backend.getDriveSuggestions(10).catch(() => null);
     this.suggestions = res?.ok ? res.data?.suggestions ?? [] : [];
-    if (!res?.ok) this.problem = "Could not look at Drive right now.";
+    if (!res?.ok) this.problem = "Could not reach Google Drive right now.";
     this.render();
   }
   render() {
@@ -16834,12 +22644,12 @@ var DriveImportModal = class extends import_obsidian49.Modal {
     contentEl.empty();
     contentEl.addClass("myu-power-down");
     contentEl.createEl("h2", { text: "Meeting notes on Google Drive" });
-    contentEl.createEl("p", { cls: "myu-prose myu-quiet", text: "Docs beside your email that look like meeting notes. Importing makes a meeting Myu understands, like a note in your meetings folder." });
+    contentEl.createEl("p", { cls: "myu-prose myu-quiet", text: "Documents in your Google Drive, linked from your email, that look like meeting notes. Importing one adds it as a meeting Myu knows about, like a note in your meetings folder." });
     if (this.problem) contentEl.createDiv({ cls: "myu-problem", text: this.problem });
     if (this.suggestions === null) contentEl.createEl("p", { cls: "myu-quiet myu-thinking", text: "Looking" });
     else if (this.suggestions.length === 0) contentEl.createEl("p", { cls: "myu-quiet", text: "Nothing suggested right now." });
     for (const s2 of this.suggestions ?? []) {
-      const row = new import_obsidian49.Setting(contentEl).setName(s2.source_email_subject || s2.file_id).setDesc([s2.source_email_sender, s2.source_email_date, s2.meeting_signals?.join(", ")].filter(Boolean).join(" \xB7 "));
+      const row = new import_obsidian51.Setting(contentEl).setName(s2.source_email_subject || s2.file_id).setDesc([s2.source_email_sender, s2.source_email_date, s2.meeting_signals?.join(", ")].filter(Boolean).join(" \xB7 "));
       row.addButton((b) => b.setButtonText("Import").setCta().onClick(() => void this.importIds([s2.file_id], s2.id)));
       row.addButton((b) => b.setButtonText("Dismiss").onClick(async () => {
         await this.plugin.backend.dismissDriveSuggestion(s2.id).catch(() => void 0);
@@ -16847,7 +22657,7 @@ var DriveImportModal = class extends import_obsidian49.Modal {
         this.render();
       }));
     }
-    new import_obsidian49.Setting(contentEl).setName("Or paste a Google Doc link").addText((t) => t.setPlaceholder("https://docs.google.com/document/d/\u2026").setValue(this.pasted).onChange((v) => {
+    new import_obsidian51.Setting(contentEl).setName("Or paste a Google Doc link").addText((t) => t.setPlaceholder("https://docs.google.com/document/d/\u2026").setValue(this.pasted).onChange((v) => {
       this.pasted = v;
     })).addButton((b) => b.setButtonText("Import").onClick(() => {
       const id = driveFileId(this.pasted);
@@ -16940,8 +22750,8 @@ function revealSetting(container, name, schedule = (fn, ms) => window.setTimeout
 }
 
 // src/views/ConversationSaveModal.ts
-var import_obsidian50 = require("obsidian");
-var ConversationSaveModal = class extends import_obsidian50.Modal {
+var import_obsidian52 = require("obsidian");
+var ConversationSaveModal = class extends import_obsidian52.Modal {
   constructor(app, onConfirm) {
     super(app);
     this.onConfirm = onConfirm;
@@ -16949,12 +22759,12 @@ var ConversationSaveModal = class extends import_obsidian50.Modal {
   onOpen() {
     const { contentEl } = this;
     contentEl.addClass("myu-power-down");
-    contentEl.createEl("h2", { text: "Save this conversation into your vault?" });
+    contentEl.createEl("h2", { text: "Save this conversation to your vault?" });
     contentEl.createEl("p", {
       cls: "myu-prose",
-      text: "It becomes a note in Myu/Conversations/ \u2014 Myu's words about you and the people you discussed, in a file that syncs wherever your vault syncs and stays after Myu forgets. Saving is always per-conversation; nothing saves itself."
+      text: "It is saved as a note in Myu/Conversations/. The note includes what Myu said about you and the people you discussed. It syncs wherever your vault syncs, and Myu cannot delete it later. Conversations are only saved when you choose to save them."
     });
-    new import_obsidian50.Setting(contentEl).addButton((b) => b.setButtonText("Not now").onClick(() => this.close())).addButton(
+    new import_obsidian52.Setting(contentEl).addButton((b) => b.setButtonText("Not now").onClick(() => this.close())).addButton(
       (b) => b.setButtonText("Save it").setCta().onClick(() => {
         this.close();
         void this.onConfirm();
@@ -16967,7 +22777,7 @@ var ConversationSaveModal = class extends import_obsidian50.Modal {
 };
 
 // src/vault/MaterializationService.ts
-var import_obsidian51 = require("obsidian");
+var import_obsidian53 = require("obsidian");
 var PEOPLE_SWEEP_MS = 24 * 60 * 60 * 1e3;
 var HISTORY_SWEEP_MS = 30 * 60 * 1e3;
 var PACE_MS = 500;
@@ -16994,6 +22804,22 @@ var MaterializationService = class {
   get folder() {
     return this.deps.settings().materialize_folder.replace(/\/+$/, "") || "Myu";
   }
+  /**
+   * Me.md's card (2026-10-05): the whole card (the deep dive: the read in full, every section, and — since the server
+   * sends them there too — the tiles and the pressing item). A deep card with no tiles is an older server's: the read
+   * card fills them in (`withReadExtras`). `readCard`: the read card already in hand (the changes feed's). Null when no
+   * card came back.
+   */
+  async selfCardForVault(readCard) {
+    const api = this.deps.api();
+    const get = (level) => Promise.resolve().then(() => api.getSelfCard(level)).catch(() => null);
+    const deep = await get("deep_dive");
+    const whole = deep?.ok ? deep.data?.card ?? null : null;
+    if (whole && whole.tiles != null) return whole;
+    const read = readCard ? null : await get("read");
+    const small = readCard ?? (read?.ok ? read.data?.card ?? null : null);
+    return whole ? withReadExtras(whole, small) : small;
+  }
   enabled() {
     const s2 = this.deps.settings();
     return s2.materialize_consented && s2.materialize_enabled && this.deps.canRun();
@@ -17014,6 +22840,12 @@ var MaterializationService = class {
   }
   async sweep() {
     const s2 = this.deps.settings();
+    if (!s2.memories_by_day_local) {
+      s2.memories_by_day = {};
+      s2.myu_entity_changed_at = {};
+      s2.vault_changes_since = 0;
+      s2.memories_by_day_local = true;
+    }
     await this.writeBaseOnce();
     await this.refreshAmbient();
     if (this.deps.flags().vault_changes) {
@@ -17024,8 +22856,8 @@ var MaterializationService = class {
       this.deps.onProgress(null);
       return r;
     }
-    const selfCard = await this.deps.api().getSelfCard().catch(() => null);
-    await this.writeHeld(`${this.folder}/Me.md`, buildSelfMarkdown(selfCard?.data?.card ?? null));
+    const selfCard = await this.selfCardForVault();
+    if (selfCard) await this.writeHeld(`${this.folder}/Me.md`, buildSelfMarkdown(selfCard));
     let people = 0;
     let skipped = 0;
     if (s2.materialize_people) {
@@ -17070,7 +22902,7 @@ var MaterializationService = class {
     }
     const total = listed.data?.count ?? meetings.length;
     if (total > meetings.length) {
-      this.deps.onProgress(`Meeting history: ${meetings.length} of ${total} this pass \u2014 the rest follow on later passes`);
+      this.deps.onProgress(`Meeting history: ${meetings.length} of ${total} so far. The rest follow on later syncs`);
     }
   }
   /**
@@ -17087,7 +22919,7 @@ var MaterializationService = class {
     const when = whenDate ? whenDate.toISOString().slice(0, 10) : "";
     const name = sanitizeName(`${when ? `${when} ` : ""}${title}`.trim() || id);
     const path = `${this.folder}/Meetings/${name}.md`;
-    const exists = this.deps.app.vault.getAbstractFileByPath((0, import_obsidian51.normalizePath)(path)) !== null;
+    const exists = this.deps.app.vault.getAbstractFileByPath((0, import_obsidian53.normalizePath)(path)) !== null;
     if (exists && !fullRefresh) return;
     this.deps.onProgress(`Myu is writing your meeting history \u2014 ${i} of ${total} \xB7 ${title}`);
     await this.paced();
@@ -17136,9 +22968,24 @@ var MaterializationService = class {
     const s2 = this.deps.settings();
     const map = s2.memories_by_day;
     const cutoff = new Date(Date.now() - 90 * 864e5).toISOString().slice(0, 10);
+    const localDay = (ms) => {
+      const d = new Date(ms);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    };
     for (const m of memories) {
-      const day = String(m.created_at ?? "").slice(0, 10);
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || day < cutoff) continue;
+      const utcDay = String(m.created_at ?? "").slice(0, 10);
+      const was = map[utcDay];
+      if (was) {
+        const kept = was.filter((n) => n !== name);
+        if (kept.length) map[utcDay] = kept;
+        else delete map[utcDay];
+      }
+    }
+    for (const m of memories) {
+      const ms = cardStampMs(m.created_at);
+      if (ms == null) continue;
+      const day = localDay(ms);
+      if (day < cutoff) continue;
       const names = map[day] ?? [];
       if (!names.includes(name)) names.push(name);
       map[day] = names;
@@ -17251,7 +23098,8 @@ var MaterializationService = class {
     } else if (typeof entry.content === "string") {
       text = entry.content;
     }
-    if (!text.trim()) return null;
+    const pasted = readPastedBlocks(entry.pasted_blocks);
+    if (!text.trim() && pasted.length === 0) return null;
     const journalId = String(entry.journal_id ?? entry.id ?? "") || void 0;
     const recentCutoff = Date.now() - 7 * 864e5;
     let turns;
@@ -17270,7 +23118,8 @@ var MaterializationService = class {
             continue;
           }
         }
-        if (!content.trim()) continue;
+        const chatPasted = readPastedBlocks(chat.pasted_blocks);
+        if (!content.trim() && chatPasted.length === 0) continue;
         const isUser = String(chat.chatter_id ?? "") === accountId;
         if (!isUser && content.trim().startsWith("{")) {
           try {
@@ -17281,11 +23130,11 @@ var MaterializationService = class {
           } catch {
           }
         }
-        collected.push({ role: isUser ? "you" : "myu", text: content });
+        collected.push({ role: isUser ? "you" : "myu", text: content, ...chatPasted.length ? { pasted: chatPasted } : {} });
       }
       if (collected.length > 0) turns = collected;
     }
-    return { day, entry: { time, text, journalId, turns } };
+    return { day, entry: { time, text, journalId, turns, ...pasted.length ? { pasted } : {} } };
   }
   /** Myu/Companies/ — org pages with wikilinked people. Person-pass sibling. */
   async materializeCompanies() {
@@ -17321,6 +23170,7 @@ var MaterializationService = class {
     if (s2.materialize_today) {
       await this.writeToday();
       await this.writeWeek();
+      await this.writeMyuLog();
     }
     if (s2.materialize_commitments) {
       await this.writeCommitmentsRollup();
@@ -17368,11 +23218,13 @@ var MaterializationService = class {
   nameIsTaken(name, ownPath) {
     const dest = this.deps.app.metadataCache.getFirstLinkpathDest?.(name, "");
     if (!dest) return false;
-    return (0, import_obsidian51.normalizePath)(dest.path) !== (0, import_obsidian51.normalizePath)(ownPath);
+    return (0, import_obsidian53.normalizePath)(dest.path) !== (0, import_obsidian53.normalizePath)(ownPath);
   }
   async writePerson(entity, commitments, allDisplayNames = []) {
     await this.paced();
-    const cardRes = await this.deps.api().getCard("person", entity.entity_id);
+    const api = this.deps.api();
+    const deepRes = typeof api.getCardDeep === "function" ? await api.getCardDeep("person", entity.entity_id).catch(() => null) : null;
+    const cardRes = deepRes && deepRes.ok && deepRes.data?.card ? deepRes : await api.getCard("person", entity.entity_id);
     if (!cardRes.ok) return "error";
     return this.writePersonFromCard(entity, cardRes.data?.card ?? null, commitments, allDisplayNames);
   }
@@ -17397,7 +23249,8 @@ var MaterializationService = class {
       (id) => s2.myu_checkbox_state[id] ?? false,
       this.deps.findTheirPage(entity.display_name)?.replace(/\.md$/, "").split("/").pop() ?? null,
       memories,
-      aliases
+      aliases,
+      (s2.base_url ?? "https://myu.askmyu.com/api").replace(/\/api\/?$/, "")
     );
     const outcome = await this.writeHeld(path, md);
     if (outcome === "written") {
@@ -17452,7 +23305,8 @@ var MaterializationService = class {
       page++;
       if (serverTime === null && typeof d.server_time === "number") serverTime = d.server_time;
       if (page === 1 && d.self?.card) {
-        await this.writeHeld(`${this.folder}/Me.md`, buildSelfMarkdown(d.self.card));
+        const selfCard = await this.selfCardForVault(d.self.card);
+        await this.writeHeld(`${this.folder}/Me.md`, buildSelfMarkdown(selfCard ?? d.self.card));
       }
       if (s2.materialize_people) {
         for (const item of d.people ?? []) {
@@ -17549,12 +23403,31 @@ var MaterializationService = class {
     const res = await this.deps.api().getBrief();
     const brief = res.data?.brief;
     if (!brief) return;
-    const date = brief.date ?? (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
-    const sections = (brief.sections ?? []).map((section) => ({
-      title: section.title,
-      items: (section.items ?? []).map((i) => i.text ?? "").filter(Boolean)
-    }));
+    const now = /* @__PURE__ */ new Date();
+    const date = brief.date ?? `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    const sections = [];
+    const linesRes = await this.deps.api().getMyuLines("today").catch(() => null);
+    const lines = linesRes?.data?.lines ?? [];
+    if (lines.length > 0) {
+      const linesSection = buildTodayLinesSection(lines);
+      if (linesSection.items.length > 0) sections.push(linesSection);
+    }
+    for (const section of brief.sections ?? []) {
+      sections.push({
+        title: section.title,
+        items: (section.items ?? []).map((i) => i.text ?? "").filter(Boolean)
+      });
+    }
     await this.writeHeld(`${this.folder}/Today.md`, buildTodayMarkdown(date, sections));
+  }
+  /** Myu/Log/<day>.md — the Days log (slice 15). What Myu read/assumed/said/did/waited. */
+  async writeMyuLog() {
+    const day = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+    const since = `${day}T00:00:00Z`;
+    const res = await this.deps.api().getMyuLog({ since, limit: 100 }).catch(() => null);
+    if (!res?.ok) return;
+    const items = res.data?.items ?? [];
+    await this.writeHeld(`${this.folder}/Log/${day}.md`, buildMyuLogMarkdown(day, items));
   }
   async writeWeek() {
     const res = await this.deps.api().getWeeklyReview().catch(() => null);
@@ -17579,7 +23452,7 @@ var MaterializationService = class {
    * user-initiated removals, so it is recoverable).
    */
   async retirePersonNote(entityId) {
-    const folder = (0, import_obsidian51.normalizePath)(`${this.folder}/People`);
+    const folder = (0, import_obsidian53.normalizePath)(`${this.folder}/People`);
     for (const file of this.deps.app.vault.getMarkdownFiles()) {
       if (!file.path.startsWith(`${folder}/`)) continue;
       const fm = this.deps.app.metadataCache.getFileCache(file)?.frontmatter;
@@ -17596,7 +23469,7 @@ var MaterializationService = class {
    */
   async writeGuide(content) {
     if (!this.enabled()) return null;
-    const path = (0, import_obsidian51.normalizePath)(`${this.folder}/${WEAVE_NOTE}`);
+    const path = (0, import_obsidian53.normalizePath)(`${this.folder}/${WEAVE_NOTE}`);
     const r = await this.writeHeld(path, content);
     return r === "written" || r === "unchanged" ? path : null;
   }
@@ -17606,7 +23479,7 @@ var MaterializationService = class {
       ["People.base", () => buildPeopleBase(`${this.folder}/People`)],
       ["Companies.base", () => buildCompaniesBase(`${this.folder}/Companies`)]
     ]) {
-      const path = (0, import_obsidian51.normalizePath)(`${this.folder}/${name}`);
+      const path = (0, import_obsidian53.normalizePath)(`${this.folder}/${name}`);
       if (this.deps.app.vault.getAbstractFileByPath(path)) continue;
       await this.deps.app.vault.create(path, build());
     }
@@ -17619,11 +23492,11 @@ var MaterializationService = class {
   /** Write with edit-hold + no-op suppression; updates the hash baseline. */
   async writeHeld(rawPath, content) {
     const s2 = this.deps.settings();
-    const path = (0, import_obsidian51.normalizePath)(rawPath);
+    const path = (0, import_obsidian53.normalizePath)(rawPath);
     try {
       const existing = this.deps.app.vault.getAbstractFileByPath(path);
       const newHash = await hashContent(content);
-      if (existing instanceof import_obsidian51.TFile) {
+      if (existing instanceof import_obsidian53.TFile) {
         const current = await this.deps.app.vault.cachedRead(existing);
         const currentHash = await hashContent(current);
         if (currentHash === newHash) return "unchanged";
@@ -17647,9 +23520,9 @@ var MaterializationService = class {
   /** After the watcher ships a file's edits, re-arm the hold with disk truth. */
   async rebaseline(path) {
     const s2 = this.deps.settings();
-    const file = this.deps.app.vault.getAbstractFileByPath((0, import_obsidian51.normalizePath)(path));
-    if (file instanceof import_obsidian51.TFile) {
-      s2.myu_file_hashes[(0, import_obsidian51.normalizePath)(path)] = await hashContent(await this.deps.app.vault.cachedRead(file));
+    const file = this.deps.app.vault.getAbstractFileByPath((0, import_obsidian53.normalizePath)(path));
+    if (file instanceof import_obsidian53.TFile) {
+      s2.myu_file_hashes[(0, import_obsidian53.normalizePath)(path)] = await hashContent(await this.deps.app.vault.cachedRead(file));
       await this.deps.save();
     }
   }
@@ -17658,8 +23531,8 @@ var MaterializationService = class {
     let current = "";
     for (const part of parts) {
       current = current ? `${current}/${part}` : part;
-      if (!this.deps.app.vault.getAbstractFileByPath((0, import_obsidian51.normalizePath)(current))) {
-        await this.deps.app.vault.createFolder((0, import_obsidian51.normalizePath)(current)).catch(() => void 0);
+      if (!this.deps.app.vault.getAbstractFileByPath((0, import_obsidian53.normalizePath)(current))) {
+        await this.deps.app.vault.createFolder((0, import_obsidian53.normalizePath)(current)).catch(() => void 0);
       }
     }
   }
@@ -17677,7 +23550,7 @@ function groupByOwner(commitments) {
 }
 
 // src/capture/MyuFolderWatcher.ts
-var import_obsidian52 = require("obsidian");
+var import_obsidian54 = require("obsidian");
 var TICK_DEBOUNCE_MS = 5 * 1e3;
 function canvasNodeMeaning(node) {
   const parts = [
@@ -17703,7 +23576,7 @@ var MyuFolderWatcher = class {
     if (this.active) return;
     this.active = true;
     register("modify", (file) => {
-      if (!this.active || !(file instanceof import_obsidian52.TFile)) return;
+      if (!this.active || !(file instanceof import_obsidian54.TFile)) return;
       if (file.extension !== "md" && file.extension !== "canvas") return;
       const folder = this.deps.settings().materialize_folder.replace(/\/+$/, "") || "Myu";
       if (!file.path.startsWith(`${folder}/`) && file.path !== `${folder}.md`) return;
@@ -17878,7 +23751,45 @@ var MyuFolderWatcher = class {
 };
 
 // src/views/OnboardingModal.ts
-var import_obsidian53 = require("obsidian");
+var import_obsidian56 = require("obsidian");
+
+// src/views/WhoseProfileModal.ts
+var import_obsidian55 = require("obsidian");
+var WHOSE_PROFILE_WORDS = {
+  whose: (name) => `This profile belongs to ${name}. Is that you?`,
+  itsMe: "Yes, that's me",
+  notMe: "No, that's someone else",
+  notMine: (name) => `Nothing was added: that is ${name}'s profile, not yours. Paste the address of your own profile, which looks like linkedin.com/in/your-name.`
+};
+var WhoseProfileModal = class extends import_obsidian55.Modal {
+  constructor(app, profileName, onAnswer) {
+    super(app);
+    this.profileName = profileName;
+    this.onAnswer = onAnswer;
+    this.answered = false;
+  }
+  onOpen() {
+    const { contentEl } = this;
+    contentEl.addClass("myu-power-down");
+    contentEl.createEl("h2", { text: "Add your LinkedIn profile" });
+    contentEl.createEl("p", { cls: "myu-prose", text: WHOSE_PROFILE_WORDS.whose(this.profileName) });
+    new import_obsidian55.Setting(contentEl).addButton((b) => b.setButtonText(WHOSE_PROFILE_WORDS.notMe).onClick(() => this.answer(false))).addButton((b) => b.setButtonText(WHOSE_PROFILE_WORDS.itsMe).setCta().onClick(() => this.answer(true)));
+  }
+  answer(yes) {
+    this.answered = true;
+    this.close();
+    this.onAnswer(yes);
+  }
+  onClose() {
+    this.contentEl.empty();
+    if (!this.answered) {
+      this.answered = true;
+      this.onAnswer(false);
+    }
+  }
+};
+
+// src/views/OnboardingModal.ts
 var ONBOARDING_COPY = {
   gapLine: "What LinkedIn can't tell me is where you are right now.",
   situatedQuestion: "Who's the person, or the meeting, that matters most this week?",
@@ -17889,7 +23800,7 @@ var ONBOARDING_COPY = {
 var onboardingSession = { accountId: null, transcript: [], careerReadMd: null, stage: null };
 var CONFIDENCE_SUFFICIENT = 0.5;
 var CONFIDENCE_BORDERLINE_MIN = 0.2;
-var OnboardingModal = class extends import_obsidian53.Modal {
+var OnboardingModal = class extends import_obsidian56.Modal {
   constructor(app, plugin, onFinished) {
     super(app);
     this.plugin = plugin;
@@ -17901,11 +23812,19 @@ var OnboardingModal = class extends import_obsidian53.Modal {
     this.working = false;
     /** Arc succeeded WITH a current role during this session. */
     this.arcCompleted = false;
+    /**
+     * Pasted text in the moment's field, as chips (2026-10-06): classified with the typed words, then sent with them
+     * as the first journal entry. The last paste that became one, while Undo can put it back inline.
+     */
+    this.momentPasted = [];
+    this.momentUndo = null;
+    /** The modal's live region, outside contentEl (which every render empties). */
+    this.liveEl = null;
     this.isOpen = false;
     /** Finished or dismissed — the caller hears exactly once. */
     this.handedOff = false;
     /** Markdown render lifecycle scoped to this modal, not the plugin (obsidianmd/no-plugin-as-component). */
-    this.mdHost = new import_obsidian53.Component();
+    this.mdHost = new import_obsidian56.Component();
   }
   setStage(stage) {
     this.stage = stage;
@@ -17914,6 +23833,7 @@ var OnboardingModal = class extends import_obsidian53.Modal {
   onOpen() {
     this.isOpen = true;
     this.contentEl.addClass("myu-power-down");
+    if (!this.liveEl) this.liveEl = pastedLiveRegion(this.modalEl);
     const accountId = this.plugin.settings.account_id ?? null;
     if (onboardingSession.accountId !== accountId) {
       onboardingSession.accountId = accountId;
@@ -17932,7 +23852,7 @@ var OnboardingModal = class extends import_obsidian53.Modal {
       this.setStage("moment");
       if (!resuming) this.say(this.momentPrompt(scripts));
     } else if (!resuming) {
-      this.say("Hey \u2014 I'm Myu. Your notes will teach me plenty over time, but they can't tell me where you are RIGHT NOW. Two minutes fixes that. To start: your career arc \u2014 share your LinkedIn, or a resume.");
+      this.say("Hey \u2014 I'm Myu. Your notes will teach me a lot over time, but they can't tell me where you are right now. Two minutes fixes that. To start, share your LinkedIn or a resume so I can see your career so far.");
     }
     this.render();
   }
@@ -17982,10 +23902,10 @@ var OnboardingModal = class extends import_obsidian53.Modal {
       if (line.role === "read") {
         const fold = log.createEl("details", { cls: "myu-fold myu-onboard-read" });
         if (this.readOpen) fold.setAttr("open", "");
-        fold.createEl("summary", { text: "What Myu read from your career" });
+        fold.createEl("summary", { text: "What Myu learned from your career" });
         const body = fold.createDiv({ cls: "markdown-rendered" });
-        void import_obsidian53.MarkdownRenderer.render(this.app, line.text, body, "/", this.mdHost);
-        body.createDiv({ cls: "myu-quiet", text: "The full canvas is open behind this window \u2014 yours to keep, and to explore after." });
+        void import_obsidian56.MarkdownRenderer.render(this.app, line.text, body, "/", this.mdHost);
+        body.createDiv({ cls: "myu-quiet", text: "The full canvas is open behind this window. You can look at it after this." });
         fold.addEventListener("toggle", () => {
           this.readOpen = fold.hasAttribute("open");
         });
@@ -18004,13 +23924,13 @@ var OnboardingModal = class extends import_obsidian53.Modal {
   }
   renderArc(root) {
     let url = "";
-    new import_obsidian53.Setting(root).setName("LinkedIn").addText((t) => {
+    new import_obsidian56.Setting(root).setName("LinkedIn").addText((t) => {
       t.setPlaceholder("https://linkedin.com/in/you").onChange((v) => url = v.trim());
     }).addButton(
       (b) => b.setButtonText("Share").setCta().onClick(() => void this.submitLinkedin(url))
     );
-    const row = new import_obsidian53.Setting(root);
-    if (import_obsidian53.Platform.isDesktopApp) {
+    const row = new import_obsidian56.Setting(root);
+    if (import_obsidian56.Platform.isDesktopApp) {
       row.addButton((b) => b.setButtonText("Upload a resume").onClick(() => void this.submitResume()));
     }
     row.addButton(
@@ -18038,13 +23958,89 @@ var OnboardingModal = class extends import_obsidian53.Modal {
         };
       }
     }).catch(() => void 0);
-    new import_obsidian53.Setting(root).setName("Right now").addText((t) => {
+    let tell = null;
+    new import_obsidian56.Setting(root).setName("Right now").addText((t) => {
       field = t;
-      t.setPlaceholder(this.payback() ? ONBOARDING_COPY.situatedPlaceholder : "A sentence or two, in your words").onChange((v) => text = v);
-    }).addButton(
-      (b) => b.setButtonText("Tell Myu").setCta().onClick(() => void this.submitMoment(text.trim()))
-    );
-    new import_obsidian53.Setting(root).addButton(
+      t.setPlaceholder(this.payback() ? ONBOARDING_COPY.situatedPlaceholder : "A sentence or two, in your words").onChange((v) => {
+        text = v;
+        if (this.momentUndo) {
+          this.momentUndo = null;
+          drawRow();
+        }
+      });
+    }).addButton((b) => {
+      tell = b;
+      b.setButtonText("Tell Myu").setCta().onClick(() => void this.submitMoment(text.trim()));
+    });
+    const row = root.createDiv({ cls: "myu-pasted-row" });
+    const input = field?.inputEl ?? null;
+    const drawRow = () => {
+      renderPastedRow(row, this.momentPasted, {
+        open: (id) => openChip(id),
+        remove: (id) => removeChip(id),
+        undo: this.momentUndo ? undo : null
+      });
+      tell?.setDisabled(!!pastedBlocksProblem(this.momentPasted));
+    };
+    const undo = () => {
+      const pending = this.momentUndo;
+      this.momentUndo = null;
+      const out = input && pending ? undoChip(input.value, this.momentPasted, pending) : null;
+      if (input && out) {
+        this.momentPasted = out.chips;
+        input.value = out.value;
+        text = out.value;
+      }
+      drawRow();
+      if (input && out) {
+        input.focus();
+        input.setSelectionRange(out.caret, out.caret);
+      }
+    };
+    const removeChip = (id) => {
+      this.momentPasted = this.momentPasted.filter((c) => c.id !== id);
+      this.momentUndo = null;
+      drawRow();
+      input?.focus();
+    };
+    const openChip = (id) => {
+      const at = this.momentPasted.findIndex((c) => c.id === id);
+      const chip = this.momentPasted[at];
+      if (!chip) return;
+      new PastedTextModal(this.app, chip, this.momentPasted.length > 1 ? at + 1 : void 0, text, {
+        putBack: () => {
+          if (!canPutBack(text, chip).ok) return;
+          text = putBackText(text, chip);
+          this.momentPasted = this.momentPasted.filter((c) => c !== chip);
+          this.momentUndo = null;
+          if (input) input.value = text;
+          drawRow();
+          input?.focus();
+          input?.setSelectionRange(text.length, text.length);
+        },
+        remove: () => removeChip(id)
+      }).open();
+    };
+    if (input) {
+      attachPasteListeners(input, {
+        addPasted: (pastedText2, source, at) => {
+          const out = chipAdded(this.momentPasted, pastedText2, source, at);
+          this.momentPasted = out.chips;
+          this.momentUndo = out.undo;
+          text = input.value;
+          announce(this.liveEl, PASTE_WORDS.announce(out.chip.chars));
+          drawRow();
+        }
+      });
+      input.addEventListener("keydown", (event) => {
+        if (this.momentUndo && isUndoKey(event)) {
+          event.preventDefault();
+          undo();
+        }
+      });
+    }
+    drawRow();
+    new import_obsidian56.Setting(root).addButton(
       (b) => b.setButtonText("Not now").onClick(() => {
         this.close();
         this.handOff();
@@ -18071,8 +24067,22 @@ var OnboardingModal = class extends import_obsidian53.Modal {
       return;
     }
     const summary = seek.data?.body?.content ?? "LinkedIn profile found.";
+    let confirmed = false;
+    const profileName = typeof seek.data?.profile_name === "string" ? seek.data.profile_name.trim() : "";
+    if (seek.data?.name_match === "mismatch" && profileName) {
+      this.say(WHOSE_PROFILE_WORDS.whose(profileName));
+      this.render();
+      const theirs = await new Promise((resolve) => new WhoseProfileModal(this.app, profileName, resolve).open());
+      this.you(theirs ? WHOSE_PROFILE_WORDS.itsMe : WHOSE_PROFILE_WORDS.notMe);
+      if (!theirs) {
+        this.say(WHOSE_PROFILE_WORDS.notMine(profileName));
+        this.render();
+        return;
+      }
+      confirmed = true;
+    }
     const lid = url.match(/linkedin\.com\/in\/([^/?]+)/)?.[1] ?? "";
-    if (lid) await this.plugin.backend.saveLinkedinId(accountId, lid);
+    if (lid) await (confirmed ? this.plugin.backend.saveLinkedinId(accountId, lid, true) : this.plugin.backend.saveLinkedinId(accountId, lid));
     await this.finishArc("linkedin", summary);
   }
   async submitResume() {
@@ -18081,7 +24091,7 @@ var OnboardingModal = class extends import_obsidian53.Modal {
     const dialog = electron?.remote?.dialog;
     const fs = w.require?.("fs");
     if (!dialog || !fs) {
-      notifyError("Resume upload needs the desktop app \u2014 paste your LinkedIn instead.");
+      notifyError("Resume upload only works in the desktop app. Paste your LinkedIn URL instead.");
       return;
     }
     const picked = await dialog.showOpenDialog({
@@ -18101,7 +24111,7 @@ var OnboardingModal = class extends import_obsidian53.Modal {
     const upload = await this.plugin.backend.resumeUpload(accountId, name, bytes.buffer);
     this.working = false;
     if (!upload.ok) {
-      this.say("That upload didn't take. Try again, paste your LinkedIn, or skip for now.");
+      this.say("That upload failed. Try again, paste your LinkedIn, or skip for now.");
       this.render();
       return;
     }
@@ -18170,17 +24180,21 @@ I can see your past roles, but couldn't quite tell what you're doing right now. 
     return "Where are you in your career right now? A sentence or two, in your own words.";
   }
   async submitMoment(text) {
-    if (!text) return;
+    const chips = [...this.momentPasted];
+    if (!text && chips.length === 0) return;
+    if (pastedBlocksProblem(chips)) return;
     const accountId = this.plugin.settings.account_id;
     if (!accountId) return;
-    this.you(text);
+    this.you([text, ...chips.map((c, i) => chipLabel(c, chips.length > 1 ? i + 1 : void 0))].filter(Boolean).join("\n"));
+    this.momentPasted = [];
+    this.momentUndo = null;
     this.working = true;
     this.render();
     const arcProvided = this.arcCompleted || this.scripts().onboard_arc_provided === true;
     const priorAttempts = this.scripts().onboard_moment_attempt_count ?? 0;
     let shouldComplete = arcProvided;
     try {
-      const classify = await this.plugin.backend.classifyCareerMoment(accountId, text);
+      const classify = await this.plugin.backend.classifyCareerMoment(accountId, text, chips);
       const confidence = classify.data?.confidence ?? 0;
       const captured = classify.data?.moment_captured === true || confidence >= CONFIDENCE_SUFFICIENT;
       const borderline = !captured && confidence >= CONFIDENCE_BORDERLINE_MIN;
@@ -18198,7 +24212,7 @@ I can see your past roles, but couldn't quite tell what you're doing right now. 
     onboardingSession.stage = null;
     this.close();
     this.handOff();
-    void this.plugin.openChat({ text, send: true, templateType: "onboarding_moment" });
+    void this.plugin.openChat({ text, send: true, pasted: chips, templateType: "onboarding_moment" });
   }
 };
 
@@ -18269,13 +24283,153 @@ var RefreshGate = class {
   }
 };
 
+// src/menuMarksBar.ts
+var MENU_PLACE_WORDS = {
+  home: "Today",
+  people: "People",
+  calendar: "Calendar",
+  spaces: "Spaces",
+  conversations: "Conversations",
+  canvas: "Canvas"
+};
+var NAMED_PLACES = 2;
+function statusBarMarks(marks) {
+  if (!marks) return { lit: null, tooltip: null };
+  const newIn = (key) => marks.marks[key]?.new ?? 0;
+  const fresh = MENU_ITEM_KEYS.filter((key) => newIn(key) > 0);
+  let lit = null;
+  if (fresh.length > NAMED_PLACES) {
+    const total = fresh.reduce((sum, key) => sum + newIn(key), 0);
+    lit = `${total} new in ${fresh.length} places`;
+  } else if (fresh.length > 0) {
+    lit = fresh.map((key, i) => `${newIn(key)} ${i === 0 ? "new in" : "in"} ${MENU_PLACE_WORDS[key]}`).join(" \xB7 ");
+  }
+  const lines = MENU_ITEM_KEYS.map((key) => {
+    const words = menuMarkWords(marks.marks[key]);
+    return words ? `${MENU_PLACE_WORDS[key]}: ${words}` : "";
+  }).filter(Boolean);
+  return { lit, tooltip: lines.length ? lines.join("\n") : null };
+}
+function todayPaneMarks(words, where) {
+  return where.mobile && where.unlocked && words.lit ? words.lit : null;
+}
+var REREAD_AFTER_MS = 400;
+var OPENED_AGAIN_AFTER_MS = 6e4;
+var MenuMarksKeeper = class {
+  constructor(deps) {
+    this.deps = deps;
+    /** The server's marks; null until read, and while the server has no door. */
+    this.marks = null;
+    /** null: not asked yet; false: the server has no door (404); true: the marks are the server's. */
+    this.available = null;
+    this.inflight = null;
+    /** Bumped by every change made here (a push, a place opened, a sign-out): an answer to an older read is dropped. */
+    this.seq = 0;
+    this.timer = null;
+    /** When each place was last told it was opened, from here (ms). */
+    this.told = /* @__PURE__ */ new Map();
+    /** What each place's "opened" was before it was opened in this visit: what its entries count as new from. */
+    this.visit = createVisitSince();
+    this.timers = deps.timers ?? { set: (fn, ms) => window.setTimeout(fn, ms), clear: (id) => window.clearTimeout(id) };
+    this.now = deps.now ?? (() => Date.now());
+  }
+  /** The status bar's words for the marks (nothing while the server has no door). */
+  words() {
+    return statusBarMarks(this.available ? this.marks : null);
+  }
+  /**
+   * From when a place's entries count as new (ms): since it was opened before this visit, and on Today never before
+   * this morning. Null while the server has no marks: then nothing is known to be new.
+   */
+  since(item) {
+    return this.visit.since(item, this.available ? this.marks : null, new Date(this.now()));
+  }
+  /** Read the marks. One read at a time; a failed read keeps what is shown (a first failure shows nothing). */
+  load() {
+    if (this.inflight) return this.inflight;
+    const seq = this.seq;
+    const read = this.deps.doors().getMenuMarks().then(
+      (marks) => {
+        if (seq !== this.seq) return;
+        this.set(marks ? { marks, available: true } : { marks: null, available: false });
+      },
+      () => void 0
+    ).finally(() => {
+      if (this.inflight === read) this.inflight = null;
+    });
+    this.inflight = read;
+    return read;
+  }
+  /** The server's push (`menu_marks`): the whole body, each time something changes. */
+  take(raw) {
+    const marks = readMenuMarks(raw);
+    if (!marks) return;
+    this.seq += 1;
+    this.set({ marks, available: true });
+  }
+  /**
+   * A place brought forward here: its "new" goes at once, and the server is told (it keeps "opened" on the account).
+   * Nothing is sent while the server has no door. A place that shows nothing new here is told all the same, since
+   * the count here can be behind the server's (a push missed, or on its way), but at most once a minute.
+   */
+  opened(item) {
+    if (!item || this.available !== true || !this.marks) return;
+    const now = this.now();
+    const last = this.told.get(item);
+    if ((this.marks.marks[item]?.new ?? 0) === 0 && last !== void 0 && now - last < OPENED_AGAIN_AFTER_MS) return;
+    this.told.set(item, now);
+    this.seq += 1;
+    const seq = this.seq;
+    this.visit.opening(item, this.marks);
+    this.set({ marks: withOpened(this.marks, item, now) });
+    this.deps.doors().markMenuOpened(item).then(
+      (marks) => {
+        if (marks && seq === this.seq) this.set({ marks });
+      },
+      // Not told after all: the next time it is brought forward tells it.
+      () => {
+        if (this.told.get(item) === now) this.told.delete(item);
+      }
+    );
+  }
+  /** A line changed (`line_new`, `line_updated`): read again soon, in case a push was missed. Only while the server has the door. */
+  lineChanged() {
+    if (this.available !== true) return;
+    if (this.timer !== null) this.timers.clear(this.timer);
+    this.timer = this.timers.set(() => {
+      this.timer = null;
+      void this.load();
+    }, REREAD_AFTER_MS);
+  }
+  /** Signed out or locked: nothing is shown until the next read, and a read still out is dropped. */
+  reset() {
+    this.seq += 1;
+    this.inflight = null;
+    this.told.clear();
+    this.visit.reset();
+    if (this.timer !== null) {
+      this.timers.clear(this.timer);
+      this.timer = null;
+    }
+    if (this.marks === null && this.available === null) return;
+    this.marks = null;
+    this.available = null;
+    this.deps.onChange();
+  }
+  set(next) {
+    if (next.marks !== void 0) this.marks = next.marks;
+    if (next.available !== void 0) this.available = next.available;
+    this.deps.onChange();
+  }
+};
+
 // src/main.ts
 var RECOVERY_REPAINT_MS = 3e4;
 var TODAY_REFRESH_MS = 5 * 60 * 1e3;
 var TODAY_REFRESH_GAP_MS = 5e3;
 var LIVE_WATCHDOG_MS = 45 * 1e3;
 var QUEUE_RETRY_MS = 10 * 60 * 1e3;
-var AskMyuPlugin = class extends import_obsidian54.Plugin {
+var AskMyuPlugin = class extends import_obsidian57.Plugin {
   constructor() {
     super(...arguments);
     this.settings = { ...DEFAULT_SETTINGS };
@@ -18299,6 +24453,19 @@ var AskMyuPlugin = class extends import_obsidian54.Plugin {
     /** GET /oauth/google/status, cached per session — the scope-aware picture (calendar · mail · meeting notes). */
     this.integration = null;
     /**
+     * The menu's marks (2026-10-06): what is new in each of Myu's places, said in the status bar (on a phone, at the
+     * top of the Today pane), and the places opened here told to the server. Nothing while the server has no door.
+     * See menuMarksBar.ts.
+     */
+    this.menuMarks = new MenuMarksKeeper({ doors: () => this.backend, onChange: () => this.paintMenuMarks() });
+    /**
+     * "Seen" (2026-10-06): a line is reported the first time its words have been in view for a second, in the Today
+     * pane, the chat pane or a meeting's card (each hands in its content when it opens). One watcher, so a line on
+     * Today's row and in its conversation is reported once. Nothing changes while the server has no door.
+     * See linesSeenWatch.ts.
+     */
+    this.linesSeen = new SeenWatcher({ send: (lineIds) => this.reportLinesSeen(lineIds) });
+    /**
      * The transport hit a wall a fresh session (401) or a fresh escrow (403 enc)
      * clears. Let the machine try; when it worked, the refused request is sent
      * again by the transport, the live stream re-opens on the new session, and
@@ -18317,6 +24484,8 @@ var AskMyuPlugin = class extends import_obsidian54.Plugin {
     this.settingTab = null;
     this.statusBarEl = null;
     this.returningSetupOffered = false;
+    /** The person's own day (2026-09-28): this computer's zone saved once per signed-in stretch. */
+    this.timeZoneSynced = false;
     /** First-run choreography line, rendered by TodayView ("6 of 38 · Jim…"). */
     this.materializeProgress = null;
     /** The batched-reads flags from /features; off until it answers, and on an older backend. */
@@ -18401,6 +24570,11 @@ var AskMyuPlugin = class extends import_obsidian54.Plugin {
     /** The always-keep switch, honoured from outside the pane. Once per id per session. */
     this.keptCanvasIds = /* @__PURE__ */ new Set();
   }
+  /** The report itself: only signed in and past the terms; otherwise the lines are reported the next time they are in view. */
+  reportLinesSeen(lineIds) {
+    if (this.unlock?.current !== "unlocked" || this.termsStanding() === "gated") return Promise.reject(new Error("lines seen: not signed in"));
+    return this.backend.markLinesSeen(lineIds);
+  }
   async loadFeatures() {
     const res = await this.backend.getFeatures().catch(() => null);
     this.flags = res?.ok ? parseColdStartFlags(res.data) : COLD_START_OFF;
@@ -18437,6 +24611,7 @@ var AskMyuPlugin = class extends import_obsidian54.Plugin {
     await this.loadFeatures();
     await this.refreshToday({ now: true });
     this.startLiveStream();
+    this.refreshMenuMarks();
     void this.loadIntegrationStatus(true);
     void this.syncOnOpen();
     return true;
@@ -18492,6 +24667,7 @@ var AskMyuPlugin = class extends import_obsidian54.Plugin {
       onTermsRequired: (body) => this.onTermsRequired(body)
     });
     this.backend = this.settings.use_mock_backend ? new MockApi() : new Api(this.transport);
+    forgetAnswered(this.backend, (lineId) => this.linesSeen.forget(lineId));
     this.unlock = new UnlockMachine({
       api: this.backend,
       keys: this.keys,
@@ -18579,17 +24755,14 @@ var AskMyuPlugin = class extends import_obsidian54.Plugin {
     this.registerEvent(
       this.app.workspace.on("editor-menu", (menu, editor, info) => {
         if (this.unlock.current !== "unlocked") return;
-        const selection = editor.getSelection().trim();
-        if (selection) {
+        const selection = editor.getSelection();
+        const file = info.file;
+        if (selection.trim()) {
+          const block = selectionBlock(selection, file?.path, editor.getCursor("from"), editor.getCursor("to"));
           menu.addItem(
-            (i) => i.setTitle("Ask Myu about this selection").setIcon("message-circle").onClick(() => void this.openChat({ text: `About this:
-
-${selection}
-
-`, send: false }))
+            (i) => i.setTitle("Ask Myu about this selection").setIcon("message-circle").onClick(() => void this.openChat({ text: "", send: false, pasted: [block] }))
           );
         }
-        const file = info.file;
         if (file && file.extension === "md") {
           menu.addItem(
             (i) => i.setTitle("Ask Myu about this note").setIcon("message-circle").onClick(() => void this.askMyuAboutNote(file))
@@ -18605,7 +24778,7 @@ ${selection}
     this.registerEvent(
       this.app.workspace.on("file-menu", (menu, file) => {
         if (this.unlock.current !== "unlocked") return;
-        if (!(file instanceof import_obsidian54.TFile) || file.extension !== "md") return;
+        if (!(file instanceof import_obsidian57.TFile) || file.extension !== "md") return;
         menu.addItem(
           (i) => i.setTitle("Ask Myu about this note").setIcon("message-circle").onClick(() => void this.askMyuAboutNote(file))
         );
@@ -18625,9 +24798,14 @@ ${selection}
     );
     this.statusBarEl = this.addStatusBarItem();
     this.statusBarEl.addClass("myu-statusbar");
+    this.statusBarEl.setAttr("data-tooltip-position", "top");
     this.statusBarEl.onclick = () => void this.openToday();
     this.setStatusBar("disconnected", null);
-    this.registerInterval(window.setInterval(() => void this.refreshToday(), TODAY_REFRESH_MS));
+    this.registerEvent(this.app.workspace.on("active-leaf-change", (leaf) => this.broughtForward(leaf)));
+    this.registerInterval(window.setInterval(() => {
+      void this.refreshToday();
+      this.refreshMenuMarks();
+    }, TODAY_REFRESH_MS));
     this.registerInterval(window.setInterval(() => {
       if (this.unlock.current !== "unlocked") return;
       this.ensureLiveStream();
@@ -18650,7 +24828,7 @@ ${selection}
     });
     this.registerObsidianProtocolHandler("myu-connected", () => {
       stamp("myu-connected");
-      notifyStatus("Welcome back \u2014 Myu is syncing your calendar and email now.");
+      notifyStatus("Welcome back. Myu is syncing your calendar and email now.");
       void this.loadIntegrationStatus(true).then(() => this.refreshToday({ now: true }));
       void this.openToday();
     });
@@ -18668,6 +24846,11 @@ ${selection}
       stamp("myu-chat");
       if (typeof params.journal === "string" && params.journal) {
         void this.openConversation(params.journal);
+        return;
+      }
+      if (typeof params.about === "string" && params.about.includes(":")) {
+        const idx = params.about.indexOf(":");
+        void this.openChatAbout(params.about.slice(0, idx), params.about.slice(idx + 1));
       }
     });
     this.registerObsidianProtocolHandler("myu-signin", (params) => {
@@ -18690,6 +24873,16 @@ ${selection}
       void this.materializer.refreshHistoryIfDue(true);
     });
     this.sse.subscribe("brief_item_updated", () => void this.refreshToday());
+    this.sse.subscribe("menu_marks", (payload) => this.menuMarks.take(payload));
+    for (const type of ["line_new", "line_updated"]) this.sse.subscribe(type, () => this.menuMarks.lineChanged());
+    for (const type of ["line_new", "line_updated", "space.retro.updated"]) {
+      this.sse.subscribe(type, (payload) => {
+        const spaceId = typeof payload.space_id === "string" ? payload.space_id : void 0;
+        for (const leaf of this.app.workspace.getLeavesOfType(CHAT_VIEW_TYPE)) {
+          if (leaf.view instanceof ChatView) leaf.view.refreshSpace(spaceId);
+        }
+      });
+    }
     registerLiveNotices((type, handler) => this.sse.subscribe(type, handler), {
       accountId: () => this.settings.account_id,
       // A device event also refreshes the durable row — the Notice is the fast
@@ -18751,7 +24944,7 @@ ${selection}
       if (!s2.first_run_shown && !s2.token && !s2.wrapped_mdek && !s2.account_id && !s2.consent_completed) {
         s2.first_run_shown = true;
         void this.saveSettings();
-        notifyStatus("askMyu is installed \u2014 the Myu pane is where you set it up.");
+        notifyStatus("askMyu is installed. Set it up in the Myu pane.");
         void this.openToday();
       }
     });
@@ -18766,6 +24959,7 @@ ${selection}
     this.capture?.stop();
     this.myuWatcher?.stop();
     this.sse?.stop();
+    this.linesSeen.stop();
   }
   // ── lifecycle ─────────────────────────────────────────────────────────────
   async resume() {
@@ -18797,12 +24991,20 @@ ${selection}
     this.lastStateDetail = detail;
     this.setStatusBar(state, detail);
     if (state !== "unlocked") void this.refreshToday({ now: true });
+    if (state !== "unlocked") this.timeZoneSynced = false;
     if (state === "unlocked") {
       void this.refreshOnboardingState();
       void this.unlock.ensurePluginToken();
       void this.loadFeatures().then(() => {
         void this.refreshToday({ now: true });
         this.startLiveStream();
+        this.refreshMenuMarks();
+        if (!this.timeZoneSynced) {
+          this.timeZoneSynced = true;
+          void syncTimeZone(this.backend).then((ok2) => {
+            if (!ok2) this.timeZoneSynced = false;
+          });
+        }
       });
       void this.loadIntegrationStatus(true);
       if ((!this.settings.consent_completed || !this.settings.materialize_consented) && !this.returningSetupOffered) {
@@ -18823,6 +25025,8 @@ ${selection}
       this.capture.stop();
       this.meetingCapture.stop();
       this.sse.stop();
+      this.menuMarks.reset();
+      this.linesSeen.reset();
     }
     if (state === "disconnected" && detail === "token_revoked") {
       notifyError("askMyu access was revoked. Reconnect in Settings \u2192 askMyu to resume.");
@@ -18862,7 +25066,7 @@ ${selection}
       checkCallback: (checking) => {
         if (this.unlock.current !== "unlocked" || !this.settings.materialize_consented) return false;
         if (checking) return true;
-        void this.materializer.materializeAll().then(() => notifyStatus("Synced \u2014 Myu\u2019s folder is current."));
+        void this.materializer.materializeAll().then(() => notifyStatus("Synced. Myu\u2019s folder is up to date."));
         return true;
       }
     });
@@ -18889,7 +25093,7 @@ ${selection}
         if (checking) return true;
         void this.capture.capture(file).then((result) => {
           notifyStatus(
-            result === "sent" ? "Sent to Myu." : result === "queued" ? "Saved \u2014 it goes out when you are back online." : result === "vetoed" ? "This note opts out with `myu: false`." : "Nothing new in this note since the last time."
+            result === "sent" ? "Sent to Myu." : result === "queued" ? "Saved. It will be sent when you are back online." : result === "vetoed" ? "This note is excluded by `myu: false` in its frontmatter." : result === "generated" ? "Myu wrote this note, so it is not sent back as your writing." : "Nothing new in this note since the last time."
           );
         });
         return true;
@@ -18909,15 +25113,11 @@ ${selection}
     this.addCommand({
       id: "ask-about-selection",
       name: "Ask Myu about this selection",
-      editorCheckCallback: (checking, editor) => {
+      editorCheckCallback: (checking, editor, ctx) => {
         const selection = editor.getSelection();
         if (!selection.trim() || this.unlock.current !== "unlocked") return false;
         if (checking) return true;
-        void this.openChat({ text: `About this:
-
-${selection.trim()}
-
-`, send: false });
+        void this.openChat({ text: "", send: false, pasted: [selectionBlock(selection, ctx.file?.path, editor.getCursor("from"), editor.getCursor("to"))] });
         return true;
       }
     });
@@ -18953,7 +25153,7 @@ ${selection.trim()}
       if (!checking) this.removeEverythingMyuWrote();
       return true;
     } });
-    this.addCommand({ id: "weave-myu-in", name: "Weave Myu in (recipes for your notes)", callback: () => void this.openWeave() });
+    this.addCommand({ id: "weave-myu-in", name: "Add Myu to your notes (snippets)", callback: () => void this.openWeave() });
     this.addCommand({
       id: "insert-myu-snippet",
       name: "Insert a Myu snippet\u2026",
@@ -18961,7 +25161,7 @@ ${selection.trim()}
         new WeaveSnippetModal(this.app, this.settings.materialize_folder || "Myu", (snippet) => editor.replaceSelection(snippet.text)).open();
       }
     });
-    this.addCommand({ id: "help-myu", name: "Help Myu (people it cannot place)", checkCallback: (checking) => {
+    this.addCommand({ id: "help-myu", name: "Help Myu (people it cannot identify)", checkCallback: (checking) => {
       if (this.unlock.current !== "unlocked") return false;
       if (!checking) void this.openHelpMyu();
       return true;
@@ -18998,7 +25198,7 @@ ${selection.trim()}
     } });
     this.addCommand({
       id: "save-composition",
-      name: "Save a Myu composition to my vault",
+      name: "Save a Myu canvas to my vault",
       checkCallback: (checking) => {
         if (this.unlock.current !== "unlocked") return false;
         if (checking) return true;
@@ -19033,7 +25233,7 @@ ${selection.trim()}
         if (checking) return true;
         void this.meetingCapture.capture(file).then((result) => {
           notifyStatus(
-            result === "sent" ? "Meeting note sent \u2014 Myu is reading it now." : result === "unchanged" ? "Nothing new in this note since the last send." : result === "refused" ? "The server refused this note (too large, or it has no date Myu can find)." : "Not sent \u2014 check the connection."
+            result === "sent" ? "Meeting note sent. Myu is reading it now." : result === "unchanged" ? "Nothing new in this note since the last send." : result === "refused" ? "The server refused this note (too large, or it has no date Myu can find)." : "Not sent. Check your connection."
           );
         });
         return true;
@@ -19041,7 +25241,7 @@ ${selection.trim()}
     });
     this.addCommand({
       id: "next-meeting-prep",
-      name: "Look at my next meeting's prep",
+      name: "Prepare me for my next meeting",
       checkCallback: (checking) => {
         if (this.unlock.current !== "unlocked") return false;
         if (checking) return true;
@@ -19091,7 +25291,7 @@ ${selection.trim()}
     });
     this.addCommand({
       id: "let-myu-write",
-      name: "Let Myu keep a folder in my vault",
+      name: "Let Myu create a folder in my vault",
       checkCallback: (checking) => {
         if (this.unlock.current !== "unlocked") return false;
         if (checking) return true;
@@ -19115,7 +25315,7 @@ ${selection.trim()}
         if (checking) return true;
         void this.materializer.materializeAll().then(({ people, skipped }) => {
           notifyStatus(
-            skipped > 0 ? `Refreshed. ${skipped} ${skipped === 1 ? "file has" : "files have"} unshipped edits and ${skipped === 1 ? "was" : "were"} left alone.` : `Refreshed ${people} ${people === 1 ? "page" : "pages"}.`
+            skipped > 0 ? `Refreshed. ${skipped} ${skipped === 1 ? "file has" : "files have"} edits you made and ${skipped === 1 ? "was" : "were"} left alone.` : `Refreshed ${people} ${people === 1 ? "page" : "pages"}.`
           );
         });
         return true;
@@ -19136,6 +25336,7 @@ ${selection.trim()}
     const existing = this.app.workspace.getLeavesOfType(TODAY_VIEW_TYPE);
     if (existing.length > 0) {
       await this.app.workspace.revealLeaf(existing[0]);
+      this.broughtForward(existing[0]);
       void this.refreshToday({ now: true });
       return;
     }
@@ -19143,6 +25344,7 @@ ${selection.trim()}
     if (!leaf) return;
     await leaf.setViewState({ type: TODAY_VIEW_TYPE, active: true });
     await this.app.workspace.revealLeaf(leaf);
+    this.broughtForward(leaf);
   }
   /**
    * Cards open in the right sidebar and REPLACE each other — one card leaf, not
@@ -19150,26 +25352,90 @@ ${selection.trim()}
    * accumulate.
    */
   setStatusBar(state, detail) {
-    if (!this.statusBarEl) return;
+    const el = this.statusBarEl;
+    if (!el) return;
     const word = state === "unlocked" ? "ready" : state === "relocked" ? detail === "offline" ? "offline" : "locked" : state === "blocked" ? "setup" : "off";
-    this.statusBarEl.setText(`myu \xB7 ${word}`);
+    const marks = state === "unlocked" ? this.menuMarks.words() : { lit: null, tooltip: null };
+    el.setText(`myu \xB7 ${marks.lit ? "" : word}`);
+    if (marks.lit) el.createSpan({ cls: "myu-statusbar-new", text: marks.lit });
+    if (marks.tooltip) el.setAttr("aria-label", marks.tooltip);
+    else el.removeAttribute("aria-label");
   }
-  /** Shared by the palette command and the context menus. */
+  /** The menu's marks moved: the status bar says so, unless it is counting notes being read. */
+  paintStatusBar() {
+    if (this.backfillActive || !this.unlock) return;
+    this.setStatusBar(this.unlock.current, this.lastStateDetail);
+  }
+  /**
+   * The menu's marks moved, or a place was opened: the status bar; the dots beside the Today pane's rows (lit while
+   * something is new since Today was opened before this visit); and on a phone (which has no status bar) the line at
+   * the top of the Today pane.
+   */
+  paintMenuMarks() {
+    this.paintStatusBar();
+    for (const leaf of this.app.workspace.getLeavesOfType(TODAY_VIEW_TYPE)) {
+      if (leaf.isDeferred) continue;
+      const view = leaf.view;
+      if (!(view instanceof TodayView)) continue;
+      view.paintDots();
+      if (import_obsidian57.Platform.isMobile) view.paintMenuMarks();
+    }
+  }
+  /** On a phone, what is new in Myu's places, for the top of the Today pane; null on a computer (the status bar says it). */
+  menuMarksLine() {
+    return todayPaneMarks(this.menuMarks.words(), { mobile: import_obsidian57.Platform.isMobile, unlocked: this.unlock?.current === "unlocked" });
+  }
+  /** The menu's marks, read again: only signed in and past the terms (a gated account is answered 428, which shows the terms screen). */
+  refreshMenuMarks() {
+    if (this.unlock?.current !== "unlocked" || this.termsStanding() === "gated") return;
+    void this.menuMarks.load();
+  }
+  /**
+   * Which of Myu's places (the menu's items) a pane is: Today, the chat pane (a space's conversation or any other), the
+   * canvas, a card, a meeting's card. By its type, so a pane not loaded yet (deferred) still says which it is.
+   */
+  menuItemOf(leaf) {
+    const view = leaf?.view;
+    if (!view) return null;
+    if (view instanceof ChatView) return view.menuItem();
+    switch (view.getViewType()) {
+      case TODAY_VIEW_TYPE:
+        return "home";
+      case CHAT_VIEW_TYPE:
+        return "conversations";
+      case CANVAS_VIEW_TYPE:
+        return "canvas";
+      case CARD_VIEW_TYPE:
+        return "people";
+      case PREP_VIEW_TYPE:
+        return "calendar";
+      default:
+        return null;
+    }
+  }
+  /** A pane brought in front of the person (by them, or by a door they pressed): that place was opened. */
+  broughtForward(leaf) {
+    this.menuMarks.opened(this.menuItemOf(leaf));
+  }
+  /**
+   * The chat pane moved on inside itself (a new conversation, the list of past ones and back, a past one opened): the
+   * pane in front did not change, so no leaf change says so. While it is the pane in front, the place it shows now
+   * was opened.
+   */
+  chatPaneMoved(view) {
+    if (this.app.workspace.getActiveViewOfType(ChatView) !== view) return;
+    this.broughtForward(view.leaf);
+  }
+  /**
+   * Shared by the palette command and the context menus. The note goes whole as pasted text from the vault
+   * (`vault_note`, 2026-10-06), at once, as a message with nothing typed: no words are written on the person's
+   * behalf. A note over the pasted-text limit is not sent: the chat opens with it as a chip, Send held, and says why.
+   */
   async askMyuAboutNote(file) {
     const raw = await this.app.vault.cachedRead(file);
-    const clipped = raw.length > 6e3 ? `${raw.slice(0, 6e3)}
-
-[\u2026 clipped]` : raw;
+    const block = noteBlock(raw, file.path);
     const context = await this.chatContextForFile(file);
-    await this.openChat({
-      text: `About my note "${file.basename}":
-
-${clipped}
-
-What do you notice?`,
-      send: true,
-      context
-    });
+    await this.openChat({ text: "", send: true, context, pasted: block ? [block] : [] });
   }
   /** Entity grounding for a note: Myu-materialized pages carry their entity id
       in frontmatter; the user's own person pages resolve by name. */
@@ -19263,6 +25529,7 @@ What do you notice?`,
     if (!leaf) return;
     if (!existing.length) await leaf.setViewState({ type: CARD_VIEW_TYPE, active: true });
     await this.app.workspace.revealLeaf(leaf);
+    this.broughtForward(leaf);
     const view = leaf.view;
     if (view instanceof CardView) await view.showEntity(entityType, entityId, name);
   }
@@ -19347,9 +25614,12 @@ What do you notice?`,
     this.pendingOffers = this.pendingOffers.filter((o) => o.compositionId !== compositionId);
     void this.refreshToday({ now: true });
   }
-  /** `POST /feedback/submit` with what an Obsidian plugin can honestly say about itself. */
+  /**
+   * `POST /feedback/submit` with what an Obsidian plugin can honestly say about itself. `attachments.files` (2026-10-14)
+   * are the files the person added in the modal, passed through as they are.
+   */
   sendFeedback(opts) {
-    return this.backend.submitFeedback({ message: opts.message, category: opts.category, ...opts.rating ? { rating: opts.rating } : {}, app: "obsidian", version: BUILD_STAMP, context: { surface_state: opts.surface, ...opts.journalId ? { journal_id: opts.journalId } : {}, platform: import_obsidian54.Platform.isMobile ? "mobile" : "desktop" }, ...opts.attachments ? { attachments: opts.attachments } : {} });
+    return this.backend.submitFeedback({ message: opts.message, category: opts.category, ...opts.rating ? { rating: opts.rating } : {}, app: "obsidian", version: BUILD_STAMP, context: { surface_state: opts.surface, ...opts.journalId ? { journal_id: opts.journalId } : {}, platform: import_obsidian57.Platform.isMobile ? "mobile" : "desktop" }, ...opts.attachments ? { attachments: opts.attachments } : {} });
   }
   /** The canvas pane, if one is open anywhere. */
   canvasView() {
@@ -19380,19 +25650,27 @@ What do you notice?`,
     const leaf = existing[0] ?? this.app.workspace.getRightLeaf(false);
     if (!leaf) return;
     if (!existing.length) await leaf.setViewState({ type: CANVAS_VIEW_TYPE, active: true });
-    if (reveal) await this.app.workspace.revealLeaf(leaf);
+    if (reveal) {
+      await this.app.workspace.revealLeaf(leaf);
+      this.broughtForward(leaf);
+    }
     const view = leaf.view;
     if (view instanceof CanvasView) await view.showComposition(compositionId);
   }
-  /** Prep opens in the right sidebar; one prep leaf, reused, like cards. */
+  /** The meeting's card opens in the right sidebar; one leaf, reused, like cards. */
   async openPrep(eventId) {
     const existing = this.app.workspace.getLeavesOfType(PREP_VIEW_TYPE);
     const leaf = existing[0] ?? this.app.workspace.getRightLeaf(false);
     if (!leaf) return;
     if (!existing.length) await leaf.setViewState({ type: PREP_VIEW_TYPE, active: true });
     await this.app.workspace.revealLeaf(leaf);
+    this.broughtForward(leaf);
     const view = leaf.view;
     if (view instanceof PrepView) await view.showMeeting(eventId);
+  }
+  /** The Today pane again, now (a question answered in the chat pane changes it). */
+  requestTodayRefresh() {
+    void this.refreshToday({ now: true });
   }
   refreshToday(opts = {}) {
     return this.todayGate.request(opts);
@@ -19429,12 +25707,12 @@ What do you notice?`,
     if (outcome === "ceremony") {
       this.openGenesisCeremony();
     } else if (outcome === "existing_account") {
-      notifyStatus("Welcome back \u2014 this device needs approving. Myu shows how.");
+      notifyStatus("Welcome back. This device needs approval. The Myu pane shows how.");
       void this.openToday();
     } else if (outcome === "invalid") {
       notifyError("That sign-in link has expired or was already used. Request a fresh one.");
     } else {
-      notifyError("Sign-in failed \u2014 check the connection and try again.");
+      notifyError("Sign-in failed. Check your connection and try again.");
     }
   }
   /**
@@ -19542,7 +25820,7 @@ What do you notice?`,
     if (this.unlock.current !== "unlocked") return;
     const { files } = this.meetingCapture.surveyBackfill();
     if (files.length === 0) return;
-    notifyStatus(`Bringing in ${files.length} existing meeting ${files.length === 1 ? "note" : "notes"}\u2026`);
+    notifyStatus(`Sharing ${files.length} existing meeting ${files.length === 1 ? "note" : "notes"}\u2026`);
     await this.meetingCapture.backfill(files, (done, total) => {
       this.materializeProgress = `Reading your meeting notes \u2014 ${done} of ${total}`;
       this.paintProgress();
@@ -19551,7 +25829,7 @@ What do you notice?`,
     void this.refreshToday();
   }
   reportBackfillFinished(total) {
-    notifyStatus(`Brought in ${total} ${total === 1 ? "note" : "notes"}.`);
+    notifyStatus(`Shared ${total} ${total === 1 ? "note" : "notes"}.`);
     this.settings.backfill_done = true;
     void this.saveSettings();
     void this.refreshToday({ now: true });
@@ -19621,7 +25899,7 @@ What do you notice?`,
     if (this.chatView()?.revealCanvas(compositionId)) return;
     const journalId = await this.journalForComposition(compositionId);
     if (!journalId) {
-      notifyStatus("That canvas belongs to another conversation \u2014 find it under Past conversations.");
+      notifyStatus("That canvas belongs to another conversation. Find it under Past conversations.");
       return;
     }
     await this.openConversation(journalId);
@@ -19651,7 +25929,7 @@ What do you notice?`,
     const n = found.files.length;
     new PersonActionConfirmModal(this.app, {
       title: "Remove everything Myu wrote?",
-      body: `${n} ${n === 1 ? "file goes" : "files go"} to the trash \u2014 every page, note, table and canvas Myu wrote, recoverable from there. Your own notes are untouched. Writing stays ${this.settings.materialize_consented ? "on, so the folder fills again on the next sync; turn it off in settings to stop that" : "off"}.`,
+      body: `${n} ${n === 1 ? "file goes" : "files go"} to the trash: every page, note, table and canvas Myu wrote. You can recover them from the trash. Your own notes are not touched. Writing stays ${this.settings.materialize_consented ? "on, so the folder fills again on the next sync. Turn it off in settings to stop that" : "off"}.`,
       cta: "Remove"
     }, (yes) => {
       if (!yes) return;
@@ -19659,7 +25937,7 @@ What do you notice?`,
         const trashed = await trashEverythingMyuWrote(this.app, found.files);
         this.settings.myu_file_hashes = {};
         await this.saveSettings();
-        notifyStatus(`Removed ${trashed} ${trashed === 1 ? "file" : "files"} \u2014 they are in the trash.`);
+        notifyStatus(`Removed ${trashed} ${trashed === 1 ? "file" : "files"}. They are in the trash.`);
         void this.refreshToday({ now: true });
       })();
     }).open();
@@ -19678,7 +25956,7 @@ What do you notice?`,
     if (this.backfillActive || files.length === 0) return;
     this.backfillActive = true;
     this.backfillStop = false;
-    notifyStatus(`Bringing in ${files.length} ${files.length === 1 ? "note" : "notes"} \u2014 progress in the status bar; \u201CCancel bringing in notes\u201D stops it.`);
+    notifyStatus(`Sharing ${files.length} ${files.length === 1 ? "note" : "notes"}. Progress shows in the status bar; the command \u201CCancel bringing in notes\u201D stops it.`);
     const result = await this.capture.backfill(files, (done, total) => {
       this.statusBarEl?.setText(`myu \xB7 reading ${done}/${total}`);
       this.materializeProgress = `Reading your notes \u2014 ${done} of ${total}`;
@@ -19688,7 +25966,7 @@ What do you notice?`,
     this.materializeProgress = null;
     this.setStatusBar(this.unlock.current, this.lastStateDetail);
     if (result.stopped) {
-      notifyStatus("Stopped. What was sent stays sent; press Start again to continue \u2014 notes already in are skipped.");
+      notifyStatus("Stopped. Notes already sent stay sent. Press Start again to continue; notes already sent are skipped.");
       void this.refreshToday({ now: true });
       return;
     }
@@ -19709,6 +25987,110 @@ What do you notice?`,
     const view = leaf?.view;
     if (view instanceof ChatView) await view.openPastConversation(journalId);
   }
+  /**
+   * `talk ▸` on a row (F0): the chat pane opens about that one thing, Myu
+   * speaking first — its line on the row is its latest turn about the subject,
+   * so it opens the conversation; the person's first message continues it.
+   * The context names the subject for the backend's formatter; for a meeting
+   * it carries the prep fields the meeting conversation already reads.
+   */
+  async openChatAbout(subjectType, subjectId, opts = {}) {
+    if (subjectType === "space" && await this.openSpaceConversation(subjectId, opts.label ?? "", { retro: opts.retro, debrief: opts.debrief })) return;
+    let opening = (opts.line ?? "").trim();
+    let openingLine = opts.lineObj;
+    if (!opening) {
+      const scope = subjectType === "meeting" || subjectType === "account" ? "today" : subjectType === "space" ? "spaces" : "people";
+      const res = await this.backend.getMyuLines(scope).catch(() => null);
+      const line = (res?.data?.lines ?? []).find(
+        (l) => (l.subjects ?? []).some((s2) => s2.type === subjectType && s2.id === subjectId && (!opts.occurrenceKey || !s2.occurrence_key || s2.occurrence_key === opts.occurrenceKey))
+      );
+      opening = (line?.text ?? "").trim();
+      openingLine = line;
+    }
+    const lineHere = openingLine && (openingLine.text ?? "").trim() === opening ? openingLine : void 0;
+    const kind = conversationSubjectType(lineHere?.conversation?.subject_type || subjectType);
+    if (kind && kind !== "space" && kind !== "meeting" && (kind === "account" || lineHere && answersInConversation(lineHere))) {
+      await this.openSubjectConversation(kind, lineHere?.conversation?.subject_id || subjectId, opts.label ?? "");
+      return;
+    }
+    const question = subjectType === "meeting" && lineHere ? meetingQuestionAt(lineHere, opts.occurrenceKey) : null;
+    if (question) {
+      await this.openMeetingConversation(subjectId, opts.label ?? "", question.occurrenceKey);
+      return;
+    }
+    const isEntity = subjectType === "person" || subjectType === "company";
+    await this.openChat({
+      text: "",
+      send: false,
+      opening: opening || void 0,
+      openingLine: opening && openingLine && (openingLine.text ?? "").trim() === opening ? openingLine : void 0,
+      context: {
+        source: subjectType,
+        source_id: subjectId,
+        entity_references: isEntity ? [{ entity_type: subjectType, entity_id: subjectId, display_name: opts.label ?? "" }] : [],
+        ...subjectType === "meeting" ? { prep_event_id: subjectId, prep_meeting_title: opts.label, prep_phase: opts.phase ?? "before" } : {}
+      }
+    });
+  }
+  /**
+   * The chat pane, showing a meeting's own conversation (2026-09-30): the question before it, the
+   * arc's session, "Anything you didn't say in there?" and the Yes/No after it, each answered there.
+   */
+  async openMeetingConversation(eventId, label, occurrenceKey) {
+    const existing = this.app.workspace.getLeavesOfType(CHAT_VIEW_TYPE);
+    const leaf = existing[0] ?? this.app.workspace.getRightLeaf(false);
+    if (!leaf) return;
+    if (!existing.length) await leaf.setViewState({ type: CHAT_VIEW_TYPE, active: true });
+    await this.app.workspace.revealLeaf(leaf);
+    const view = leaf.view;
+    if (view instanceof ChatView) await view.openMeeting(eventId, label, occurrenceKey);
+    this.broughtForward(leaf);
+  }
+  /**
+   * The chat pane, showing a line's own conversation (2026-10-03): the account's "About you" question, or a
+   * person's or a company's line answered with several picks or a typed name. False when the pane cannot open.
+   */
+  async openSubjectConversation(type, id, label) {
+    const existing = this.app.workspace.getLeavesOfType(CHAT_VIEW_TYPE);
+    const leaf = existing[0] ?? this.app.workspace.getRightLeaf(false);
+    if (!leaf) return false;
+    if (!existing.length) await leaf.setViewState({ type: CHAT_VIEW_TYPE, active: true });
+    await this.app.workspace.revealLeaf(leaf);
+    const view = leaf.view;
+    const opened = view instanceof ChatView ? await view.openSubject(type, id, label) : false;
+    this.broughtForward(leaf);
+    return opened;
+  }
+  /** A conversation an answer asks to open (`open_conversation`: the arc's Now). */
+  async openConversationRef(ref, label = "") {
+    if (ref.subject_type === "meeting") await this.openMeetingConversation(ref.subject_id, label, ref.occurrence_key);
+    else await this.openChatAbout(ref.subject_type, ref.subject_id, { label, occurrenceKey: ref.occurrence_key });
+  }
+  /**
+   * A meeting's note in Myu's folder (written from the meeting history, `type: myu-meeting` and its
+   * id), opened in the workspace. False when the vault has none: the caller shows the notes in place.
+   */
+  async openMeetingNote(meetingId) {
+    const file = this.app.vault.getMarkdownFiles().find((f) => {
+      const fm = this.app.metadataCache.getFileCache(f)?.frontmatter;
+      return fm?.type === "myu-meeting" && fm["myu-id"] === meetingId;
+    });
+    if (!file) return false;
+    await this.app.workspace.getLeaf(false).openFile(file);
+    return true;
+  }
+  /** The chat pane, showing a space's own conversation. False when this backend has no space mode. */
+  async openSpaceConversation(spaceId, label, opts = {}) {
+    const existing = this.app.workspace.getLeavesOfType(CHAT_VIEW_TYPE);
+    const leaf = existing[0] ?? this.app.workspace.getRightLeaf(false);
+    if (!leaf) return false;
+    if (!existing.length) await leaf.setViewState({ type: CHAT_VIEW_TYPE, active: true });
+    await this.app.workspace.revealLeaf(leaf);
+    const view = leaf.view;
+    const opened = view instanceof ChatView ? await view.openSpace(spaceId, label, opts) : false;
+    if (opened) this.broughtForward(leaf);
+    return opened;
+  }
   async openChat(seed) {
     const existing = this.app.workspace.getLeavesOfType(CHAT_VIEW_TYPE);
     const leaf = existing[0] ?? this.app.workspace.getRightLeaf(false);
@@ -19717,6 +26099,7 @@ What do you notice?`,
     await this.app.workspace.revealLeaf(leaf);
     const view = leaf.view;
     if (view instanceof ChatView) view.seed(seed);
+    this.broughtForward(leaf);
   }
   /** P6.3 — the exposure modal, then the vault-module write. Never automatic. */
   offerConversationSave(turns) {
@@ -19802,7 +26185,7 @@ What do you notice?`,
       void this.refreshToday();
     });
     this.lastSyncAt = Date.now();
-    notifyStatus(`Exported \u2014 ${summary.conversations.saved} conversations, ${summary.canvases.kept} canvases, ${summary.people} people. Receipt: Myu/Export.md`);
+    notifyStatus(`Exported: ${summary.conversations.saved} conversations, ${summary.canvases.kept} canvases, ${summary.people} people. Summary: Myu/Export.md`);
   }
   openDataExport() {
     if (this.unlock.current !== "unlocked") {
@@ -19832,14 +26215,14 @@ What do you notice?`,
   async keepCanvasIfAlwaysOn(compositionId, summary = "") {
     if (!shouldKeepCanvas(this.settings.auto_keep_canvas, compositionId, this.keptCanvasIds)) return;
     const outcome = await this.exportComposition(compositionId, "canvas", { quiet: true });
-    if (outcome.status === "written") notifyStatus(`Kept canvas${summary ? ` \u2014 ${summary}` : ""}: ${outcome.canvasPath}`);
-    else notifyError(`Couldn\u2019t keep a canvas: ${outcome.message}`);
+    if (outcome.status === "written") notifyStatus(`Saved canvas${summary ? ` \u2014 ${summary}` : ""}: ${outcome.canvasPath}`);
+    else notifyError(`Couldn\u2019t save a canvas: ${outcome.message}`);
   }
   async exportComposition(compositionId, format = "canvas", opts = {}) {
     const res = await this.backend.getComposition(compositionId);
     const spec = res.data?.composition;
     if (!res.ok || !spec) {
-      if (!opts.quiet) notifyError("Couldn't load that composition. Check the id and your connection.");
+      if (!opts.quiet) notifyError("Couldn't load that canvas. Check the id and your connection.");
       return { status: "error", message: res.error || "could not load the composition" };
     }
     const webUrl = `${this.settings.base_url.replace(/\/api\/?$/, "")}/dashboard`;
@@ -19894,7 +26277,7 @@ What do you notice?`,
         notifyError("No weekly note configured in Periodic Notes, so there is nowhere to write it.");
         break;
       case "nothing_to_write":
-        notifyStatus("No movement to report this week \u2014 nothing written.");
+        notifyStatus("Nothing changed this week, so nothing was written.");
         break;
       case "error":
         notifyError(`Could not write the weekly review: ${outcome.message}`);

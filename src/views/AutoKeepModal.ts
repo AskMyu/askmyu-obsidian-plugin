@@ -19,23 +19,23 @@ export class AutoKeepModal extends Modal {
   override onOpen(): void {
     const { contentEl } = this;
     contentEl.addClass('myu-power-down');
-    contentEl.createEl('h2', { text: 'Keep every canvas in your vault?' });
+    contentEl.createEl('h2', { text: 'Save every canvas to your vault?' });
     contentEl.createEl('p', {
       cls: 'myu-prose',
       text:
-        'While this is on, every canvas this pane shows is saved into Myu/Canvas/ \u2014 ' +
-        'the same composition updates its file in place and keeps your layout; a new one gets a new file. ' +
-        'Canvases Myu makes expire on the server within a day; the vault copy is the one that lasts.',
+        'While this is on, every canvas shown in this pane is saved to Myu/Canvas/. ' +
+        'When Myu updates a canvas, its file is updated in place and your layout stays. A new canvas gets a new file. ' +
+        'Canvases expire on the server within a day; the copy in your vault does not.',
     });
     contentEl.createEl('p', {
       cls: 'myu-prose myu-quiet',
       text:
-        'Worth knowing: vault files sync through whatever you use, and anything written here ' +
-        'leaves Myu\u2019s reach permanently. Turn the switch off any time; files already kept stay yours.',
+        'Note: files in your vault sync with whatever sync service you use, and Myu cannot change ' +
+        'or delete them once they are written. You can turn this off at any time. Files already saved stay in your vault.',
     });
     new Setting(contentEl)
       .addButton((b) => b.setButtonText('Not now').onClick(() => this.answer(false)))
-      .addButton((b) => b.setButtonText('Keep every canvas').setCta().onClick(() => this.answer(true)));
+      .addButton((b) => b.setButtonText('Save every canvas').setCta().onClick(() => this.answer(true)));
   }
 
   private answer(keep: boolean): void {

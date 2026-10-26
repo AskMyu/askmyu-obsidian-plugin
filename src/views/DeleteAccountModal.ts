@@ -40,16 +40,16 @@ export class DeleteAccountModal extends Modal {
     contentEl.createEl('p', {
       cls: 'myu-prose',
       text:
-        'Everything askMyu holds about you is deleted: your entries, the people ' +
-        'and companies it built, its reads, and the key that opens them. This ' +
-        'cannot be undone and there is no grace period.',
+        'Everything askMyu stores about you is deleted: your entries, the people ' +
+        'and companies it knows, what it has written about them, and the encryption key. ' +
+        'This cannot be undone.',
     });
     contentEl.createEl('p', {
       cls: 'myu-prose',
       text:
-        'Your vault is untouched. Every note you wrote stays exactly where it ' +
-        'is, including the folder Myu has been keeping — that folder simply ' +
-        'stops changing. Delete it whenever you like; everything in it is ' +
+        'Your vault is not touched. Every note you wrote stays where it is, ' +
+        'including the Myu folder. That folder just stops updating. ' +
+        'You can delete it whenever you like; every file in it is ' +
         'marked myu-generated: true.',
     });
 

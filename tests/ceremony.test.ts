@@ -80,7 +80,7 @@ test('ceremony — manager path: copy → door-aware finish → genesis, NO pape
   // The finish door must exist, speak to the MANAGER path, and not demand
   // the retype (the phantom paper-check bug).
   assert.ok(
-    await root.click('It’s in my password manager — finish'),
+    await root.click('Saved in my password manager. Finish'),
     `manager finish button missing; visible: ${root.visibleTexts().join(' | ')}`,
   );
   assert.deepEqual(calls.completeGenesis, [phrase], 'genesis ran with the shown phrase');
@@ -114,7 +114,7 @@ test('ceremony — paper path: wrong words refused, right words finish', async (
 test('ceremony — harden mode routes to setupRecoveryPhrase, not genesis', async () => {
   const { root, phrase, calls } = makeModal('harden');
   await root.click('Copy for your password manager');
-  await root.click('It’s in my password manager — finish');
+  await root.click('Saved in my password manager. Finish');
   assert.deepEqual(calls.setupRecoveryPhrase, [phrase]);
   assert.equal(calls.completeGenesis.length, 0);
 });
@@ -122,8 +122,8 @@ test('ceremony — harden mode routes to setupRecoveryPhrase, not genesis', asyn
 test('ceremony — before securing, the only doors are write-down and not-now', async () => {
   const { root } = makeModal('genesis');
   const texts = root.visibleTexts();
-  assert.ok(!texts.includes('It’s in my password manager — finish'), 'no finish before securing');
-  assert.ok(!texts.includes('The file is safe — finish'), 'no file-finish before securing');
+  assert.ok(!texts.includes('Saved in my password manager. Finish'), 'no finish before securing');
+  assert.ok(!texts.includes('File saved. Finish'), 'no file-finish before securing');
   assert.ok(texts.includes('I wrote it down'));
   assert.ok(texts.includes('Not now'));
   // Platform.isDesktopApp is false in this stub — the file button must hide,
@@ -347,7 +347,7 @@ async function driveDoor(mode: Mode, door: Door, unlockResults?: Array<'ok' | 'u
   const drive = async () => {
     if (door === 'manager') {
       assert.ok(await root.click('Copy for your password manager'), `[${mode}/${door}] copy exists`);
-      assert.ok(await root.click('It’s in my password manager — finish'), `[${mode}/${door}] finish exists`);
+      assert.ok(await root.click('Saved in my password manager. Finish'), `[${mode}/${door}] finish exists`);
     } else if (door === 'paper') {
       assert.ok(await root.click('I wrote it down'), `[${mode}/${door}] write-down exists`);
       const inputs = [...root.walk()].filter((e) => e.tag === 'input');
@@ -397,8 +397,8 @@ test('ceremony — a failed finish strands nobody: the retry completes, every do
       // The modal must still offer a working finish — no dead ends.
       const retried =
         (await t.root.click('Finish')) ||
-        (await t.root.click('It’s in my password manager — finish')) ||
-        (await t.root.click('The file is safe — finish'));
+        (await t.root.click('Saved in my password manager. Finish')) ||
+        (await t.root.click('File saved. Finish'));
       assert.ok(retried, `[${door}] a retry affordance exists after failure (visible: ${t.root.visibleTexts().join(' | ')})`);
       await new Promise((r) => setTimeout(r, 0));
       assert.equal(t.finishedCount(), 1, `[${door}] the retry completed the ceremony`);
@@ -884,7 +884,7 @@ test('delete account — says plainly that the vault survives', async () => {
   const text = root.visibleTexts().join(' ');
   // The reassurance a local-first user needs at exactly this moment, and the
   // thing they would otherwise have to guess at.
-  assert.match(text, /vault is untouched/i, 'the copy states the vault is not deleted');
+  assert.match(text, /vault is not touched/i, 'the copy states the vault is not deleted');
   assert.match(text, /myu-generated/i, 'and how to purge what Myu wrote, if they want to');
 });
 
@@ -944,7 +944,7 @@ test('person edit — correcting a memory REQUIRES the correction text', async (
   const { root, calls } = makePersonEditModal([{ memory_id: 'm1', text: 'He left Acme' }]);
   assert.ok(await root.click('Correct'), 'the correct button exists');
   assert.equal(calls.memory.length, 0, 'no correction typed → nothing sent');
-  assert.ok(notices.some((n) => /actually true/i.test(n)), 'and the user is told why');
+  assert.ok(notices.some((n) => /correction first/i.test(n)), 'and the user is told why');
 });
 
 test('person edit — a typed correction keeps the original, down-weighted', async () => {
@@ -1145,7 +1145,7 @@ test('an unrecognised component renders its data rather than deferring to the we
 type Fx = { type: string; label?: string; variant?: string; data: Record<string, unknown>; expect: RegExp };
 const COMPONENT_FIXTURES: Record<string, Fx> = {
   a: { type: 'text_block', data: { text: 'Two weeks without a reply.', tone: 'observational' }, expect: /Two weeks without a reply\./ },
-  b: { type: 'person_card', data: { name: 'Marcus Webb', role: 'VP Eng', company: 'Acme', health_tier: 'NEEDS_ATTENTION', key_insight: 'has gone quiet', photo_url: 'https://x/p.jpg' }, expect: /\[\[Marcus Webb\]\] — VP Eng, Acme — \*needs attention\* — has gone quiet/ },
+  b: { type: 'person_card', data: { name: 'Marcus Webb', role: 'VP Eng', company: 'Acme', health_tier: 'NEEDS_ATTENTION', key_insight: 'has gone quiet', photo_url: 'https://x/p.jpg' }, expect: /\[\[Marcus Webb\]\] — VP Eng, Acme — \*worth a check-in\* — has gone quiet/ },
   b2: { type: 'person_card', variant: 'stakeholder', data: { name: 'Priya Nair', subject_role: 'Lead Investor', stance: 'skeptical', what_they_want: ['no surprises'], what_they_can_block: ['the bridge round'] }, expect: /\*\*Stance\*\* — skeptical[\s\S]*What they can block[\s\S]*the bridge round/ },
   c: { type: 'team_grid', data: { title: 'Platform', total_count: 3, people: [{ id: 'p1', type: 'person_card', data: { name: 'Dana Ortiz', role: 'Staff Eng' } }] }, expect: /\*1 of 3\*[\s\S]*\[\[Dana Ortiz\]\] — Staff Eng/ },
   d: { type: 'chart', data: { title: 'Reply latency', fallback_text: 'Replies slowed over July.', recharts_config: { type: 'line', x_key: 'week', y_key: 'days', color: '#b8860b', data: [{ week: '07-06', days: 1 }, { week: '07-20', days: 9 }] } }, expect: /\| Week \| Days \|[\s\S]*\| 07-20 \| 9 \|[\s\S]*Replies slowed over July\./ },
@@ -1193,7 +1193,7 @@ const COMPONENT_FIXTURES: Record<string, Fx> = {
   aq: { type: 'prediction_table', data: { framing: 'If you do nothing', horizon_label: 'next 14 days', predictions: [{ what: 'He escalates', confidence: 0.55, by_when: '2026-09-05', who_else_affected: ['Dana Ortiz'] }], footer: 'Based on 3 patterns.' }, expect: /If you do nothing \*\(next 14 days\)\*[\s\S]*\| He escalates \| 2026-09-05 \| 55% \| Dana Ortiz \|[\s\S]*\*Based on 3 patterns\.\*/ },
   ar: { type: 'alignment_hierarchy', data: { subject_name: 'Marcus Webb', overall_alignment_score: 0.55, tiers: [{ level: 'L2', label: 'Strategy', score: 0.3, status: 'disagree', their_stance: 'growth now', your_stance: 'debt first', evidence: [{ date: '08-20', source: 'slack', preview: 'no to sales' }], actions: ['Name the trade-off'] }] }, expect: /Alignment with \[\[Marcus Webb\]\][\s\S]*\*\*55% aligned\*\*[\s\S]*\*\*L2 Strategy\*\* — disagree 30%\n  - them: growth now\n  - you: debt first\n  - `08-20` no to sales \*\(slack\)\*\n  - → Name the trade-off/ },
   as: { type: 'circle_pack', data: { title: 'Clusters', nodes: [{ id: 'r-4', label: 'Dana Ortiz', value: 9, group: 'platform' }], groups: [{ id: 'platform', label: 'Platform' }] }, expect: /\*\*Platform\*\*\n- \[\[Dana Ortiz\]\] \(9\)/ },
-  at: { type: 'hierarchy', data: { title: 'Reporting', root: { id: 'you', label: 'You', children: [{ id: 'r-1', label: 'Marcus Webb', health_tier: 'at_risk', children: [{ id: 'r-4', label: 'Dana Ortiz' }] }] } }, expect: /- You\n  - Marcus Webb \*\(at risk\)\*\n    - Dana Ortiz/ },
+  at: { type: 'hierarchy', data: { title: 'Reporting', root: { id: 'you', label: 'You', children: [{ id: 'r-1', label: 'Marcus Webb', health_tier: 'at_risk', children: [{ id: 'r-4', label: 'Dana Ortiz' }] }] } }, expect: /- You\n  - Marcus Webb \*\(needs some care\)\*\n    - Dana Ortiz/ },
   au: { type: 'matrix_view', data: { title: 'Who talks', entities: [{ id: 'r-1', label: 'Marcus' }, { id: 'r-4', label: 'Dana' }], cells: [{ row_id: 'r-1', col_id: 'r-4', value: 14, label: 'weekly' }], value_label: 'messages' }, expect: /\| messages \| Marcus \| Dana \|[\s\S]*\| \*\*Marcus\*\* \|  \| 14 \(weekly\) \|/ },
   av: { type: 'venn_diagram', data: { title: 'Overlap', sets: [{ id: 'a', label: 'Platform', size: 6 }, { id: 'b', label: 'Hiring', size: 4 }], intersections: [{ sets: ['a', 'b'], size: 2, members: [{ id: 'r-4', label: 'Dana Ortiz' }] }] }, expect: /- \*\*Platform ∩ Hiring\*\* — 2: Dana Ortiz/ },
   aw: { type: 'card_section', data: { entity_type: 'person', entity_id: 'r-1', section_type: 'narrative', section_title: 'How things are', section_data: { text: 'The quiet has a shape.' } }, expect: /How things are\n\nThe quiet has a shape\./ },
@@ -1284,7 +1284,7 @@ const THREE = [
 test('save composition — opened from an offer or the pane, the id is KNOWN: no picker, no question', async () => {
   const { root, calls, historyCalls } = makeExportModal({ id: 'comp-9' });
   const text = root.visibleTexts().join(' | ');
-  assert.ok(!/Which composition|paste/i.test(text), `no picker, no paste field: ${text}`);
+  assert.ok(!/Which canvas|paste/i.test(text), `no picker, no paste field: ${text}`);
   assert.equal(historyCalls(), 0, 'and no history fetch');
   assert.ok(await root.click('As a canvas'));
   assert.deepEqual(calls, [['comp-9', 'canvas']]);
@@ -1294,7 +1294,7 @@ test('save composition — opened from the command, it OFFERS compositions; an e
   const { modal, root, calls } = makeExportModal({ rows: THREE });
   await modal.ready;
   const text = root.visibleTexts().join(' | ');
-  assert.match(text, /Which composition\?/);
+  assert.match(text, /Which canvas\?/);
   assert.match(text, /Team read — platform group/, 'rows are offered by their summary');
   assert.match(text, /Where things stand with Marcus/);
   assert.ok(!/An expired one/.test(text), 'an expired composition is not offered — it would be a button that fails');
@@ -1302,7 +1302,7 @@ test('save composition — opened from the command, it OFFERS compositions; an e
   // The reported bug: nothing picked, click a save button, nothing happens.
   assert.ok(await root.click('As a note'));
   assert.deepEqual(calls, [], 'nothing is exported without a choice');
-  assert.match(root.visibleTexts().join(' '), /Pick a composition above first\./, 'and the modal SAYS so (R7)');
+  assert.match(root.visibleTexts().join(' '), /Pick a canvas above first\./, 'and the modal SAYS so (R7)');
 
   // Pick by reading, not by knowing an id.
   assert.ok(await root.click('Where things stand with Marcus'), 'a row is clickable');
@@ -1313,7 +1313,7 @@ test('save composition — opened from the command, it OFFERS compositions; an e
 test('save composition — no compositions yet: says what to do; the buttons never go dead-silent', async () => {
   const { modal, root, calls } = makeExportModal({ rows: [] });
   await modal.ready;
-  assert.match(root.visibleTexts().join(' '), /No compositions yet/);
+  assert.match(root.visibleTexts().join(' '), /No canvases yet/);
   assert.ok(await root.click('As a canvas'));
   assert.deepEqual(calls, []);
   assert.match(root.visibleTexts().join(' '), /Nothing to save yet/, 'the empty click is explained');
@@ -1529,8 +1529,8 @@ test('canvas footer — switch OFF: the save button shows; switch ON: it does no
   const on = new FakeEl('div');
   renderCanvasFooter(on as never, { autoKeep: true, keptPath: 'Myu/Canvas/2026-08-29 Team read.canvas' }, host);
   assert.ok(!(await on.click('Save to my vault')), 'on → no per-save button');
-  assert.match(on.visibleTexts().join(' '), /Always keep in my vault/, 'the switch is still shown');
-  assert.match(on.visibleTexts().join(' '), /kept in Myu\/Canvas\/2026-08-29 Team read\.canvas/, 'and says where the canvas went');
+  assert.match(on.visibleTexts().join(' '), /Always save to my vault/, 'the switch is still shown');
+  assert.match(on.visibleTexts().join(' '), /Saved to Myu\/Canvas\/2026-08-29 Team read\.canvas/, 'and says where the canvas went');
 
   const broken = new FakeEl('div');
   renderCanvasFooter(broken as never, { autoKeep: true, problem: 'Couldn\u2019t keep this canvas: disk full' }, host);
@@ -1542,9 +1542,9 @@ test('auto-keep — turning the switch on asks the exposure question ONCE; dismi
   const answers: boolean[] = [];
   const yes = new AutoKeepModal({} as never, (k) => answers.push(k)); yes.open();
   const root = yes.contentEl as unknown as FakeEl;
-  assert.match(root.visibleTexts().join(' '), /leaves Myu.s reach/, 'the same exposure warning the per-save modal gives');
+  assert.match(root.visibleTexts().join(' '), /cannot change or delete them/, 'the same exposure warning the per-save modal gives');
   assert.match(root.visibleTexts().join(' '), /expire on the server within a day/, 'and why a standing keep is worth it');
-  assert.ok(await root.click('Keep every canvas'));
+  assert.ok(await root.click('Save every canvas'));
   assert.deepEqual(answers, [true]);
 
   const no = new AutoKeepModal({} as never, (k) => answers.push(k)); no.open();
@@ -1675,6 +1675,7 @@ test('chat blocks — every type in the web\'s registry renders as markdown; boa
   // Unknown type with data: the canvas renderer's floor, never a silent drop.
   assert.match(md({ type: 'trust_arc', standing: 'holding' }), /Standing.*holding/);
   assert.equal(chatBlockMarkdown({ type: 'separator_of_nothing' } as never), null, 'unknown and empty → nothing, not junk');
+  assert.equal(chatBlockMarkdown({ type: 'support_actions', id: 's', v: 1, actions: [{ id: 'report_bug', do: 'open_feedback', category: 'bug', label: 'Report this to the team' }] } as never), null);
 });
 
 test('scenes — the pane and the note read a scened composition the way the web\'s full canvas groups it', async () => {
@@ -1768,8 +1769,8 @@ test('person actions — merge candidates follow the web\'s rule; the wire is th
   const answers: boolean[] = [];
   const m = new PersonActionConfirmModal({} as never, PERSON_ACTION_COPY.self('Marcus Webb'), (y) => answers.push(y)); m.open();
   const text = (m.contentEl as unknown as FakeEl).visibleTexts().join(' ');
-  assert.match(text, /Marcus Webb is you\?/);
-  assert.match(text, /becomes part of you/, 'says what happens: the person folds into the self');
+  assert.match(text, /Is Marcus Webb you\?/);
+  assert.match(text, /added to your own profile/, 'says what happens: the person folds into the self');
   assert.ok(!/not folded|not yet recognised/.test(text), 'the pre-fix disclaimer is gone (backend fix deployed, operator 2026-08-29)');
   assert.ok(await (m.contentEl as unknown as FakeEl).click('Yes, that\u2019s me'));
   const m2 = new PersonActionConfirmModal({} as never, PERSON_ACTION_COPY.merge('Marcus W.', 'Marcus Webb'), (y) => answers.push(y)); m2.open(); m2.close();
@@ -1843,7 +1844,7 @@ test('export manifest — a receipt that says what landed, what could not, and w
   assert.match(md, /2 kept, 4 expired on the server and cannot be fetched/);
   assert.match(md, /## What is not here[\s\S]*account[\s\S]*Request my data archive/, 'the account is named as NOT vault material, with the door to it');
   assert.match(md, /## If you uninstall[\s\S]*stays exactly as it is/, 'the statement lives in the vault, not only in a README');
-  assert.match(md, /data\.json[\s\S]*goes with it/, 'and says what leaves: the plugin token and wrapped key');
+  assert.match(md, /data\.json[\s\S]*is removed with it/, 'and says what leaves: the plugin token and wrapped key');
   const one = buildExportManifest({ date: 'd', people: 1, conversations: { saved: 0, alreadyThere: 0, failed: 0 }, canvases: { kept: 0, expired: 0, failed: 0 }, surfaces: [] });
   assert.match(one, /1 page written/); assert.ok(!/already here|could not|expired/.test(one), 'zero counts are not narrated');
 });
@@ -1907,7 +1908,7 @@ test('settings (1.13) — a section renders INSIDE its definitions row; nothing 
   assert.equal(row.children.length, 0, 'cleanup empties the row for the next render');
   const src = await (await import('node:fs/promises')).readFile('src/views/SettingsTab.ts', 'utf8');
   const sections = [...src.matchAll(/section\('([^']+)'|section\("([^"]+)"/g)].map((m) => m[1] ?? m[2]);
-  assert.deepEqual(sections, ['Connection', 'What Myu can read', 'Meeting notes', "Myu's folder", 'Weave Myu in', 'Weekly review', 'Account', 'Advanced'], 'every display() section, Account included, is a definition');
+  assert.deepEqual(sections, ['Connection', 'What Myu can read', 'Meeting notes', "Myu's folder", 'Add Myu to your notes', 'Weekly review', 'Account', 'Advanced'], 'every display() section, Account included, is a definition');
   assert.ok(!/settingEl\.parentElement/.test(src), 'no section renders beside its row any more');
   assert.ok(/searchable: false, render: \(setting: Setting\) => mountInRow\(setting, \(root\) => appendBrand\(root, 'myu-brand myu-brand-settings'\)\)/.test(src), 'the brandmark is a definitions item too — 1.13 paints it on open, not only after a legacy repaint');
 });
@@ -2118,7 +2119,13 @@ test('relationship alerts and priority cards — Notices only at the web\'s defa
 test('card sections — provenance rides along, the sources section reads, per-section discuss only where the web offers it', async () => {
   const { sectionBlocks, isDiscussable, sectionDiscussSeed } = await import('../src/views/cardSections');
   const mem = sectionBlocks({ section_type: 'memories', title: 'Memories', items: [{ text: 'Asked for the plan twice.', date: '2026-08-20', source_type: 'journal_entry', source_id: 'j1' }, { text: 'No source' }] });
-  assert.deepEqual(mem[0], { kind: 'row', text: 'Asked for the plan twice.', meta: '2026-08-20', source: { type: 'journal_entry', id: 'j1' } });
+  assert.deepEqual({ ...mem[0], meta: undefined }, { kind: 'row', text: 'Asked for the plan twice.', meta: undefined, source: { type: 'journal_entry', id: 'j1' } });
+  assert.match(mem[0].meta ?? '', /^20 Aug( 2026)?$/, 'the day in the card\'s words (2026-10-06), never the machine date');
+  const dated = sectionBlocks({ section_type: 'threads', title: 'Your goals', items: [{ text: 'Ship the beta', due_date: String(Date.UTC(2026, 8, 30)) }, { text: 'A memory', memory_date: Date.UTC(2026, 8, 28, 12) }, { text: 'Said so', date: 'last week' }, { text: 'Send the board update', status: 'overdue', due_date: String(Date.UTC(2026, 8, 30)) }] });
+  assert.match(dated[0].meta ?? '', /^due 30 Sep( 2026)?$/, 'a due day, kept as its midnight UTC, is that day');
+  assert.match(dated[3].meta ?? '', /^overdue · due 30 Sep( 2026)?$/, 'an overdue goal says so, as the web and the terminal do');
+  assert.match(dated[1].meta ?? '', /^2[89] Sep( 2026)?$/, 'a memory\'s stamp, the reader\'s day');
+  assert.equal(dated[2].meta, 'last week', 'words the server wrote stay');
   assert.equal(mem[1]?.source, undefined);
   const src = sectionBlocks({ section_type: 'sources', title: 'Sources', items: [{ title: 'Re: Thursday sync', subtitle: 'From Dana', source_type: 'gmail', source_id: 'g1' }] });
   assert.deepEqual(src, [{ kind: 'row', text: 'Re: Thursday sync', meta: 'From Dana', source: { type: 'gmail', id: 'g1' } }]);
@@ -2127,6 +2134,87 @@ test('card sections — provenance rides along, the sources section reads, per-s
   assert.equal(isDiscussable({ section_type: 'memories', actionable: true }), false, 'only patterns/predictions/threads/weather');
   const seed = sectionDiscussSeed({ entity_id: 'rel-1', header: { display_name: 'Marcus Webb' } }, 'person', { section_id: 's1', section_type: 'patterns', title: 'Patterns', narrative: 'Goes quiet under pressure.' }, [{ kind: 'narrative', text: 'Goes quiet under pressure.' }, { kind: 'row', text: 'Q2 reorg' }]);
   assert.deepEqual(seed, { text: 'About Marcus Webb — patterns: ', source_id: 'rel-1:s1', section_content: 'Q2 reorg', section_narrative: 'Goes quiet under pressure.' });
+});
+
+test('card sections — Recent activity\'s items read by their words (2026-10-04: the structure facts are items there)', async () => {
+  const { sectionBlocks } = await import('../src/views/cardSections');
+  const recent = sectionBlocks({
+    section_type: 'recent_activity',
+    title: 'Recent activity',
+    data: {
+      section_type: 'recent_activity',
+      events: [
+        { kind: 'structure', source: 'user_stated', text: 'Reports to Daniel Ortega since December (your answer, 7 Dec); before, Hannah Cole (22 Oct to Dec)', started_ms: Date.UTC(2026, 11, 7) },
+        { kind: 'structure', source: 'email', text: 'An email from Hannah that you were copied on, 24 Nov', started_ms: Date.UTC(2026, 10, 24) },
+        { kind: 'meeting', source: 'calendar', text: '1:1, Tuesday' },
+        { kind: 'hot_edge', source: 'email' },
+      ],
+    },
+  } as never);
+  assert.deepEqual(
+    recent.map((b) => b.text),
+    ['Reports to Daniel Ortega since December (your answer, 7 Dec); before, Hannah Cole (22 Oct to Dec)', 'An email from Hannah that you were copied on, 24 Nov', '1:1, Tuesday · from your calendar'],
+    'every item with words reads (a structure fact as its words alone); one without words is not a row; a source code never shows as such',
+  );
+});
+
+test('the person note carries Recent activity as the pane shows it (2026-10-04: the structure facts reach the vault)', async () => {
+  const { buildPersonMarkdown } = await import('../src/vault/myuFiles');
+  const md = buildPersonMarkdown(
+    { entity_type: 'person', entity_id: 'rel-t', display_name: 'Tomás Rivera', item_count: 0, top_urgency: 'low', organization: 'Corvane', subtitle: 'Director of Engineering at Corvane · reports to Hannah Cole' },
+    {
+      sections: [
+        {
+          section_type: 'recent_activity',
+          title: 'Recent activity',
+          data: {
+            section_type: 'recent_activity',
+            events: [
+              { kind: 'structure', source: 'user_stated', text: 'You said he reports to Hannah Cole (4 Oct)', started_ms: Date.UTC(2026, 9, 4) },
+              { kind: 'structure', source: 'email', text: 'An email from Hannah that you were copied on, 24 Sep', started_ms: Date.UTC(2026, 8, 24) },
+            ],
+          },
+        },
+      ],
+    } as never,
+    [],
+    () => false,
+    null,
+    [],
+  );
+  assert.match(md, /^## Recent activity\n- You said he reports to Hannah Cole \(4 Oct\)\n- An email from Hannah that you were copied on, 24 Sep$/m, md);
+  assert.match(md, /^role: Director of Engineering at Corvane · reports to Hannah Cole$/m, 'the role line, whole, as a Bases column');
+});
+
+test('the self card in the vault (2026-10-05): the read in full, the tiles, the pressing item; patterns, predictions and the energy map in words', async () => {
+  const { buildSelfMarkdown } = await import('../src/vault/myuFiles');
+  const md = buildSelfMarkdown({
+    known_facts: [
+      { key: 'you', value: 'CEO and co-founder, askMyu', source: 'you', kind: 'fact' },
+      { key: 'read', value: 'You’ve spent 27 years building teams…', full: 'You’ve spent 27 years building teams, most of them as CEO.', source: 'read', kind: 'read' },
+    ],
+    tiles: [{ label: 'Burnout', value: 'Not enough yet' }, { label: 'Active goals', value: '2 active', tap_section_type: 'threads' }, { label: 'Overdue', value: '1 item', tap_section_type: 'threads' }, { label: 'Patterns', value: '3', tap_section_type: 'patterns_not_here' }],
+    hot_item: { text: 'Your board update is due Friday.', urgency: 'medium' },
+    sections: [
+      { section_type: 'threads', title: 'Your goals', data: { section_type: 'threads', items: [{ text: 'Hire two engineers' }, { text: 'Ship the beta', overdue: true }] } },
+      { section_type: 'patterns', title: 'Patterns I’m noticing', data: { section_type: 'patterns', patterns: [{ pattern_name: 'When a big decision is open, your entries swing more', description: 'How driven you sound swings more than usual.', confidence: 0.86, trend: 'declining', instances: [{ date_range: '2026-09-28 to 2026-09-28', context: 'The contract offer', detail: '' }] }] } },
+      { section_type: 'predictions', title: 'Where you’re heading', data: { section_type: 'predictions', predictions: [{ prediction: 'Ship the beta', score: 0.6 }, { prediction: 'Hire two engineers', score: 0.75, basis: 'From 3 of 4 interviews done.' }] } },
+      { section_type: 'energy_map', title: 'Energy map', data: { section_type: 'energy_map', entries: [{ entity_name: 'James Gregoire', mention_count: 7 }, { entity_name: 'James Gregoire', overall_trend: 'DEPLETING' }] } },
+      { section_type: 'career', title: 'Career', data: { section_type: 'career', narrative: 'You keep building.', top_prediction: { next_phase_name: 'Hiring your replacements' } } },
+    ],
+  } as never);
+  assert.match(md, /- \*\*Myu’s read\*\* — \*You’ve spent 27 years building teams, most of them as CEO\.\* \(Myu’s guess, not confirmed\)/);
+  assert.match(md, /- \*\*you\*\* — CEO and co-founder, askMyu · you said/);
+  assert.match(md, /## At a glance\n\n- \*\*Burnout\*\* — Not enough yet\n/);
+  assert.match(md, /- \*\*Active goals\*\* — \[\[#Your goals\|2 active\]\]\n- \*\*Overdue\*\* — \[\[#Your goals\|1 item\]\]\n/, 'a goal tile links to the section that lists the goals');
+  assert.match(md, /- \*\*Patterns\*\* — 3\n/, 'a tile whose section is not on the page is plain text');
+  assert.match(md, /^## Your goals$/m);
+  assert.match(md, /## Now\n\n- Your board update is due Friday\./);
+  assert.match(md, /- When a big decision is open, your entries swing more: How driven you sound swings more than usual\.\n- ↳ The contract offer \*\(28 Sep( 2026)?\)\*/);
+  assert.match(md, /- Ship the beta\n- Hire two engineers \*\(75% · From 3 of 4 interviews done\.\)\*/, 'a number only with its basis');
+  assert.match(md, /- James Gregoire \*\(came up 7 times · draining\)\*/, 'one row per person, the trend in words');
+  assert.match(md, /- Next: Hiring your replacements/);
+  assert.doesNotMatch(md, /DEPLETING|86%|confidence|declining|60%/);
 });
 
 test('feed-panel wires — GET/POST, paths and bodies exactly as the web sends them', async () => {
@@ -2138,7 +2226,7 @@ test('feed-panel wires — GET/POST, paths and bodies exactly as the web sends t
   await api.searchFeed('mar cus'); await api.getSourceDetail('gmail', 'g 1'); await api.setRelationshipLinkedIn('r1', null); await api.setRelationshipLinkedIn('r1', 'https://linkedin.com/in/x'); await api.rejectMerge('s', 't');
   await api.addMeetingDecision('m1', 'Keep Thursday'); await api.addMeetingCommitment('m1', 'Book the room', 'action_item', 'Dana'); await api.getDriveSuggestions(); await api.importFromDrive(['f1']); await api.dismissDriveSuggestion('sug-1');
   assert.deepEqual(calls, [
-    ['GET', '/feed/help-myu'], ['GET', '/feed/related-persons?relationship_id=r%2F1&limit=5'], ['GET', '/feed/related-memories?relationship_id=r1&limit=3'],
+    ['GET', '/myu/lines?scope=people'], ['GET', '/feed/related-persons?relationship_id=r%2F1&limit=5'], ['GET', '/feed/related-memories?relationship_id=r1&limit=3'],
     ['GET', '/feed/entities/dispatch?entity_type=person&entity_id=r1'], ['POST', '/feed/entities/dismiss', { entity_id: 'r1', signal_fingerprint: 'fp', category: 'attention' }],
     ['GET', '/feed/search?q=mar%20cus&types=all&limit=10'], ['GET', '/card/source-detail?source_type=gmail&source_id=g%201'],
     ['POST', '/v2/relationships/linkedin/r1', { linkedin_url: null }], ['POST', '/v2/relationships/linkedin/r1', { linkedin_url: 'https://linkedin.com/in/x' }],
@@ -2244,9 +2332,28 @@ test('LinkedIn matches — the panel\'s walk, verbatim: one card, ✗ brings the
 test('reply rating — the web\'s modal: the thumb sets the rating, a note is optional, what is sent is SAID and the transcript is a switch', async () => {
   const { ReplyRatingModal } = await import('../src/views/ReplyRatingModal');
   const { formatConversationAttachment } = await import('../src/views/feedbackAttachment');
-  const turns = [{ role: 'user', text: 'so this whole shopping for a law firm' }, { role: 'myu', blocks: [{ type: 'conversational', text: 'Ask for a **capped** first engagement.' }] }] as never[];
+  // The opening turn carries its time and a pasted block (2026-10-06); Myu's turn has no time, so it takes the attachment's.
+  const letter = { id: 'p1', text: 'Engagement letter, draft 2\n\nFees: capped for the first phase.', chars: 61, lines: 3, source: 'paste' };
+  const turns = [{ role: 'user', text: 'so this whole shopping for a law firm', at: '2026-08-30T09:59:00.000Z', pasted: [letter] }, { role: 'myu', blocks: [{ type: 'conversational', text: 'Ask for a **capped** first engagement.' }] }] as never[];
   const att = formatConversationAttachment(turns as never, 'j1', new Date('2026-08-30T10:00:00Z'));
-  assert.match(att.attached_content, /^--- Journal Entry ---\nID: j1\nTimestamp: 2026-08-30T10:00:00.000Z\n\nso this whole shopping for a law firm\n\n--- Journal Chat ---\n\[agent\] Ask for a \*\*capped\*\* first engagement\.$/, 'the web\'s formatJournalForEmail shape');
+  assert.equal(
+    att.attached_content,
+    [
+      '--- Journal Entry ---',
+      'ID: j1',
+      'Timestamp: 2026-08-30T09:59:00.000Z',
+      '',
+      '  so this whole shopping for a law firm',
+      '  [pasted text 1 · 61 chars · 3 lines · paste]',
+      '  | Engagement letter, draft 2',
+      '  |',
+      '  | Fees: capped for the first phase.',
+      '',
+      '--- Journal Chat ---',
+      '[agent 2026-08-30T10:00:00.000Z] Ask for a **capped** first engagement.',
+    ].join('\n'),
+    'the shared conversation.txt shape: timestamped turns, labelled blocks',
+  );
   assert.match(att.attached_summary, /^Journal entry \(.+\):\nso this whole shopping for a law firm\n\n1 chat turn attached in full\.$/);
 
   const sent: unknown[] = [];
@@ -2259,7 +2366,7 @@ test('reply rating — the web\'s modal: the thumb sets the rating, a note is op
   const m = new ReplyRatingModal({} as never, plugin as never, -1, 'j1', turns as never, () => { submitted++; }); m.open();
   const root = m.contentEl as unknown as FakeEl;
   const text = root.visibleTexts().join(' ');
-  assert.match(text, /What was off\?/, 'the web\'s header for a thumbs-down');
+  assert.match(text, /What went wrong\?/, 'the web\'s header for a thumbs-down');
   assert.match(text, /Attach this conversation/, 'the transcript is a visible switch');
   assert.ok(await root.click('Send'));
   await new Promise((r) => setTimeout(r, 0));
@@ -2284,7 +2391,7 @@ test('the first run is the pane, not a ladder — no modal on enable, rows in To
   assert.match(enable, /notifyStatus\('askMyu is installed/, 'a Notice, and the pane');
   const today = await fs.readFile('src/views/TodayView.ts', 'utf8');
   const rows = today.slice(today.indexOf('private setupRows()'), today.indexOf('return rows;'));
-  const order = ['Keep what Myu knows in your vault', 'Choose what Myu may read', 'Bring in what you have already written', 'Share meeting notes', 'Tell Myu who you are'].map((t) => rows.indexOf(t));
+  const order = ['Save what Myu knows to your vault', 'Choose what Myu may read', 'Share the notes you have already written', 'Share meeting notes', 'Tell Myu who you are'].map((t) => rows.indexOf(t));
   assert.ok(order.every((i) => i >= 0) && order.every((i, k) => k === 0 || i > order[k - 1]!), `rows in the agreed order: ${order.join(',')}`);
   assert.match(rows, /!s\.materialize_consented && \(this\.brief \|\| s\.consent_completed\)/, 'the folder row shows as soon as Myu has something to put in it');
   const { OnboardingModal } = await import('../src/views/OnboardingModal');
@@ -2325,7 +2432,7 @@ test('read consent — names the one server and shows what each folder holds; th
   assert.equal(folderScope(app, 'Empty'), 'no notes yet');
   const fs = await import('node:fs/promises');
   const write = await fs.readFile('src/views/MaterializeConsentModal.ts', 'utf8');
-  assert.match(write, /Myu keeps one folder in your vault, up to date: a page for each/, 'the give, first');
+  assert.match(write, /Myu writes one folder in your vault and keeps it up to date: a page for each/, 'the give, first');
   assert.match(write, /Remove everything Myu wrote/, 'and the way out, named');
   const readme = await fs.readFile('README.md', 'utf8');
   for (const q of ['Can I self-host, or use it offline?', 'What exactly is sent?', 'Can I exclude my journal, or any note?', 'Will it touch my existing notes?', 'Can I change the folder?', 'How do I delete my data?']) assert.ok(readme.includes(q), `README answers: ${q}`);
@@ -2369,12 +2476,12 @@ test('settings — a fetch that FAILED is said in the reader\'s words, never pai
   assert.equal(loadFailure({ ok: true, status: 200, error: null }), null);
   assert.match(loadFailure(null)!, /could not be reached/);
   assert.match(loadFailure({ ok: false, status: 0, error: 'offline' })!, /could not be reached/);
-  assert.match(loadFailure({ ok: false, status: 401, error: 'http_401' })!, /reopened/);
-  assert.match(loadFailure({ ok: false, status: 403, error: 'http_403' })!, /still being opened/);
+  assert.match(loadFailure({ ok: false, status: 401, error: 'http_401' })!, /refreshed/);
+  assert.match(loadFailure({ ok: false, status: 403, error: 'http_403' })!, /Still signing in/);
   assert.match(loadFailure({ ok: false, status: 428, error: 'terms_required' })!, /beta terms/);
-  assert.match(loadFailure({ ok: false, status: 429, error: 'http_429' })!, /pause/);
-  assert.match(loadFailure({ ok: false, status: 503, error: 'http_503' })!, /could not answer \(503\)/);
-  assert.match(loadFailure({ ok: false, status: 404, error: 'http_404' })!, /answered 404/);
+  assert.match(loadFailure({ ok: false, status: 429, error: 'http_429' })!, /Too many requests/);
+  assert.match(loadFailure({ ok: false, status: 503, error: 'http_503' })!, /server error \(503\)/);
+  assert.match(loadFailure({ ok: false, status: 404, error: 'http_404' })!, /returned an error \(404\)/);
 });
 
 test('settings — rerender is update(): the definitions are re-read and the active tab repainted; no legacy display() remains', async () => {
@@ -2551,7 +2658,7 @@ test('settings — a refused device list says so and offers Retry; Retry paints 
   const host = new FakeEl('div');
   await (tab as unknown as { renderDevices(el: FakeEl): Promise<void> }).renderDevices(host);
   let texts = host.visibleTexts();
-  assert.ok(texts.some((t) => t.startsWith("Couldn't load — This session is still being opened")), `says why: ${texts.join(' | ')}`);
+  assert.ok(texts.some((t) => t.startsWith("Couldn't load. Still signing in")), `says why: ${texts.join(' | ')}`);
   assert.ok(!texts.some((t) => /no other devices|no devices/i.test(t)), 'a refusal is not an empty state');
   assert.ok(await host.click('Retry'), 'Retry is offered');
   await new Promise((r) => setTimeout(r, 5));
@@ -2596,10 +2703,10 @@ test('weave — one module owns the recipes: seven, unique, the folder woven in,
   // A snippet that IS a fence gets a longer fence around it, so the copy is the whole block.
   assert.ok(guide.includes('````markdown\n```tasks\nnot done\npath includes Notes/Myu\n```\n````'), 'the Tasks block is wrapped in a four-tick fence');
   assert.equal(fence('plain', 'text'), '```text\nplain\n```');
-  assert.ok(guide.startsWith('# Weave Myu in\n'), 'the pane carries its own title');
+  assert.ok(guide.startsWith('# Add Myu to your notes\n'), 'the pane carries its own title');
   const note = weaveGuide('Myu', { asNote: true });
   assert.ok(note.startsWith('---\nmyu-generated: true\n---\n'), 'as a note it is purgeable like everything Myu writes');
-  assert.ok(!note.includes('# Weave Myu in\n'), 'as a note the file name is the title');
+  assert.ok(!note.includes('# Add Myu to your notes\n'), 'as a note the file name is the title');
   assert.ok(guide.includes('app.plugins.plugins.askmyu.api'), 'the scripting API moved here from the settings pane');
 });
 
@@ -2623,12 +2730,12 @@ test('weave — the pane renders the guide, adds a copy button only where Obsidi
   const view = new WeaveView({} as never, plugin as never);
   await view.onOpen();
   assert.equal(markdownRenders.length, before + 1, 'one render');
-  assert.ok(markdownRenders[before]!.startsWith('# Weave Myu in'), 'the guide is what is rendered');
-  assert.ok(!view.contentEl.visibleTexts().some((t) => t.startsWith('Keep a copy')), 'no write offered while the folder is off');
+  assert.ok(markdownRenders[before]!.startsWith('# Add Myu to your notes'), 'the guide is what is rendered');
+  assert.ok(!view.contentEl.visibleTexts().some((t) => t.startsWith('Save a copy')), 'no write offered while the folder is off');
   settings.materialize_consented = true;
   settings.materialize_enabled = true;
   await view.render();
-  assert.ok(view.contentEl.visibleTexts().includes('Keep a copy in Myu/'), 'the write is offered once the folder is on');
+  assert.ok(view.contentEl.visibleTexts().includes('Save a copy in Myu/'), 'the write is offered once the folder is on');
 
   // Copy buttons: one per bare <pre>, none where Obsidian already put one.
   const body = new FakeEl('div');
@@ -2825,8 +2932,8 @@ test('approval — the machine owns it: a dialog closing does not cancel; denial
   const { approvalFailureText } = await import('../src/views/approvalCopy');
   assert.match(approvalFailureText({ step: 'request', status: 429, error: 'rate_limit_exceeded' }), /Too many approval requests in the last hour/);
   assert.match(approvalFailureText({ step: 'request', status: 0, error: 'offline' }), /^Could not start the approval\. askMyu could not be reached/);
-  assert.match(approvalFailureText({ step: 'poll', status: 403, error: 'http_403' }), /^Could not check on the approval\. This session is still being opened/);
-  assert.match(approvalFailureText({ step: 'handover', status: 0, error: null }), /key handover/);
+  assert.match(approvalFailureText({ step: 'poll', status: 403, error: 'http_403' }), /^Could not check on the approval\. Still signing in/);
+  assert.match(approvalFailureText({ step: 'handover', status: 0, error: null }), /receiving your key/);
 
   // While waiting, a pause or a server hiccup is not a verdict; a request the server forgot has aged out.
   let pollAnswer: { ok: boolean; status: number; data: unknown; error: string | null } = { ok: false, status: 503, data: null, error: 'http_503' };
@@ -3099,6 +3206,75 @@ test('Today — one bundle unpacks into the six reads the pane knows; a null par
   const half = readsFromBundle({ ok: true, status: 200, error: null, data: { brief: null, events: { events: [] }, errors: { brief: 'brief failed' } } } as never);
   assert.equal(half.brief.ok, false);
   assert.equal(half.brief.error, 'brief failed', 'a failed part carries its own message');
+});
+
+test('sync — Me.md is your whole card: the deep dive (the read in full, its tiles and pressing item); an older server\'s deep card takes them from the read card (2026-10-05)', async () => {
+  const { MaterializationService } = await import('../src/vault/MaterializationService');
+  const { TFile } = await import('./ui-stub');
+  const w = ((globalThis as { window?: Record<string, unknown> }).window ??= {});
+  w['setTimeout'] ??= setTimeout;
+  const files = new Map<string, string>();
+  const tfile = (path: string) => Object.assign(new TFile(), { path });
+  const app = {
+    vault: {
+      getAbstractFileByPath: (p: string) => (files.has(p) ? tfile(p) : null),
+      cachedRead: async (f: { path: string }) => files.get(f.path) ?? '',
+      process: async (f: { path: string }, fn: (s: string) => string) => { files.set(f.path, fn(files.get(f.path) ?? '')); },
+      create: async (p: string, c: string) => { files.set(p, c); },
+      createFolder: async () => undefined,
+      getMarkdownFiles: () => [...files.keys()].map(tfile),
+      getFirstLinkpathDest: () => null,
+    },
+    metadataCache: { getFileCache: () => ({ frontmatter: {} }) },
+    fileManager: { trashFile: async (f: { path: string }) => { files.delete(f.path); } },
+  };
+  const settings: Record<string, unknown> = {
+    account_id: 'acc', materialize_folder: 'Myu', materialize_consented: true, materialize_enabled: true, materialize_people: false, materialize_commitments: false,
+    materialize_meetings_history: false, materialize_journal_history: false, materialize_calendar: false, materialize_today: false,
+    myu_checkbox_state: {}, myu_file_hashes: {}, myu_entity_changed_at: {}, memories_by_day: {}, vault_changes_since: 0, last_people_materialize: 0, last_history_materialize: 0,
+  };
+  const ok = (data: unknown) => ({ ok: true, status: 200, data, error: null });
+  const facts = (deep: boolean) => [{ key: 'read', value: 'You’ve spent 27 years across 12 companies.', ...(deep ? { full: 'You’ve spent 27 years across 12 companies. Alongside it: advisor at Monitaur.' } : {}), source: 'read', kind: 'read' }];
+  const readCard = { header: { display_name: 'You' }, known_facts: facts(false), tiles: [{ label: 'Burnout risk', value: 'Low' }], hot_item: { text: 'Your board update is due Friday.', urgency: 'medium' }, sections: [] };
+  const deepCard = { header: { display_name: 'You' }, known_facts: facts(true), sections: [{ section_type: 'career', title: 'Career', data: { section_type: 'career', top_prediction: { next_phase_name: 'Hiring your replacements' } } }] };
+  const asked: string[] = [];
+  const api = {
+    getSelfCard: async (level?: string) => { asked.push(level ?? 'read'); return ok({ card: level === 'deep_dive' ? deepCard : readCard }); },
+    getVaultChanges: async () => ok({ server_time: 1, since: 0, self: { card: readCard }, people: [], companies: [], meetings: [], journal_days: [], next_cursor: null }),
+    listVaultCommitments: async () => ok({ commitments: [] }),
+  };
+  const svc = new MaterializationService({
+    app: app as never, api: () => api as never, settings: () => settings as never, save: async () => undefined, canRun: () => true,
+    findTheirPage: () => null, onProgress: () => undefined, contentKey: () => ({}) as CryptoKey,
+    flags: () => ({ today_bundle: true, vault_changes: true, entities_changed_ids: true, entity_changed_at: true, retry_after_header: true }), paceMs: 0,
+  });
+  // An older server: the deep card has no tiles, so the feed's read card fills them in (no second call: the feed has it).
+  await svc.syncChanges('full');
+  const me = files.get('Myu/Me.md') ?? '';
+  assert.deepEqual(asked, ['deep_dive'], 'the feed carries the read card: only the deep dive is asked for');
+  assert.match(me, /Alongside it: advisor at Monitaur\./, 'the read in full');
+  assert.match(me, /## At a glance\n\n- \*\*Burnout risk\*\* — Low/, 'the read card\'s tiles');
+  assert.match(me, /## Now\n\n- Your board update is due Friday\./, 'the read card\'s pressing item');
+  assert.match(me, /- Next: Hiring your replacements/, 'the deep dive\'s sections');
+
+  // The server as built: the deep card carries its own tiles and pressing item; they are the ones written.
+  const ownTiles = { tiles: [{ label: 'Overdue', value: '1 goal' }], hot_item: { text: 'Your Q1 plan is due tonight.', urgency: 'high' } };
+  api.getSelfCard = async (level?: string) => { asked.push(level ?? 'read'); return ok({ card: level === 'deep_dive' ? { ...deepCard, ...ownTiles } : readCard }); };
+  settings.vault_changes_since = 0;
+  await svc.syncChanges('full');
+  assert.match(files.get('Myu/Me.md') ?? '', /- \*\*Overdue\*\* — 1 goal/);
+  assert.match(files.get('Myu/Me.md') ?? '', /- Your Q1 plan is due tonight\./);
+  assert.doesNotMatch(files.get('Myu/Me.md') ?? '', /Burnout risk/, 'the deep card\'s own, not the read card\'s');
+
+  // The deep dive fails: the feed's card is written; nothing at all: Me.md stays as it was.
+  api.getSelfCard = async () => { throw new Error('offline'); };
+  await svc.syncChanges('full');
+  assert.match(files.get('Myu/Me.md') ?? '', /You’ve spent 27 years across 12 companies\./);
+  files.set('Myu/Me.md', 'kept');
+  settings.vault_changes_since = 0;
+  (api as { getVaultChanges: unknown }).getVaultChanges = async () => ok({ server_time: 1, since: 0, people: [], companies: [], meetings: [], journal_days: [], next_cursor: null });
+  await svc.syncChanges('full');
+  assert.equal(files.get('Myu/Me.md'), 'kept', 'no card: the note is left alone');
 });
 
 test('sync — the delta feed replaces a card call per person: pages merge journal days, stamps skip unchanged cards, removed people go to the trash, and the cursor advances only on a whole read', async () => {

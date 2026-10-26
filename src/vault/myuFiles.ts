@@ -11,9 +11,14 @@
  * Tasks plugin, and the join key between a vault edit and a server object.
  */
 
-import type { CardSpecLite, EntityHeadline, VaultCommitment, WeeklyEdition } from '../transport/api';
-import type { CompositionComponentLite, CompositionSpecLite } from '../wire';
-import { normalizeSection } from '../views/cardSections';
+import type { CardSpecLite, EntityHeadline, MyuLineLite, VaultCommitment, WeeklyEdition } from '../transport/api';
+import type { CompositionComponentLite, CompositionSpecLite, PastedBlockWire } from '../wire';
+import { cardLabel } from '../pastedText';
+import { normalizeSection, sectionBlocks } from '../views/cardSections';
+import { knownFactLabel, knownFactSource, knownFactText } from '../selfCard';
+import { cardDayWords } from '../cardDays';
+import { standingWords } from '../standing';
+import { groupBySubject, isWaitingLine, lineNeedsYou, rowOpensConversation, stackOf } from '../todayLines';
 
 export const MYU_GENERATED_KEY = 'myu-generated';
 
@@ -267,7 +272,7 @@ export function buildMeetingHistoryMarkdown(meeting: Record<string, unknown>): s
   const transcript = text(meeting.transcript);
   if (transcript) parts.push('', '## Transcript', '', transcript);
 
-  parts.push('', '*Maintained by Myu — meeting history from your account. Edits here are replaced.*', '');
+  parts.push('', '*Written by Myu from your meeting history. Any edits here will be overwritten.*', '');
   return parts.join('\n');
 }
 
@@ -277,10 +282,26 @@ export function buildMeetingHistoryMarkdown(meeting: Record<string, unknown>): s
     deep link reopens it in the chat pane — RESUMABLE, not a museum piece. */
 export interface JournalDayEntry {
   time: string;
+  /** The typed words; empty for an entry that is pasted text only. */
   text: string;
   journalId?: string;
-  turns?: Array<{ role: 'you' | 'myu'; text: string }>;
+  /** The entry's pasted text (2026-10-06), as quote callouts after the typed words. */
+  pasted?: PastedBlockWire[];
+  turns?: Array<{ role: 'you' | 'myu'; text: string; pasted?: PastedBlockWire[] }>;
 }
+
+/**
+ * Pasted text in a note (2026-10-06): a folded quote callout titled with its label, every line of the text quoted
+ * (`depth` levels: 1 on its own, 2 inside a conversation's quoted turns), a blank line as a bare `>`. Pasted text is
+ * someone else's words as often as the person's own; the callout keeps it apart from what they wrote.
+ */
+export function pastedCallout(block: PastedBlockWire, n: number | undefined, depth = 1): string {
+  const quote = Array(depth).fill('>').join(' ');
+  return [`[!quote]- ${cardLabel(block, n)}`, ...block.text.split('\n')].map((line) => (line ? `${quote} ${line}` : quote)).join('\n');
+}
+
+/** The number a block shows among its turn's, when the turn has several. */
+const pastedNumber = (blocks: readonly PastedBlockWire[], i: number): number | undefined => (blocks.length > 1 ? i + 1 : undefined);
 
 export function buildJournalDayMarkdown(date: string, entries: JournalDayEntry[]): string {
   const head = frontmatter([
@@ -291,7 +312,10 @@ export function buildJournalDayMarkdown(date: string, entries: JournalDayEntry[]
   ]);
   const parts: string[] = [head, '', `# Journal — ${date}`];
   for (const entry of entries) {
-    parts.push('', `## ${entry.time}`, '', entry.text.trim());
+    parts.push('', `## ${entry.time}`);
+    if (entry.text.trim()) parts.push('', entry.text.trim());
+    const pasted = entry.pasted ?? [];
+    pasted.forEach((block, i) => parts.push('', pastedCallout(block, pastedNumber(pasted, i))));
     if (entry.turns && entry.turns.length > 0) {
       parts.push('');
       for (const turn of entry.turns) {
@@ -299,6 +323,9 @@ export function buildJournalDayMarkdown(date: string, entries: JournalDayEntry[]
         for (const line of turn.text.trim().split('\n')) {
           parts.push(`> **${speaker}:** ${line}`.trimEnd());
         }
+        // A turn's pasted text: a callout inside the quoted conversation.
+        const turnPasted = turn.pasted ?? [];
+        turnPasted.forEach((block, i) => parts.push('>', pastedCallout(block, pastedNumber(turnPasted, i), 2)));
         parts.push('>');
       }
       parts.pop();
@@ -307,7 +334,7 @@ export function buildJournalDayMarkdown(date: string, entries: JournalDayEntry[]
       parts.push('', `[continue this conversation ▸](obsidian://myu-chat?journal=${entry.journalId})`);
     }
   }
-  parts.push('', '*Maintained by Myu — your journal, decrypted into your vault. Edits here are replaced.*', '');
+  parts.push('', '*Written by Myu — your journal, decrypted into your vault. Any edits here will be overwritten.*', '');
   return parts.join('\n');
 }
 
@@ -336,7 +363,7 @@ export function buildDayMarkdown(
       const time = e.all_day ? 'all day' : (e.start_time ?? '').slice(11, 16) || '—';
       // Every line is a DOOR (operator, 2026-08-25: calendar items must link
       // back to their thing): prep opens in the pane via the deep link.
-      const door = e.event_id ? ` [prep ▸](obsidian://myu-prep?event=${e.event_id})` : '';
+      const door = e.event_id ? ` [prepare ▸](obsidian://myu-prep?event=${e.event_id})` : '';
       parts.push(`- **${time}** ${e.title ?? 'Busy'}${door}`);
     }
   }
@@ -348,7 +375,7 @@ export function buildDayMarkdown(
     parts.push('', `## Journal`, '', `![[Journal/${date}]]`);
   }
   if (memoryPeople.length > 0) {
-    parts.push('', '## Relationship notes', '', `Memories minted this day about ${memoryPeople.map((n) => `[[${n}]]`).join(', ')}.`);
+    parts.push('', '## Relationship notes', '', `Memories recorded this day about ${memoryPeople.map((n) => `[[${n}]]`).join(', ')}.`);
   }
   if (events.length === 0 && meetingLinks.length === 0 && !hasJournal && memoryPeople.length === 0) {
     parts.push('', '*Nothing on file for this day.*');
@@ -383,7 +410,7 @@ export function buildMonthCalendarMarkdown(months: Array<{ year: number; month: 
       parts.push(`| ${row.join(' | ')} |`);
     }
   }
-  parts.push('', '*Maintained by Myu — the number after a day is how much is on file for it.*', '');
+  parts.push('', '*Written by Myu. The number after a day is how many items there are for it.*', '');
   return parts.join('\n');
 }
 
@@ -535,7 +562,7 @@ export function buildExportManifest(s: ExportSummary): string {
   const head = frontmatter([['type', 'myu-export'], [MYU_GENERATED_KEY, true], ['date', s.date]]);
   return [
     head, '', '# Everything Myu knows, as files', '',
-    `*Exported ${s.date}. Every file Myu wrote carries \`myu-generated: true\` \u2014 this whole export is one search away, and one delete away.*`, '',
+    `*Exported ${s.date}. Every file Myu wrote has \`myu-generated: true\` in its frontmatter, so you can find or delete all of them with one search.*`, '',
     '## What is here', '',
     ...s.surfaces.map((x) => `- ${x}`),
     `- **People** \u2014 ${s.people} ${s.people === 1 ? 'page' : 'pages'} written or refreshed this pass`,
@@ -543,11 +570,11 @@ export function buildExportManifest(s: ExportSummary): string {
     `- **Canvases** \u2014 ${s.canvases.kept} kept${s.canvases.expired ? `, ${s.canvases.expired} expired on the server and cannot be fetched` : ''}${s.canvases.failed ? `, ${s.canvases.failed} failed` : ''} \u2192 \`Myu/Canvas/\``,
     '', '## What is not here', '',
     '- Your **account** itself \u2014 email addresses, devices, keys, consents. Those are not vault material. For a complete archive of what the server holds, use **Request my data archive** (Settings \u2192 askMyu \u2192 Advanced): an encrypted zip, link by email, passphrase shown once.',
-    '- Your **own notes** \u2014 they were never Myu\u2019s to export. They are already yours.',
+    '- Your **own notes**. They are already yours; Myu does not export them.',
     '', '## If you uninstall', '',
     '- Everything under `Myu/` stays exactly as it is. Nothing here needs the plugin to open: markdown, `.canvas` (an open standard), `.base` (an Obsidian core feature).',
-    '- Notes stop refreshing; nothing breaks. Links, properties and tables keep working.',
-    '- The plugin\u2019s own `data.json` (your plugin token and wrapped key) goes with it \u2014 no custody is left on this device.',
+    '- Notes stop updating; nothing breaks. Links, properties and tables keep working.',
+    '- The plugin\u2019s own `data.json` (your plugin token and encrypted key) is removed with it, so no key is left on this device.',
     '- Your account is untouched. Delete it from Settings \u2192 askMyu, or on the web.', '',
   ].join('\n');
 }
@@ -747,6 +774,13 @@ function textOf(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
+/** The day (YYYY-MM-DD) of a server time: an ISO string or epoch milliseconds. Anything else has no day. */
+function dayOf(value: unknown): string {
+  if (typeof value === 'string') return value.trim().slice(0, 10);
+  if (typeof value === 'number' && Number.isFinite(value)) return new Date(value).toISOString().slice(0, 10);
+  return '';
+}
+
 function listOf(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return value
@@ -829,7 +863,8 @@ export function componentMarkdown(
       const link = personLink(name, resolvePersonName);
       const stakeholder = component.variant === 'stakeholder' || data.mode === 'stakeholder' || !!data.stance;
       const role = textOf(data.subject_role) || [textOf(data.role), textOf(data.company)].filter(Boolean).join(', ');
-      const health = [textOf(data.health_tier).toLowerCase().replace(/_/g, ' '), textOf(data.trajectory)].filter(Boolean).join(', ');
+      // How things stand, in plain words (never the server's rating code); the trend as given.
+      const health = [standingWords(textOf(data.health_tier)), textOf(data.trajectory)].filter(Boolean).join(', ');
       const insight = textOf(data.key_insight) || textOf(data.summary) || textOf(data.text) || textOf(data.tone_summary);
       const tags = Array.isArray(data.tags) ? bulletsOf(data.tags).map((t) => `\`${t.slice(2)}\``).join(' ') : '';
       const tail = [role, health && `*${health}*`, insight].filter(Boolean).join(' — ');
@@ -1220,7 +1255,8 @@ export function componentMarkdown(
     }
     case 'hierarchy': {
       const walk = (node: Record<string, unknown>, indent: number): string[] => {
-        const line = `${'  '.repeat(indent)}- ${textOf(node.label)}${textOf(node.health_tier) ? ` *(${textOf(node.health_tier).replace(/_/g, ' ')})*` : ''}`;
+        const standing = standingWords(textOf(node.health_tier));
+        const line = `${'  '.repeat(indent)}- ${textOf(node.label)}${standing ? ` *(${standing})*` : ''}`;
         const kids = Array.isArray(node.children) ? (node.children as Array<Record<string, unknown>>) : [];
         return [line, ...kids.flatMap((k) => walk(k, indent + 1))];
       };
@@ -1281,6 +1317,23 @@ export function componentMarkdown(
   }
 }
 
+/**
+ * A card section on paper: the same rows the card pane shows (`sectionBlocks`) — its words, its items with their dates,
+ * and the shapes the pane draws as rows (Recent activity's items, a timeline's events, 2026-10-04: before, the note
+ * wrote only `items`, so Recent activity's structure facts never reached the vault). Null for a bare heading.
+ */
+export function sectionMarkdown(rawSection: Parameters<typeof sectionBlocks>[0]): string[] | null {
+  const blocks = sectionBlocks(rawSection);
+  if (!blocks.length) return null;
+  const title = normalizeSection(rawSection).title?.trim();
+  const out: string[] = ['', `## ${title || 'Notes'}`];
+  for (const b of blocks) {
+    if (b.kind === 'narrative') out.push('', b.text);
+    else out.push(`- ${b.text}${b.meta ? ` *(${b.meta})*` : ''}`);
+  }
+  return out;
+}
+
 /** Myu/Me.md — the SELF card: the account's own arc, on its own paper. */
 export function buildSelfMarkdown(card: CardSpecLite | null): string {
   const head = frontmatter([['type', 'myu-self'], [MYU_GENERATED_KEY, true]]);
@@ -1292,31 +1345,45 @@ export function buildSelfMarkdown(card: CardSpecLite | null): string {
   if (facts.length > 0) {
     rendered++;
     parts.push('', '## What Myu knows so far', '', '*Correct any of it under Settings \u2192 askMyu \u2192 Account.*', '');
+    // The read in full (`full`, 2026-10-05: Me.md is read at the deep dive), each fact with where it came from in words.
     for (const f of facts) {
-      const key = (f.key ?? '').replace(/_/g, ' ');
-      const src = f.source ? ` \u00b7 ${f.source}` : '';
-      if (f.kind === 'read') parts.push(`- **${key}** \u2014 *${f.value}* (a read, worth testing${src})`);
-      else if (f.kind === 'not_yet') parts.push(`- **not yet** \u2014 ${f.value}${src}`);
-      else parts.push(`- **${key}** \u2014 ${f.value}${src}`);
+      const label = knownFactLabel({ key: f.key ?? '', kind: f.kind });
+      const text = knownFactText({ value: f.value ?? '', full: f.full }, true);
+      const from = knownFactSource({ source: f.source, kind: f.kind });
+      if (f.kind === 'read') parts.push(`- **${label}** \u2014 *${text}* (${from})`);
+      else parts.push(`- **${label}** \u2014 ${text}${from ? ` \u00b7 ${from}` : ''}`);
     }
   }
-  for (const rawSection of card?.sections ?? []) {
-    const section = normalizeSection(rawSection);
-    const title = section.title?.trim();
-    const narrative = section.narrative?.trim();
-    const items = (section.items ?? []).filter((i) => i.text?.trim());
-    if (!narrative && items.length === 0) continue; // a bare title is not a section
+  // The tiles and the one pressing item, as the smaller cards show them (2026-10-05). A tile that names a section
+  // ("Active goals" → "Your goals") links to that section's heading below, when this page has it.
+  const sectionNotes = (card?.sections ?? []).map((raw) => ({ type: raw.section_type, lines: sectionMarkdown(raw) }));
+  const headingOf = (type?: string): string | null => {
+    const heading = type ? sectionNotes.find((n) => n.type === type && n.lines)?.lines?.[1]?.replace(/^## /, '') : undefined;
+    return heading && !/[[\]|#^]/.test(heading) ? heading : null;
+  };
+  const tiles = (card?.tiles ?? []).filter((t) => t?.label?.trim() && t?.value?.trim());
+  if (tiles.length > 0) {
     rendered++;
-    parts.push('', `## ${title || 'Notes'}`);
-    if (narrative) parts.push('', narrative);
-    for (const item of items) {
-      parts.push(`- ${item.text}${item.date ? ` *(${item.date})*` : ''}`);
+    parts.push('', '## At a glance', '');
+    for (const t of tiles) {
+      const heading = headingOf(t.tap_section_type);
+      const value = heading ? `[[#${heading}|${t.value}]]` : t.value;
+      parts.push(`- **${t.label}** \u2014 ${value}${t.sub_value ? ` (${t.sub_value})` : ''}`);
     }
+  }
+  if (card?.hot_item?.text?.trim()) {
+    rendered++;
+    parts.push('', '## Now', '', `- ${card.hot_item.text.trim()}`);
+  }
+  for (const { lines } of sectionNotes) {
+    if (!lines) continue; // a bare title is not a section
+    rendered++;
+    parts.push(...lines);
   }
   if (rendered === 0) {
-    parts.push('', '*Myu is still forming its picture of you — this page fills in as it learns.*');
+    parts.push('', '*Myu is still learning about you. This page fills in over time.*');
   }
-  parts.push('', '*Maintained by Myu — how Myu currently sees you. Edits here are replaced.*', '');
+  parts.push('', '*Written by Myu: how Myu currently sees you. Any edits here will be overwritten.*', '');
   return parts.join('\n');
 }
 
@@ -1349,19 +1416,11 @@ export function buildCompanyMarkdown(
   }
 
   for (const rawSection of card?.sections ?? []) {
-    const section = normalizeSection(rawSection);
-    const title = section.title?.trim();
-    const narrative = section.narrative?.trim();
-    const items = (section.items ?? []).filter((i) => i.text?.trim());
     // A titled section with nothing in it is a bare heading — the company
     // note had "What's happening here" and "Your people here" as empty
     // headings beside the real ones (operator's vault, 2026-08-29).
-    if (!narrative && items.length === 0) continue;
-    parts.push('', `## ${title || 'Notes'}`);
-    if (narrative) parts.push('', narrative);
-    for (const item of items) {
-      parts.push(`- ${item.text}${item.date ? ` *(${item.date})*` : ''}`);
-    }
+    const lines = sectionMarkdown(rawSection);
+    if (lines) parts.push(...lines);
   }
 
   const memoryLines = (Array.isArray(memories) ? memories : [])
@@ -1370,17 +1429,116 @@ export function buildCompanyMarkdown(
   if (memoryLines.length > 0) {
     parts.push('', '## Memories');
     for (let i = 0; i < memoryLines.length; i++) {
-      const when = memories[i]?.created_at ? ` *(${String(memories[i].created_at).slice(0, 10)})*` : '';
+      const when = cardDayWords(memories[i]?.created_at) ? ` *(${cardDayWords(memories[i]?.created_at)})*` : '';
       parts.push(`- ${memoryLines[i]}${when}`);
     }
   }
 
   parts.push(
     '',
-    '*Maintained by Myu — regenerated as things change. Edits here are replaced.*',
+    '*Written by Myu and updated as things change. Any edits here will be overwritten.*',
     '',
   );
   return parts.join('\n');
+}
+
+/** The five sections one-list slice 6 added. They carry structured `data`
+ *  (not narrative/items), so the generic renderer skips them; these are rendered
+ *  vault-native instead: spaces link OUT to the web room with the reason stated;
+ *  commitments are Tasks checkboxes; readings are a words-first table with the
+ *  experiment note; emissions and the log are lists. */
+const AGENTIC_SECTIONS = new Set([
+  'spaces_shared',
+  'commitments_between',
+  'partner_readings',
+  'emissions',
+  'log',
+]);
+
+type LooseAgenticSection = {
+  section_type?: string;
+  title?: string;
+  is_experiment?: boolean;
+  note?: string;
+  data?: Record<string, unknown>;
+};
+
+/** Render one of the five new agentic sections into vault-native markdown. */
+export function renderAgenticSection(section: LooseAgenticSection, webUrl: string): string[] {
+  const out: string[] = [];
+  const title = section.title?.trim() || section.section_type || 'Notes';
+  const data = section.data ?? {};
+  const items = Array.isArray(data.items) ? (data.items as Array<Record<string, unknown>>) : [];
+
+  if (section.section_type === 'spaces_shared') {
+    if (items.length === 0) return out;
+    out.push('', `## ${title}`);
+    for (const it of items) {
+      const name = textOf(it.name) || 'a space';
+      const line = textOf(it.line);
+      const spaceId = textOf(it.space_id);
+      // The space opens here, in the chat pane: its conversation with Myu and the team's retro.
+      // (Until 0.1.3 this linked out to the web and said spaces were web only; they are not.)
+      const link = spaceId ? `obsidian://myu-chat?about=${encodeURIComponent(`space:${spaceId}`)}` : webUrl;
+      out.push(`- **[${name}](${link})**${line ? ` — ${line}` : ''}`);
+    }
+    return out;
+  }
+
+  if (section.section_type === 'commitments_between') {
+    if (items.length === 0) return out;
+    out.push('', `## ${title}`);
+    for (const it of items) {
+      const what = textOf(it.what) || 'a commitment';
+      const status = textOf(it.status);
+      const how = textOf(it.how_myu_knows);
+      const executor = textOf(it.executor);
+      const done = status === 'done' || status === 'kept';
+      const meta = [status, executor && executor !== 'person' ? `handled by ${executor === 'coding_tool' ? 'Claude Code' : 'Myu'}` : '', how]
+        .filter(Boolean)
+        .join(' · ');
+      out.push(`- [${done ? 'x' : ' '}] ${what}${meta ? ` %%${meta}%%` : ''}${meta ? ` *(${meta})*` : ''}`);
+    }
+    return out;
+  }
+
+  if (section.section_type === 'partner_readings') {
+    const rows = Array.isArray(data.rows) ? (data.rows as Array<Record<string, unknown>>) : [];
+    if (rows.length === 0) return out;
+    out.push('', `## ${title}${section.is_experiment ? ' · experiment' : ''}`);
+    out.push('', '| | |', '|---|---|');
+    for (const r of rows) {
+      const dim = textOf(r.dimension);
+      const words =
+        r.words === 'alike' ? 'You read this alike' : r.words === 'differently' ? 'You see this differently. Worth a conversation' : 'Not shared';
+      out.push(`| ${dim} | ${words} |`);
+    }
+    out.push('', '*Words only. The numbers are an experiment, and both of you need to turn them on.*');
+    return out;
+  }
+
+  if (section.section_type === 'emissions') {
+    if (items.length === 0) {
+      out.push('', `## ${title}`, '', `*${section.note || 'Nothing yet.'}*`);
+      return out;
+    }
+    out.push('', `## ${title}`);
+    for (const it of items) out.push(`- ${textOf(it.text)}${dayOf(it.at) ? ` *(${dayOf(it.at)})*` : ''}`);
+    return out;
+  }
+
+  if (section.section_type === 'log') {
+    if (items.length === 0) return out;
+    out.push('', `## What Myu did about them`);
+    for (const it of items) {
+      const kind = textOf(it.kind);
+      const text = textOf(it.text);
+      out.push(`- ${kind ? `**${kind}** ` : ''}${text}${dayOf(it.at) ? ` *(${dayOf(it.at)})*` : ''}`);
+    }
+    return out;
+  }
+
+  return out;
 }
 
 export function buildPersonMarkdown(
@@ -1391,6 +1549,7 @@ export function buildPersonMarkdown(
   theirPageName: string | null,
   memories: Array<{ memory_text?: string; text?: string; created_at?: string }> = [],
   aliases: string[] = [],
+  webUrl = 'https://myu.askmyu.com',
 ): string {
   const head = frontmatter([
     ['type', 'myu-person'],
@@ -1440,18 +1599,18 @@ export function buildPersonMarkdown(
   // the user consented to paper. No verdict lands in frontmatter (spec: body
   // prose keeps its evidence framing; frontmatter is the most-scanned surface).
   for (const rawSection of card?.sections ?? []) {
-    const section = normalizeSection(rawSection);
-    const title = section.title?.trim();
-    const narrative = section.narrative?.trim();
-    const items = (section.items ?? []).filter((i) => i.text?.trim());
+    // One list, two lenses (slice 6): the five new sections carry structured
+    // data, not narrative/items — render them vault-native (links out for the
+    // room, checkboxes for commitments, a words-first table for readings).
+    const agentic = rawSection as LooseAgenticSection;
+    if (AGENTIC_SECTIONS.has(agentic.section_type ?? '')) {
+      parts.push(...renderAgenticSection(agentic, webUrl));
+      continue;
+    }
     // A titled section with nothing in it was a bare heading — five of them on a
     // person Myu knows nothing about yet (operator's vault, 2026-08-29).
-    if (!narrative && items.length === 0) continue;
-    parts.push('', `## ${title || 'Notes'}`);
-    if (narrative) parts.push('', narrative);
-    for (const item of items) {
-      parts.push(`- ${item.text}${item.date ? ` *(${item.date})*` : ''}`);
-    }
+    const lines = sectionMarkdown(rawSection);
+    if (lines) parts.push(...lines);
   }
 
   if (openCommitments.length > 0) {
@@ -1471,20 +1630,20 @@ export function buildPersonMarkdown(
   if (memoryLines.length > 0) {
     parts.push('', '## Memories');
     for (let i = 0; i < memoryLines.length; i++) {
-      const when = memories[i]?.created_at ? ` *(${String(memories[i].created_at).slice(0, 10)})*` : '';
+      const when = cardDayWords(memories[i]?.created_at) ? ` *(${cardDayWords(memories[i]?.created_at)})*` : '';
       parts.push(`- ${memoryLines[i]}${when}`);
     }
   }
 
   if (!parts.some((p) => p.startsWith('## '))) {
 
-    parts.push('', '*Nothing here yet \u2014 Myu fills this in as things happen.*');
+    parts.push('', '*Nothing here yet. Myu fills this in as things happen.*');
 
   }
 
   parts.push(
     '',
-    '*Maintained by Myu — regenerated as things change. Ticking a checkbox marks it done in Myu; other edits here are replaced.*',
+    '*Written by Myu and updated as things change. Ticking a checkbox marks it done in Myu; other edits here will be overwritten.*',
     '',
   );
   return parts.join('\n');
@@ -1507,7 +1666,66 @@ export function buildTodayMarkdown(
     for (const item of section.items) parts.push(`- ${item}`);
   }
   if (sections.every((s) => s.items.length === 0)) {
-    parts.push('', 'Nothing needs you yet today.');
+    parts.push('', 'Nothing needs your attention yet today.');
+  }
+  parts.push('');
+  return parts.join('\n');
+}
+
+/** One list, two lenses (slice 15): the lines under rows become a Today section.
+ *  ONE item per person, company, space or meeting, as the pane draws them: its name, the
+ *  line that speaks now, how many more there are, and a `talk ▸` link into the conversation
+ *  (answering happens in the pane or on the web). The backend writes many lines per subject,
+ *  and an item per line, with no name on it, made a note nobody could read. Rows that need
+ *  you come first. A waiting line is not an ask and is left out. */
+export function buildTodayLinesSection(lines: MyuLineLite[]): { title: string; items: string[] } {
+  const items: string[] = [];
+  // Shown: queued and released only, as the pane shows (never held, R18b; never answered, declined or expired).
+  const shown = lines.filter((l) => !l.state || l.state === 'queued' || l.state === 'released');
+  const groups = groupBySubject(shown.filter((l) => !isWaitingLine(l)));
+  for (const g of [...groups.filter((x) => x.needsYou), ...groups.filter((x) => !x.needsYou)]) {
+    const stack = stackOf(g.lines);
+    const text = textOf(stack.top?.text);
+    if (!text) continue;
+    const dot = g.needsYou ? '● ' : '';
+    const named = g.lines.some((l) => textOf(l.subjects?.[0]?.label));
+    const name = !g.id ? '' : g.type === 'person' && named ? `[[${sanitizeName(g.label)}]] — ` : `**${g.label}** — `;
+    const more = stack.rest.length > 0 ? ` (and ${stack.rest.length} more)` : '';
+    // A drafted interview debrief has no conversation to link to: its line is answered in the Today pane.
+    const talk = rowOpensConversation(g) ? ` — [talk ▸](obsidian://myu-chat?about=${encodeURIComponent(`${g.type}:${g.id}`)})` : '';
+    if (g.id) {
+      items.push(`${dot}${name}*${text}*${more}${talk}`);
+      continue;
+    }
+    // Lines about nothing that can be opened: each is its own short item, as before.
+    for (const l of g.lines) items.push(`${lineNeedsYou(l) ? '● ' : ''}*${textOf(l.text)}*`);
+  }
+  return { title: 'What needs your attention today', items };
+}
+
+/** Myu/Log/<day>.md — everything Myu read, assumed, said, did and waited on, at
+ *  the grain of the purpose. Provenance rendered per the CLI contract. */
+export function buildMyuLogMarkdown(
+  day: string,
+  items: Array<{ kind?: string; text?: string; purpose?: string; at?: string; provenance?: { surface?: string; agent?: string } }>,
+): string {
+  const head = frontmatter([
+    ['type', 'myu-log'],
+    [MYU_GENERATED_KEY, true],
+    ['date', day],
+  ]);
+  const parts: string[] = [head, '', `# What Myu did — ${day}`];
+  if (items.length === 0) {
+    parts.push('', '*Nothing yet today.*', '');
+    return parts.join('\n');
+  }
+  for (const it of items) {
+    const kind = textOf(it.kind);
+    const text = textOf(it.text);
+    const when = it.at ? String(it.at).slice(11, 16) : '';
+    const p = it.provenance;
+    const via = p?.agent === 'claude_code' ? ' · via your Claude Code session' : p?.surface === 'cli' ? ' · via terminal' : '';
+    parts.push(`- ${when ? `\`${when}\` ` : ''}${kind ? `**${kind}** ` : ''}${text}${via}`);
   }
   parts.push('');
   return parts.join('\n');
@@ -1550,7 +1768,7 @@ export function buildCommitmentsMarkdown(
   }
   parts.push(
     '',
-    '*Maintained by Myu from your meetings. Tick a box to mark it done in Myu.*',
+    '*Written by Myu from your meetings. Tick a box to mark it done in Myu.*',
     '',
   );
   return parts.join('\n');

@@ -37,34 +37,34 @@ export class CanvasExportModal extends Modal {
     const { contentEl } = this;
     contentEl.addClass('myu-power-down');
 
-    contentEl.createEl('h2', { text: 'Save this composition into your vault?' });
+    contentEl.createEl('h2', { text: 'Save this canvas to your vault?' });
 
     contentEl.createEl('p', {
       cls: 'myu-prose',
       text:
-        'Two forms, both into Myu/Canvas/. A CANVAS keeps the spatial layout and ' +
-        'opens in Obsidian\u2019s own canvas editor. A NOTE is ordinary markdown \u2014 ' +
-        'prose, lists, tables, a mermaid diagram \u2014 greppable, diffable, and readable ' +
-        'in any editor long after this plugin is gone.',
+        'You can save it two ways, both into Myu/Canvas/. As a canvas: keeps the layout and ' +
+        'opens in Obsidian\u2019s own canvas editor. As a note: plain markdown ' +
+        '(text, lists, tables, diagrams) that any editor can open, ' +
+        'even without this plugin.',
     });
 
     contentEl.createEl('p', {
       cls: 'myu-prose myu-quiet',
-      text: 'Either way, people link to their pages in your vault when you keep them.',
+      text: 'Either way, people mentioned in it link to their pages in your vault.',
     });
 
     contentEl.createEl('p', {
       cls: 'myu-prose myu-quiet',
       text:
-        'Worth knowing: vault files sync through whatever you use, and anything written ' +
-        'here leaves Myu\u2019s reach permanently. Charts are saved as a dated snapshot \u2014 ' +
-        'a table in a note, a picture on a canvas \u2014 never as something pretending to be live.',
+        'Note: files in your vault sync with whatever sync service you use, and Myu cannot ' +
+        'change or delete them once written. Charts are saved as a dated snapshot ' +
+        '(a table in a note, a picture on a canvas); they do not update.',
     });
 
     if (!this.compositionId) {
-      contentEl.createEl('h3', { text: 'Which composition?' });
+      contentEl.createEl('h3', { text: 'Which canvas?' });
       this.listEl = contentEl.createDiv({ cls: 'myu-pick-list' });
-      this.listEl.createEl('p', { cls: 'myu-quiet myu-thinking', text: 'Finding your compositions' });
+      this.listEl.createEl('p', { cls: 'myu-quiet myu-thinking', text: 'Finding your canvases' });
       this.ready = this.loadRows();
 
       new Setting(contentEl)
@@ -103,7 +103,7 @@ export class CanvasExportModal extends Modal {
     if (this.rows.length === 0) {
       host.createEl('p', {
         cls: 'myu-quiet',
-        text: 'No compositions yet. Ask Myu for a canvas in chat \u2014 the offer there saves it directly.',
+        text: 'No canvases yet. Ask Myu for a canvas in chat. When Myu offers one, you can save it from there.',
       });
       return;
     }
@@ -111,7 +111,7 @@ export class CanvasExportModal extends Modal {
       const id = String(row.composition_id ?? row.id);
       const item = host.createEl('button', {
         cls: 'myu-pick-row' + (this.selected === id ? ' is-selected' : ''),
-        text: row.summary_text || row.subject_name || 'Untitled composition',
+        text: row.summary_text || row.subject_name || 'Untitled canvas',
       });
       const meta = [row.subject_name && row.summary_text ? row.subject_name : '', whenOf(row.created_at)].filter(Boolean).join(' \u00b7 ');
       if (meta) item.createSpan({ cls: 'myu-whisper', text: meta });
@@ -129,8 +129,8 @@ export class CanvasExportModal extends Modal {
       // Never a silent no-op. Say what is missing, where they are looking.
       this.problemEl?.setText(
         this.rows && this.rows.length > 0
-          ? 'Pick a composition above first.'
-          : 'Nothing to save yet \u2014 ask Myu for a canvas in chat, then save it from the offer there.',
+          ? 'Pick a canvas above first.'
+          : 'Nothing to save yet. Ask Myu for a canvas in chat, then save it from there.',
       );
       return;
     }

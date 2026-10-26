@@ -28,7 +28,7 @@ export class DriveImportModal extends Modal {
     this.render();
     const res = await this.plugin.backend.getDriveSuggestions(10).catch(() => null);
     this.suggestions = res?.ok ? (res.data?.suggestions ?? []) : [];
-    if (!res?.ok) this.problem = 'Could not look at Drive right now.';
+    if (!res?.ok) this.problem = 'Could not reach Google Drive right now.';
     this.render();
   }
 
@@ -37,7 +37,7 @@ export class DriveImportModal extends Modal {
     contentEl.empty();
     contentEl.addClass('myu-power-down');
     contentEl.createEl('h2', { text: 'Meeting notes on Google Drive' });
-    contentEl.createEl('p', { cls: 'myu-prose myu-quiet', text: 'Docs beside your email that look like meeting notes. Importing makes a meeting Myu understands, like a note in your meetings folder.' });
+    contentEl.createEl('p', { cls: 'myu-prose myu-quiet', text: 'Documents in your Google Drive, linked from your email, that look like meeting notes. Importing one adds it as a meeting Myu knows about, like a note in your meetings folder.' });
     if (this.problem) contentEl.createDiv({ cls: 'myu-problem', text: this.problem });
     if (this.suggestions === null) contentEl.createEl('p', { cls: 'myu-quiet myu-thinking', text: 'Looking' });
     else if (this.suggestions.length === 0) contentEl.createEl('p', { cls: 'myu-quiet', text: 'Nothing suggested right now.' });

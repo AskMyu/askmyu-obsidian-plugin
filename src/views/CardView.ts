@@ -27,7 +27,9 @@ import { SourceDetailModal } from './SourceDetailModal';
 import { renderLinkedInMatches, renderLinkedInRecovery, suggestionsOf } from './linkedinCards';
 import { PersonEditModal, type EditableMemory } from './PersonEditModal';
 import { flattenMemoryPayload } from '../vault/myuFiles';
+import { cardDayWords } from '../cardDays';
 import { decryptWithKey } from '../crypto/primitives';
+import { MAP_FOLD_WORDS, firstNameOf, isOnMap } from '../mapFold';
 
 export const CARD_VIEW_TYPE = 'askmyu-card';
 
@@ -43,6 +45,14 @@ export class CardView extends ItemView {
   /** Board perspectives — fetched on demand, reset per entity. */
   private board: BoardLiteResult | null = null;
   private boardOpen = false;
+  /**
+   * People Myu isn't keeping track of yet (2026-10-03): the words under the header after "Keep track of <First>"
+   * went through, kept across the re-read (the fresh card no longer says `on_map`); the one that failed, until the
+   * next press. Both forgotten when the pane moves to someone else.
+   */
+  private mapWord: { entityId: string; text: string } | null = null;
+  /** The press in flight — tests wait on it. */
+  private busy: Promise<void> = Promise.resolve();
 
   constructor(
     leaf: WorkspaceLeaf,
@@ -101,7 +111,7 @@ export class CardView extends ItemView {
       }
       const id = row.memory_id;
       if (!text || !id) continue;
-      memories.push({ memory_id: id, text, date: row.memory_date?.slice(0, 10) });
+      memories.push({ memory_id: id, text, date: cardDayWords(row.memory_date) ?? undefined });
     }
 
     new PersonEditModal(this.app, this.plugin, entityId, this.entityName, memories, () => {
@@ -111,7 +121,13 @@ export class CardView extends ItemView {
     }, this.card?.header?.linkedin_url ?? null).open();
   }
 
+  /** The "Keep track of …" press in flight, if any. */
+  whenIdle(): Promise<void> {
+    return this.busy;
+  }
+
   async showEntity(entityType: CardEntityType, entityId: string, fallbackName: string): Promise<void> {
+    if (this.mapWord && this.mapWord.entityId !== entityId) this.mapWord = null;
     this.entityType = entityType;
     this.entityId = entityId;
     this.entityName = fallbackName;
@@ -180,8 +196,8 @@ export class CardView extends ItemView {
         cls: 'myu-quiet',
         text:
           this.entityType === 'company'
-            ? "Myu doesn't have a read on this company yet."
-            : "Myu couldn't find this person. Point it at the right profile:",
+            ? "Myu doesn't know anything about this company yet."
+            : "Myu couldn't find this person. Paste their LinkedIn profile below, or say they are not on LinkedIn:",
       });
       if (this.entityType === 'person') this.renderLinkedInRecovery(root);
       return;
@@ -192,11 +208,15 @@ export class CardView extends ItemView {
     root.createDiv({ cls: 'myu-card-title', text: header?.display_name || this.entityName || 'Card' });
     if (header?.subtitle) root.createDiv({ cls: 'myu-quiet', text: header.subtitle });
 
+    // A person Myu isn't keeping track of yet (2026-10-03): the state under the header and the one way back,
+    // "Keep track of <First>". Opening the card changed nothing; nothing is drawn when the header does not say so.
+    if (this.entityType === 'person' && this.entityId) this.renderMapState(root, this.entityId, header);
+
     // Chip by exception: an unconfirmed identity is a real gap the user can
     // close — IN the pane (P8.7 follow-up): confirming calls
     // /card/identity/confirm and the chip disappears on the refetch.
     if (header?.identity_status && header.identity_status !== 'confirmed' && header.identity_status !== 'linked') {
-      const confirm = root.createEl('button', { cls: 'myu-affordance myu-cta', text: "That's them \u2014 confirm" });
+      const confirm = root.createEl('button', { cls: 'myu-affordance myu-cta', text: "Yes, that's them" });
       confirm.onclick = () => {
         const entityId = this.entityId;
         if (!entityId) return;
@@ -251,13 +271,13 @@ export class CardView extends ItemView {
     // are regenerated from server truth: a correction typed into the file would
     // be silently overwritten on the next pass.
     if (this.entityType === 'person' && this.entityId) {
-      const correct = root.createEl('button', { cls: 'myu-affordance', text: 'Correct this' });
+      const correct = root.createEl('button', { cls: 'myu-affordance', text: 'Edit or correct' });
       correct.onclick = () => void this.openCorrections();
     }
 
     // Talk about this person/company, with the card as context — the backend
     // formatter already knows the `card` source; the pane just carries it.
-    const discuss = root.createEl('button', { cls: 'myu-affordance', text: 'Discuss' });
+    const discuss = root.createEl('button', { cls: 'myu-affordance', text: 'Discuss with Myu' });
     discuss.onclick = () =>
       void this.plugin.openChat({
         text: '',
@@ -319,7 +339,7 @@ export class CardView extends ItemView {
       const disclosure = root.createDiv({ cls: 'myu-zone' });
       const link = disclosure.createEl('a', {
         cls: 'myu-quiet',
-        text: `${undrawn} ${undrawn === 1 ? 'section doesn’t' : 'sections don’t'} render here yet — open on the web`,
+        text: `${undrawn} ${undrawn === 1 ? 'section can’t' : 'sections can’t'} be shown here yet — open on the web`,
         href: `${this.plugin.settings.base_url.replace(/\/api\/?$/, '')}/dashboard`,
       });
       link.setAttr('target', '_blank');
@@ -327,6 +347,41 @@ export class CardView extends ItemView {
     }
 
     this.renderBoard(root);
+  }
+
+  /**
+   * The block under the header for a person on the map: the state sentence (their first name, their pronouns) and
+   * "Keep track of <First>" → `POST /v2/relationships/keep`. On success the block says so and the card re-reads
+   * (the fresh header no longer says `on_map`, so only the sentence stays); a refusal says so under the button, which
+   * stays pressable. Nothing when `on_map` is false or absent — except the words from a press on this very card.
+   */
+  private renderMapState(root: HTMLElement, entityId: string, header: CardSpecLite['header']): void {
+    const word = this.mapWord?.entityId === entityId ? this.mapWord.text : null;
+    if (!isOnMap(header)) {
+      if (word) root.createDiv({ cls: 'myu-map-state' }).createDiv({ cls: 'myu-map-state-line myu-quiet', text: word });
+      return;
+    }
+    const first = firstNameOf(header?.display_name || this.entityName);
+    const block = root.createDiv({ cls: 'myu-map-state' });
+    block.createDiv({ cls: 'myu-map-state-line myu-quiet', text: MAP_FOLD_WORDS.cardState(first, header?.pronouns) });
+    const keep = block.createEl('button', { cls: 'myu-affordance myu-cta myu-map-keep', text: MAP_FOLD_WORDS.keepOf(first) });
+    if (word) block.createDiv({ cls: 'myu-map-state-line myu-quiet', text: word });
+    keep.onclick = () => {
+      keep.disabled = true;
+      this.busy = this.busy
+        .then(async () => {
+          const res = await this.plugin.backend.keepRelationship(entityId).catch(() => null);
+          if (this.entityId !== entityId) return; // the pane moved on
+          if (!res?.ok) {
+            this.mapWord = { entityId, text: MAP_FOLD_WORDS.failed };
+            this.render();
+            return;
+          }
+          this.mapWord = { entityId, text: MAP_FOLD_WORDS.kept(first) };
+          await this.showEntity(this.entityType, entityId, this.entityName);
+        })
+        .catch(() => undefined);
+    };
   }
 
   /**
@@ -356,13 +411,13 @@ export class CardView extends ItemView {
 
     zone.createDiv({ cls: 'myu-whisper', text: 'the board' });
     if (!this.board) {
-      zone.createEl('p', { cls: 'myu-quiet', text: 'Convening…' });
+      zone.createEl('p', { cls: 'myu-quiet', text: 'Loading…' });
       return;
     }
 
     const takes = this.board.takes ?? [];
     if (takes.length === 0) {
-      zone.createEl('p', { cls: 'myu-quiet', text: 'The board has nothing yet — not enough history here.' });
+      zone.createEl('p', { cls: 'myu-quiet', text: 'The board has nothing to say yet. There is not enough history with this person.' });
       return;
     }
 
@@ -374,7 +429,7 @@ export class CardView extends ItemView {
 
     // Seed rides the message text — the supported contract for content the
     // backend's context formatter doesn't hydrate from an id.
-    const talk = zone.createEl('button', { cls: 'myu-affordance', text: 'Talk this through' });
+    const talk = zone.createEl('button', { cls: 'myu-affordance', text: 'Discuss with Myu' });
     talk.onclick = () => {
       const lines = takes.map((t) => `${t.advisor_name ?? 'Advisor'}: ${t.take_text ?? t.text ?? ''}`).join('\n');
       void this.plugin.openChat({
@@ -410,8 +465,8 @@ export class CardView extends ItemView {
           b.disabled = true;
           const init = provider === 'google' ? await this.plugin.backend.googleOAuthInit(opts).catch(() => null) : await this.plugin.backend.microsoftOAuthInit(opts).catch(() => null);
           const url = init?.data?.auth_url;
-          if (init?.ok && url) { window.open(url, '_blank'); notifyStatus('Finish in your browser \u2014 Myu reads the history when you come back.'); }
-          else { notifyError('The consent screen did not answer. Try again in a moment.'); b.disabled = false; }
+          if (init?.ok && url) { window.open(url, '_blank'); notifyStatus('Finish in your browser. Myu will read your email history once you are done.'); }
+          else { notifyError('Could not open the sign-in page. Try again in a moment.'); b.disabled = false; }
         };
       } else if (o.id === 'imap') {
         const b = actions.createEl('button', { cls: 'myu-affordance', text: label });
@@ -456,7 +511,7 @@ export class CardView extends ItemView {
     const mems = memories?.data?.related ?? [];
     if (!persons.length && !mems.length) return;
     const zone = root.createDiv({ cls: 'myu-zone' });
-    zone.createDiv({ cls: 'myu-whisper', text: 'around them' });
+    zone.createDiv({ cls: 'myu-whisper', text: 'related' });
     for (const p of persons) {
       const row = zone.createEl('button', { cls: 'myu-row myu-row-tappable', attr: { 'aria-label': `Open ${p.display_name}` } });
       row.createSpan({ cls: 'myu-row-title', text: p.display_name + (p.subtitle ? ` \u2014 ${p.subtitle}` : '') });
@@ -465,7 +520,8 @@ export class CardView extends ItemView {
     for (const m of mems) {
       if (!m.content) continue;
       const row = zone.createDiv({ cls: 'myu-row' });
-      if (m.memory_date) row.createSpan({ cls: 'myu-time', text: m.memory_date.slice(0, 10) });
+      // A memory's day in the card's words ("28 Sep"); its stamp has no zone and is the server's UTC (2026-10-06).
+      if (cardDayWords(m.memory_date)) row.createSpan({ cls: 'myu-time', text: cardDayWords(m.memory_date) ?? '' });
       row.createSpan({ cls: 'myu-row-title', text: (m.entity_display_name ? `${m.entity_display_name}: ` : '') + m.content });
       if (m.source_type && m.source_id) {
         const src = row.createEl('button', { cls: 'myu-affordance myu-icon-button', attr: { 'aria-label': 'Where this came from' } });
@@ -482,7 +538,7 @@ export class CardView extends ItemView {
     const note = this.plugin.app.vault.getAbstractFileByPath(page.path);
     if (!(note instanceof TFile)) return;
 
-    const link = root.createEl('button', { cls: 'myu-affordance', text: 'Your note' });
+    const link = root.createEl('button', { cls: 'myu-affordance', text: 'Open your note' });
     link.onclick = () => void this.app.workspace.getLeaf(false).openFile(note);
   }
 }

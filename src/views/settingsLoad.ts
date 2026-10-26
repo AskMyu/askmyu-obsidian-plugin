@@ -17,14 +17,14 @@ export function loadFailure(res: Pick<ApiResponse<unknown>, 'ok' | 'status' | 'e
   if (!res || res.status === 0) return 'askMyu could not be reached. Check the connection and try again.';
   switch (res.status) {
     case 401:
-      return 'The session had to be reopened. Try again.';
+      return 'Your session was refreshed. Try again.';
     case 403:
-      return 'This session is still being opened. Try again in a moment.';
+      return 'Still signing in. Try again in a moment.';
     case 428:
-      return 'Agree to the beta terms first — the Today pane has them.';
+      return 'Accept the beta terms first. They are in the Today pane.';
     case 429:
-      return 'askMyu asked for a pause. Try again in a minute.';
+      return 'Too many requests. Try again in a minute.';
     default:
-      return res.status >= 500 ? `askMyu could not answer (${res.status}). Try again.` : `askMyu answered ${res.status}. Try again.`;
+      return res.status >= 500 ? `askMyu had a server error (${res.status}). Try again.` : `askMyu returned an error (${res.status}). Try again.`;
   }
 }

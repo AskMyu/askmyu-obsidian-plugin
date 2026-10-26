@@ -31,7 +31,7 @@ import type { App, TAbstractFile, TFile } from 'obsidian';
 import { TFile as TFileClass } from 'obsidian';
 import type { AskMyuApi, MeetingNotePayload } from '../transport/api';
 import type { AskMyuSettings } from '../settings';
-import { hashContent, stripFrontmatter } from './noteMeta';
+import { hashContent, isMyuGenerated, stripFrontmatter } from './noteMeta';
 import { extractEntityHints } from './wikilinks';
 import type { PersonPageIndex } from '../people/PersonPageIndex';
 
@@ -81,9 +81,10 @@ export class MeetingCapture {
     this.registered = false;
   }
 
-  /** Folder allowlist OR the per-note frontmatter opt-in. */
+  /** Folder allowlist OR the per-note frontmatter opt-in. Never a note Myu wrote (its Myu/Meetings notes). */
   qualifies(file: TFile): boolean {
     if (file.extension !== 'md') return false;
+    if (isMyuGenerated(this.deps.app.metadataCache.getFileCache(file)?.frontmatter)) return false;
 
     for (const folder of this.deps.settings().meeting_folders) {
       if (file.path === folder || file.path.startsWith(`${folder}/`)) return true;

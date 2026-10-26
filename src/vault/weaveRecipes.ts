@@ -33,10 +33,10 @@ export function weaveSnippets(folder: string): WeaveSnippet[] {
       lang: 'markdown',
     },
     { id: 'today', name: 'The brief in your daily note', desc: 'Add to your daily-note template; every daily note carries the morning brief.', text: `![[${f}/Today]]`, lang: 'markdown' },
-    { id: 'week', name: 'The week, embedded', desc: 'Same idea for your weekly note.', text: `![[${f}/Week]]`, lang: 'markdown' },
+    { id: 'week', name: 'The week in your weekly note', desc: 'Add to your weekly-note template.', text: `![[${f}/Week]]`, lang: 'markdown' },
     { id: 'tasks', name: 'Myu commitments in a Tasks query', desc: 'Anywhere you keep a Tasks block.', text: '```tasks\nnot done\npath includes ' + f + '\n```', lang: 'markdown' },
     { id: 'uri', name: 'A button to today', desc: 'Works from any note, QuickAdd macro, or launcher.', text: 'obsidian://myu', lang: 'text' },
-    { id: 'people-base', name: 'The people table, inside any note', desc: 'Bases embed — the live CRM table lands wherever you paste this.', text: `![[${f}/People.base]]`, lang: 'markdown' },
+    { id: 'people-base', name: 'The people table, inside any note', desc: 'A Bases embed. The live people table appears wherever you paste this.', text: `![[${f}/People.base]]`, lang: 'markdown' },
     {
       id: 'people-dataview',
       name: 'Your people as a Dataview table',
@@ -60,15 +60,15 @@ export function fence(text: string, lang: string): string {
  * everything else Myu wrote.
  */
 export function weaveGuide(folder: string, opts: { asNote?: boolean } = {}): string {
-  const head = opts.asNote ? '---\nmyu-generated: true\n---\n\n' : '# Weave Myu in\n\n';
+  const head = opts.asNote ? '---\nmyu-generated: true\n---\n\n' : '# Add Myu to your notes\n\n';
   const intro =
-    'Myu never edits your files. These are for you to paste into the things you already own — a daily-note template, a weekly note, a Tasks block, a launcher. ' +
-    'Each block has a copy button; the command *Insert a Myu snippet…* puts one at the cursor.';
+    'Myu never edits your files. These snippets are for you to paste into notes you already own: a daily-note template, a weekly note, a Tasks block, a launcher. ' +
+    'Each block has a copy button, and the command *Insert a Myu snippet…* inserts one at the cursor.';
   const body = weaveSnippets(folder)
     .map((s) => `## ${s.name}\n\n${s.desc}\n\n${fence(s.text, s.lang)}`)
     .join('\n\n');
   const api =
     '## For scripts\n\n`app.plugins.plugins.askmyu.api` — `getBrief()`, `getPrep(id)`, `getPersonCard(name)`, `getWeeklyReview()`. ' +
-    'Read-only; every call resolves null while the vault is locked, so a template never triggers a ceremony.';
+    'Read-only. Every call returns null while the vault is locked, so a template never triggers a sign-in.';
   return `${head}${intro}\n\n${body}\n\n${api}\n`;
 }

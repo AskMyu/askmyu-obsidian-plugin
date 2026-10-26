@@ -41,7 +41,7 @@ import { readsFromBundle, type TodayReads } from './todayReads';
 function remainingLabel(expiresAt: number | undefined): string {
   if (!expiresAt) return '';
   const leftMs = expiresAt - Date.now();
-  if (leftMs <= 0) return 'This one has expired \u2014 ask that device to try again.';
+  if (leftMs <= 0) return 'This request has expired. Ask that device to try again.';
   const mins = Math.ceil(leftMs / 60000);
   return `About ${mins} ${mins === 1 ? 'minute' : 'minutes'} left.`;
 }
@@ -58,29 +58,88 @@ function shortDate(ymd: string): string {
   return Number.isNaN(d.getTime()) ? ymd : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 import { MeetingConsentModal } from './MeetingConsentModal';
-import type { BriefItem, DailyBrief, GoogleCalendarEvent } from '../wire';
-import type { CoupledLoop, MirrorEdition, MirrorObservation, PatternFeedbackEvent, PersonalLoop, WeeklyEdition } from '../transport/api';
+import type { DailyBrief, GoogleCalendarEvent } from '../wire';
+import type { CoupledLoop, MirrorEdition, MirrorObservation, MyuLineLite, SpaceLite, PatternFeedbackEvent, PersonalLoop, VaultCommitment, VaultInteractionEvent, WeeklyEdition } from '../transport/api';
 import { isWeeklyEditionFresh } from '../vault/WeeklyReviewWriter';
+import { commitmentLine, sanitizeName } from '../vault/myuFiles';
+import { spaceDoorLabel, spaceIdsOf } from '../spaceConversation';
+import { foldRows, groupBySubject, lineNeedsYou, rowOpensConversation, stackOf } from '../todayLines';
+import { SPACE_RETRO_WORDS, foldSpaceRows, isSpaceLine, spaceRows } from '../spaceRetro';
+import { DEBRIEF_PANE_WORDS, isDebriefSpace } from '../debriefPane';
+import { pressLineButton, type LineButton, type LineUi } from '../lineAnswers';
+import { renderLineAsk } from './lineAsk';
+import { lineIdAttr } from '../linesSeenWatch';
+import { ENTRY_DOT_WORDS, entryDot } from '../menuMarks';
+import { decryptWithKey } from '../crypto/primitives';
+import { COMMITMENTS_FOLD_WORDS, commitmentsFold, type CommitmentRow } from '../commitmentsFold';
+import type { Commitment } from '../wire';
 
 export const TODAY_VIEW_TYPE = 'askmyu-today';
 
-/**
- * The one entity a brief item is really about. People first: a line naming a
- * person and their employer is about the person, and opening the company would
- * answer a question nobody asked.
- */
-function openTargetFor(item: BriefItem) {
-  const refs = item.entity_references ?? [];
-  return refs.find((r) => r.entity_type === 'person') ?? refs.find((r) => r.entity_type === 'company') ?? null;
+/** "Friday, 12 September" — the pane's title date, weekday first, day before month. */
+function dateTitle(d: Date): string {
+  const weekday = d.toLocaleDateString(undefined, { weekday: 'long' });
+  const month = d.toLocaleDateString(undefined, { month: 'long' });
+  return `${weekday}, ${d.getDate()} ${month}`;
 }
+
+/** A call that may not exist on an older backend, or may throw: null, never a decision. */
+async function safe<T>(f: () => Promise<T>): Promise<T | null> {
+  try {
+    return await f();
+  } catch {
+    return null;
+  }
+}
+
+type Meeting = GoogleCalendarEvent & { startDate: Date };
 
 export class TodayView extends ItemView {
   private brief: DailyBrief | null = null;
   /** P4.6: the hero shows 2; the rest render on demand. Reset per refresh. */
   private briefExpanded = false;
-  private meetings: Array<GoogleCalendarEvent & { startDate: Date }> = [];
-  /** P8.8 — the rest of the week, day-labeled doors into prep. */
-  private weekAhead: Array<GoogleCalendarEvent & { startDate: Date }> = [];
+  private meetings: Meeting[] = [];
+  /**
+   * One list, two lenses (F0): today's lines. A meeting's line sits under its
+   * row in Next / Earlier; a person's, company's or space's line is a row of
+   * its own under "for you". The dot beside a row (2026-10-06): lit while something came in for it since Today was
+   * opened before this visit (new), grey while a question there waits for an answer.
+   */
+  private todayLines: MyuLineLite[] = [];
+  /**
+   * Myu's questions answered here with a tap (2026-09-25): what each line shows between answers,
+   * and the lines answered here, kept on the list to show what Myu said back (the read keeps an
+   * answered line until tomorrow but sends no readback for it).
+   */
+  private lineUi = new Map<string, LineUi>();
+  private answeredHere = new Set<string>();
+  /** The two above, made on first use (a view built without its constructor, as the tests do, has neither). */
+  private lineState(): { ui: Map<string, LineUi>; answered: Set<string> } {
+    this.lineUi ??= new Map<string, LineUi>();
+    this.answeredHere ??= new Set<string>();
+    return { ui: this.lineUi, answered: this.answeredHere };
+  }
+  /** Space mode (R14): each space's door words, by space id (from the step of the person's getting-ready). */
+  private spaceDoors = new Map<string, string>();
+  /**
+   * The spaces this person belongs to. A space is on Today whether or not Myu has a line about
+   * it: until 0.1.3 the only way into a space was a line, and a space whose line did not need
+   * you could not be found at all. Null until the list was read (or when it cannot be).
+   */
+  private spaces: SpaceLite[] | null = null;
+  /**
+   * Rows whose other lines are showing, and whether the rest of "for you" is. Held on the
+   * VIEW (like the mirror's state below): the ambient refresh re-renders everything, and a
+   * row the reader opened must not snap shut under them.
+   */
+  private openStacks = new Set<string>();
+  private forYouOpen = false;
+  private spacesOpen = false;
+  /** "Open with you today" — the open commitments, as Tasks checkboxes. */
+  private commitments: VaultCommitment[] = [];
+  /** "what you owe ▸" (terminal parity, 2026-09-26): the commitments between people, `GET /commitments`. */
+  private owed: Commitment[] = [];
+  private owedOpen = false;
   private mirror: MirrorEdition | null = null;
   private weekly: WeeklyEdition | null = null;
   /**
@@ -120,11 +179,14 @@ export class TodayView extends ItemView {
 
   override async onOpen(): Promise<void> {
     this.contentEl.addClass('myu-today');
+    // "Seen" (2026-10-06): a row's line in view for a second is reported, through every redraw of the pane.
+    this.plugin.linesSeen?.watch(this.contentEl);
     await this.refresh();
   }
 
   override async onClose(): Promise<void> {
     if (this.retryTimer !== null) { window.clearTimeout(this.retryTimer); this.retryTimer = null; }
+    this.plugin.linesSeen?.unwatch(this.contentEl);
     this.contentEl.empty();
   }
 
@@ -232,10 +294,66 @@ export class TodayView extends ItemView {
       .map((e) => ({ ...e, startDate: parseEventTime(e.start_time) }))
       .sort((a, b) => a.startDate.getTime() - b.startDate.getTime());
     this.meetings = dated.filter((e) => localDate(e.startDate) === today);
-    this.weekAhead = dated.filter((e) => localDate(e.startDate) > today);
+
+    await this.readLinesAndCommitments();
 
     this.loading = false;
     this.render();
+  }
+
+  /**
+   * The lines and the open commitments ride along the good day; neither
+   * decides the pane's error state (a backend without them is an older one,
+   * not a broken one). Encrypted commitment rows open here — this device has
+   * custody — the same way the vault's Commitments file opens them.
+   */
+  private async readLinesAndCommitments(): Promise<void> {
+    const [linesRes, commitsRes, spacesRes, owedRes] = await Promise.all([
+      safe(() => this.plugin.backend.getMyuLines('today')),
+      safe(() => this.plugin.backend.listVaultCommitments()),
+      safe(() => this.plugin.backend.listSpaces()),
+      safe(() => this.plugin.backend.getCommitments()),
+    ]);
+    if (owedRes?.ok) this.owed = owedRes.data?.items ?? [];
+    if (spacesRes?.ok) this.spaces = spacesRes.data?.spaces ?? [];
+    // The read keeps a line answered today on today's list until tomorrow but
+    // sends no readback for it; only open lines are drawn here.
+    if (linesRes?.ok) {
+      this.todayLines = (linesRes.data?.lines ?? []).filter(
+        (l) => !l.state || l.state === 'queued' || l.state === 'released' || this.lineState().answered.has(l.line_id),
+      );
+    }
+    // Space mode (R14): a space's door says where the person is in getting ready ("Myu is asking
+    // what you want to bring up ▸" / "Ready to share with the team ▸" / …), from the step, never a count.
+    // An interview debrief has no getting-ready step to read: its door is its own words.
+    const debriefs = new Set((this.spaces ?? []).filter(isDebriefSpace).map((sp) => sp.space_id));
+    const doors = new Map<string, string>();
+    await Promise.all(
+      [...new Set([...spaceIdsOf(this.todayLines), ...(this.spaces ?? []).map((sp) => sp.space_id)])].filter((id) => !debriefs.has(id)).map(async (id) => {
+        const mine = await safe(() => this.plugin.backend.getRetroPrepMine(id));
+        doors.set(id, spaceDoorLabel(mine?.ok ? mine.data : null));
+      }),
+    );
+    this.spaceDoors = doors;
+    if (commitsRes?.ok) this.commitments = await this.openCommitments(commitsRes.data?.commitments ?? []);
+  }
+
+  private async openCommitments(rows: VaultCommitment[]): Promise<VaultCommitment[]> {
+    const key = this.plugin.keys?.get() ?? null;
+    const out: VaultCommitment[] = [];
+    for (const c of rows) {
+      if (c.status && c.status !== 'open') continue;
+      if ((c.content ?? '').trim() || !c.encrypted_content || !key) {
+        out.push(c);
+        continue;
+      }
+      try {
+        out.push({ ...c, content: (await decryptWithKey(c.encrypted_content, key)).trim() });
+      } catch {
+        out.push(c);
+      }
+    }
+    return out;
   }
 
   /**
@@ -258,6 +376,7 @@ export class TodayView extends ItemView {
   private render(): void {
     const root = this.contentEl;
     root.empty();
+    this.dots = [];
 
     if (this.loading) {
       root.createEl('p', { cls: 'myu-quiet myu-thinking', text: 'Opening your day' });
@@ -277,19 +396,25 @@ export class TodayView extends ItemView {
       return;
     }
 
+    this.renderMenuMarks(root);
     this.renderSyncBar(root);
     if (this.plugin.termsUpdateVisible()) this.renderTermsUpdate(root);
     this.renderDeviceRequests(root);
     this.renderSetup(root);
     this.renderMaterializeProgress(root);
-    this.renderCues(root);
     this.renderInsights(root);
     this.renderOffers(root);
+    // From Myu — <date>: the brief, then Next and Earlier as meeting rows with
+    // the line under each, then Open with you today (the mock's pane, F0).
+    this.renderBrief(root);
+    this.renderSpaces(root);
+    this.renderForYou(root);
+    this.renderNext(root);
+    this.renderOpenWithYou(root);
+    this.renderWhatYouOwe(root);
     this.renderHelpMyu(root);
     this.renderWeekEdition(root);
     this.renderLoop(root);
-    this.renderBrief(root);
-    this.renderNext(root);
     this.renderWeek(root);
     this.renderMonthlyPointer(root);
     this.renderMirror(root);
@@ -307,7 +432,7 @@ export class TodayView extends ItemView {
     zone.createEl('h3', { text: 'Before you start' });
     zone.createEl('p', {
       cls: 'myu-prose',
-      text: 'The beta needs one thing first: your agreement to the beta participation terms and the privacy policy. Read them, then tick the box.',
+      text: 'Before you use the beta, please agree to the beta participation terms and the privacy policy. Read them, then tick the box.',
     });
     this.renderTermsLinks(zone);
     const label = zone.createEl('label', { cls: 'myu-terms-label' });
@@ -323,7 +448,7 @@ export class TodayView extends ItemView {
     };
     go.onclick = async () => {
       go.disabled = true;
-      go.textContent = 'Recording\u2026';
+      go.textContent = 'Saving\u2026';
       const ok = await this.plugin.acceptTerms();
       if (!ok) {
         go.disabled = false;
@@ -341,7 +466,7 @@ export class TodayView extends ItemView {
   private renderTermsUpdate(root: HTMLElement): void {
     const zone = root.createDiv({ cls: 'myu-zone myu-terms-update' });
     zone.createEl('h3', { text: 'We\u2019ve updated the terms' });
-    zone.createEl('p', { cls: 'myu-prose', text: `The beta participation terms or the privacy policy changed (version ${this.plugin.terms?.currentVersion ?? ''}). You can keep working on the version you agreed to; accepting the new one takes a moment.` });
+    zone.createEl('p', { cls: 'myu-prose', text: `The beta participation terms or the privacy policy changed (version ${this.plugin.terms?.currentVersion ?? ''}). You can keep using Myu under the version you agreed to. Accepting the new one takes a moment.` });
     this.renderTermsLinks(zone);
     const actions = zone.createDiv({ cls: 'myu-mirror-actions' });
     const accept = actions.createEl('button', { cls: 'myu-affordance myu-cta', text: 'I agree to the updated terms' });
@@ -372,7 +497,7 @@ export class TodayView extends ItemView {
     if (!requests.length) return;
     for (const request of requests) {
       const zone = root.createDiv({ cls: 'myu-zone myu-device-request' });
-      zone.createDiv({ cls: 'myu-whisper', text: 'a device wants in' });
+      zone.createDiv({ cls: 'myu-whisper', text: 'a device wants to join' });
       zone.createDiv({ cls: 'myu-claim', text: `\u201c${request.device_name || 'A new device'}\u201d wants to join your account` });
       const left = remainingLabel(request.expires_at);
       zone.createDiv({ cls: 'myu-quiet', text: left ? `Type the 4-digit code it shows. ${left}` : 'Type the 4-digit code it shows.' });
@@ -395,8 +520,8 @@ export class TodayView extends ItemView {
   private renderHelpMyu(root: HTMLElement): void {
     const n = this.plugin.helpQueue.length;
     if (n === 0) return;
-    const row = root.createEl('button', { cls: 'myu-row myu-row-tappable', attr: { 'aria-label': 'People Myu needs help placing' } });
-    row.createSpan({ cls: 'myu-row-title', text: `${n} ${n === 1 ? 'person needs' : 'people need'} your help placing them` });
+    const row = root.createEl('button', { cls: 'myu-row myu-row-tappable', attr: { 'aria-label': 'People Myu needs help identifying' } });
+    row.createSpan({ cls: 'myu-row-title', text: `Help Myu identify ${n} ${n === 1 ? 'person' : 'people'}` });
     const chev = row.createSpan({ cls: 'myu-affordance-inline myu-chevron' });
     setIcon(chev, 'chevron-right');
     row.onclick = () => void this.plugin.openHelpMyu();
@@ -440,13 +565,13 @@ export class TodayView extends ItemView {
       const facts = item.meta?.facts;
       const lines = [facts?.role_line, facts?.why_meeting ? `Why: ${facts.why_meeting}` : '', facts?.mutual_ties?.length ? `You both know ${facts.mutual_ties.join(', ')}` : '', ...(facts?.public_context ?? []).slice(0, 2)].filter((x): x is string => !!x);
       for (const l of lines) row.createDiv({ cls: 'myu-quiet', text: l });
-      if (item.meta?.cold) row.createDiv({ cls: 'myu-quiet', text: item.meta.first_time ? 'First meeting \u2014 facts only, worth capturing how it lands.' : 'No history here yet \u2014 Myu starts learning this one afterwards.' });
+      if (item.meta?.cold) row.createDiv({ cls: 'myu-quiet', text: item.meta.first_time ? 'First meeting. Facts only; worth noting how it goes afterwards.' : 'No history yet. Myu starts learning about this person after the meeting.' });
       const actions = row.createDiv({ cls: 'myu-canvas-actions' });
       const eventId = item.actions?.find((a) => a.action_type === 'prep')?.target_id || item.meta?.event_id;
-      if (eventId) { const prep = actions.createEl('button', { cls: 'myu-affordance myu-cta', text: 'Prep' }); prep.onclick = () => void this.plugin.openPrep(eventId); }
+      if (eventId) { const prep = actions.createEl('button', { cls: 'myu-affordance myu-cta', text: 'Prepare' }); prep.onclick = () => void this.plugin.openPrep(eventId); }
       if (item.actions?.some((a) => a.action_type === 'capture_after')) {
         const name = item.entity_references?.[0]?.display_name ?? 'them';
-        const cap = actions.createEl('button', { cls: 'myu-affordance', text: 'Capture after' });
+        const cap = actions.createEl('button', { cls: 'myu-affordance', text: 'Add notes' });
         cap.onclick = () => void this.plugin.openChat({ text: `After the meeting with ${name}: `, send: false });
       }
     }
@@ -457,13 +582,13 @@ export class TodayView extends ItemView {
     const offers = this.plugin.pendingOffers;
     if (offers.length === 0) return;
     const zone = root.createDiv({ cls: 'myu-zone myu-offers' });
-    zone.createDiv({ cls: 'myu-whisper', text: 'myu prepared' });
+    zone.createDiv({ cls: 'myu-whisper', text: 'prepared by Myu' });
     for (const offer of offers) {
       const row = zone.createDiv({ cls: 'myu-offer-row' });
       row.createSpan({ cls: 'myu-claim', text: (offer.summaryText || 'A canvas') + (offer.subjectName ? ` \u2014 ${offer.subjectName}` : '') });
       const open = row.createEl('button', { cls: 'myu-affordance', text: offer.actionLabel });
       open.onclick = () => void this.plugin.openOffer(offer.compositionId);
-      const drop = row.createEl('button', { cls: 'myu-affordance myu-icon-button', attr: { 'aria-label': 'Let this canvas go' } });
+      const drop = row.createEl('button', { cls: 'myu-affordance myu-icon-button', attr: { 'aria-label': 'Dismiss this canvas' } });
       setIcon(drop, 'x');
       drop.onclick = () => this.plugin.dismissOffer(offer.compositionId);
     }
@@ -493,7 +618,7 @@ export class TodayView extends ItemView {
       go.onclick = () => r.open();
     }
     if (this.giveLine) zone.createEl('p', { cls: 'myu-voice', text: this.giveLine });
-    const hide = zone.createEl('button', { cls: 'myu-affordance myu-link-button', text: 'Hide setup \u2014 every door stays in settings' });
+    const hide = zone.createEl('button', { cls: 'myu-affordance myu-link-button', text: 'Hide setup. Everything here is also in settings' });
     hide.onclick = () => { s.setup_hidden = true; void this.plugin.saveSettings(); this.render(); };
   }
 
@@ -505,20 +630,20 @@ export class TodayView extends ItemView {
     // The folder, as soon as Myu has something to put in it (a brief, or a
     // read consent given). A cold account gets it after its first give.
     if (!s.materialize_consented && (this.brief || s.consent_completed)) {
-      rows.push({ title: 'Keep what Myu knows in your vault', why: 'One folder, Myu/, renameable: people and companies, your journal by day, meetings, today, commitments as checkboxes, every canvas you keep. Your own notes are never edited.', button: 'Let Myu write\u2026', primary: true, open: () => p.offerResidencyThen(refresh) });
+      rows.push({ title: 'Save what Myu knows to your vault', why: 'One folder, Myu/ (you can rename it): people and companies, your journal by day, meetings, today, commitments as checkboxes, every canvas you save. Your own notes are never edited.', button: 'Let Myu write\u2026', primary: true, open: () => p.offerResidencyThen(refresh) });
     }
     if (!s.consent_completed) {
-      rows.push({ title: 'Choose what Myu may read', why: 'Nothing is read until you choose. Only the folders you choose leave this device, encrypted with a key that stays here.', button: 'Choose folders\u2026', primary: !rows.length, open: () => new ConsentModal(this.app, p, refresh).open() });
+      rows.push({ title: 'Choose what Myu may read', why: 'Nothing is read until you choose. Only notes in the folders you choose are sent, encrypted with a key that stays on this device.', button: 'Choose folders\u2026', primary: !rows.length, open: () => new ConsentModal(this.app, p, refresh).open() });
     }
     if (s.consent_completed && !s.backfill_done) {
       const { files, oldest } = p.capture.surveyBackfill();
       if (files.length > 0) {
         const months = oldest ? Math.max(1, Math.round((Date.now() - oldest) / (1000 * 60 * 60 * 24 * 30))) : 0;
-        rows.push({ title: 'Bring in what you have already written', why: `${files.length} ${files.length === 1 ? 'note' : 'notes'} in the folders you shared${months ? `, going back ${months >= 12 ? `${Math.round(months / 12)} ${Math.round(months / 12) === 1 ? 'year' : 'years'}` : `${months} ${months === 1 ? 'month' : 'months'}`}` : ''}. Preview first; nothing leaves until you press Start.`, button: 'Preview\u2026', open: () => p.offerBackfill() });
+        rows.push({ title: 'Share the notes you have already written', why: `${files.length} ${files.length === 1 ? 'note' : 'notes'} in the folders you shared${months ? `, going back ${months >= 12 ? `${Math.round(months / 12)} ${Math.round(months / 12) === 1 ? 'year' : 'years'}` : `${months} ${months === 1 ? 'month' : 'months'}`}` : ''}. Preview first; nothing is sent until you press Start.`, button: 'Preview\u2026', open: () => p.offerBackfill() });
       } else if (!s.backfill_done) { s.backfill_done = true; void p.saveSettings(); }
     }
     if (s.consent_completed && s.meeting_folders.length === 0 && !s.meeting_consent_offered) {
-      rows.push({ title: 'Share meeting notes', why: 'A separate choice: meeting notes are processed on the server like every meeting source, not end-to-end encrypted like your journal.', button: 'Choose\u2026', open: () => new MeetingConsentModal(this.app, p, refresh).open() });
+      rows.push({ title: 'Share meeting notes', why: 'A separate choice. Meeting notes are processed on the server like every other meeting source. Unlike your journal, they are not encrypted with your device key.', button: 'Choose\u2026', open: () => new MeetingConsentModal(this.app, p, refresh).open() });
     }
     if (p.onboardingComplete === false) {
       rows.push({ title: 'Tell Myu who you are', why: 'Optional. Used to name you and your role in briefs; kept with your encrypted account data only.', button: 'Tell Myu\u2026', open: () => p.openOnboarding(refresh) });
@@ -544,8 +669,8 @@ export class TodayView extends ItemView {
     }
     const messages: Record<string, string> = {
       disconnected: 'Not connected yet. Create an account, or sign in to the one you already have.',
-      locked: 'Locked. Myu reopens your notes when this device reaches the server.',
-      offline: 'No connection right now. Capture is paused and will catch up.',
+      locked: 'Locked. Myu unlocks your notes when this device can reach the server.',
+      offline: 'No connection right now. Sharing notes is paused and will catch up.',
     };
     root.createEl('p', { cls: 'myu-prose myu-quiet', text: messages[this.errorState ?? 'locked'] });
 
@@ -590,7 +715,7 @@ export class TodayView extends ItemView {
     if (unlock.genesisPending || detail === 'genesis_pending' || detail === 'genesis_failed') {
       root.createEl('p', {
         cls: 'myu-prose',
-        text: detail === 'genesis_failed' ? 'Key setup did not finish. Two minutes to try again: the twelve words, then everything works.' : 'One step left: your twelve words. Two minutes, then everything works.',
+        text: detail === 'genesis_failed' ? 'Key setup did not finish. Try again: the twelve-word step takes two minutes, then everything works.' : 'One step left: your twelve-word recovery phrase. It takes two minutes, then everything works.',
       });
       const finish = root.createEl('button', { cls: 'myu-door-primary', text: 'Finish setup…' });
       finish.onclick = () => this.plugin.openGenesisCeremony();
@@ -613,7 +738,7 @@ export class TodayView extends ItemView {
     if (approval?.status === 'pending') {
       root.createEl('p', { cls: 'myu-prose', text: 'Waiting for your approval. In Myu on your phone or the web app, approve this device and enter:' });
       root.createDiv({ cls: 'myu-code', text: approval.code });
-      root.createEl('p', { cls: 'myu-prose myu-quiet', text: 'It finishes on its own: go approve it and come back. The code is good for a few minutes.' });
+      root.createEl('p', { cls: 'myu-prose myu-quiet', text: 'It finishes on its own. Approve it there and come back. The code works for a few minutes.' });
       const actions = root.createDiv({ cls: 'myu-door-stack' });
       phraseDoor(actions, 'Use my recovery phrase instead');
       const cancel = actions.createEl('button', { cls: 'myu-affordance', text: 'Cancel' });
@@ -631,7 +756,7 @@ export class TodayView extends ItemView {
           ? 'This device was removed from your account. Approve it again to continue.'
           : detail === 'key_mismatch'
             ? 'This device’s key no longer matches your account. Approve it again to continue.'
-            : 'You are signed in, but this device is not approved yet. Your notes are encrypted with a key only your approved devices hold.',
+            : 'You are signed in, but this device is not approved yet. Your notes are encrypted with a key that only your approved devices have.',
     });
     if (approval) {
       root.createEl('p', {
@@ -648,7 +773,7 @@ export class TodayView extends ItemView {
       again();
     };
     const alt = doors.createDiv({ cls: 'myu-door-alt' });
-    alt.createSpan({ cls: 'myu-quiet', text: 'No other device handy?' });
+    alt.createSpan({ cls: 'myu-quiet', text: 'No other device nearby?' });
     phraseDoor(alt, 'Use my recovery phrase');
     const out = root.createDiv({ cls: 'myu-door-alt' });
     out.createSpan({ cls: 'myu-quiet', text: 'Not you?' });
@@ -693,54 +818,72 @@ export class TodayView extends ItemView {
   }
 
   /**
-   * Cue rows — the toast's vault analogue, ambient by construction. Two
-   * sources merged: SSE-pushed cues (arrive the moment dispatch delivers) and
-   * the client-derived pair as belt-and-suspenders when the stream is down —
-   * T-15 before a meeting, and just-ended. All are pane content; none are
-   * popups (invariant 4).
+   * The menu's marks on a phone (2026-10-06), where Obsidian has no status bar: what is new in Myu's places
+   * ("3 new in Today · 2 in Spaces"), lit, at the top of the pane. Nothing on a computer, nothing when nothing is new.
    */
-  private renderCues(root: HTMLElement): void {
-    const now = Date.now();
-    const rows: Array<{ text: string; eventId?: string }> = [];
-
-    for (const cue of this.plugin.liveCues) {
-      rows.push({ text: cue.text, eventId: cue.event_id });
-    }
-
-    // Client-derived fallback: only when SSE didn't already say it.
-    for (const meeting of this.meetings) {
-      const start = meeting.startDate.getTime();
-      const title = meeting.summary || 'Meeting';
-      if (start - now > 0 && start - now < 15 * 60 * 1000) {
-        rows.push({ text: `prep ready — ${title}`, eventId: meeting.event_id });
-      } else if (now - start > 5 * 60 * 1000 && now - start < 90 * 60 * 1000) {
-        rows.push({ text: `your read on ${title}?`, eventId: meeting.event_id });
-      }
-    }
-
-    if (rows.length === 0) return;
-
-    // Dedupe on text — an SSE cue about the meeting the client also derived.
-    const seen = new Set<string>();
-    const zone = root.createDiv({ cls: 'myu-cues' });
-    for (const row of rows.slice(0, 3)) {
-      if (seen.has(row.text)) continue;
-      seen.add(row.text);
-      const el = zone.createEl('button', { cls: 'myu-cue-row' });
-      el.createSpan({ cls: 'myu-claim', text: row.text });
-      if (row.eventId) {
-        const eventId = row.eventId;
-        setIcon(el.createSpan({ cls: 'myu-affordance-inline myu-chevron', attr: { 'aria-hidden': 'true' } }), 'chevron-right');
-        el.addClass('myu-row-tappable');
-        el.onclick = () => void this.plugin.openPrep(eventId);
-      }
-    }
+  private renderMenuMarks(root: HTMLElement): void {
+    const line = this.plugin.menuMarksLine();
+    if (line) root.createDiv({ cls: 'myu-menu-new', text: line });
   }
 
+  /**
+   * The marks moved: repaint THAT LINE, nothing else, no fetch. A line that is not there yet goes in at the top; a
+   * line with nothing left to say goes. Only over the day itself (not while it opens, rests or waits at the terms).
+   */
+  paintMenuMarks(): void {
+    if (this.loading || this.errorState || this.plugin.termsStanding() === 'gated') return;
+    const line = this.plugin.menuMarksLine();
+    const row = this.contentEl.querySelector('.myu-menu-new');
+    if (!line) {
+      row?.remove();
+      return;
+    }
+    if (row) row.textContent = line;
+    else this.contentEl.createDiv({ cls: 'myu-menu-new', text: line, prepend: true });
+  }
+
+  /**
+   * The rows' dots as drawn last, each with its way to draw itself again. Made on first use (a view built without its
+   * constructor, as the tests do, has none).
+   */
+  private dots: Array<() => void> = [];
+  private dotPainters(): Array<() => void> {
+    this.dots ??= [];
+    return this.dots;
+  }
+
+  /**
+   * A row's dot (2026-10-06, the operator's rule: orange is always new). Lit, in the colour of the status bar's "new",
+   * while something came in for the row since Today was opened before this visit: a question or a note alike. Grey
+   * while a question there waits for an answer. New wins while it lasts. With no marks from the server nothing is
+   * known to be new, and only what waits is marked.
+   */
+  private drawDot(mark: HTMLElement, lines: MyuLineLite[]): void {
+    mark.empty();
+    const dot = entryDot(lines, this.plugin.menuMarks?.since('home') ?? null);
+    if (dot) mark.createSpan({ cls: dot === 'new' ? 'myu-dot' : 'myu-dot myu-dot-waiting', attr: { 'aria-label': ENTRY_DOT_WORDS[dot] } });
+  }
+
+  /**
+   * The marks moved, or Today was opened: repaint THE DOTS, nothing else, no fetch. What is new is counted from when
+   * Today was opened before this visit, so an opening changes it. Only over the day itself.
+   */
+  paintDots(): void {
+    if (this.loading || this.errorState || this.plugin.termsStanding() === 'gated') return;
+    for (const paint of this.dotPainters()) paint();
+  }
+
+  /**
+   * "From Myu — Friday, 12 September", then the brief in Myu's voice. The
+   * title is the label that says who is speaking, so the voice needs no
+   * whisper of its own. The first two items lead; the rest sit behind
+   * `+N more` (R7: OUR trimming is disclosed — the server already disclosed
+   * its own via suppressed_count).
+   */
   private renderBrief(root: HTMLElement): void {
-    // Every visible section's items, in section order; the first two are the
-    // hero, the rest sit behind `+N more` (R7: OUR trimming is disclosed —
-    // the server already disclosed its own via suppressed_count).
+    const zone = root.createDiv({ cls: 'myu-zone myu-from-myu' });
+    zone.createEl('h2', { cls: 'myu-from-myu-title', text: `From Myu — ${dateTitle(new Date())}` });
+
     const all = (this.brief?.sections ?? [])
       .filter((s) => s.visible && s.section !== 'week') // the week edition has its own zone
       .flatMap((s) => s.items ?? []);
@@ -749,36 +892,18 @@ export class TodayView extends ItemView {
 
     if (items.length === 0) {
       // Only a fetch that actually landed may call the day empty.
-      root.createEl('p', {
+      zone.createEl('p', {
         cls: 'myu-quiet',
-        text: this.loadedOnce ? 'Nothing pressing this morning.' : 'Still reading your day\u2026',
+        text: this.loadedOnce ? 'Nothing urgent today.' : 'Still loading your day…',
       });
     }
 
     for (const item of items) {
-      const row = root.createDiv({ cls: 'myu-hero' });
-      // Serif, under its label: this is Myu speaking, and the register says that
-      // voice is always marked as such.
-      row.createDiv({ cls: 'myu-whisper', text: 'noticing' });
-      row.createDiv({ cls: 'myu-voice', text: item.text ?? '' });
-
-      // Affordance from the TARGET, not from the space: an item with nothing to
-      // open gets no control. A brief line like "meeting cancelled" carries no
-      // entity, and offering `open` on it is a promise the row can't keep.
-      const ref = openTargetFor(item);
-      if (!ref) continue;
-
-      const open = row.createEl('button', { cls: 'myu-affordance', text: 'Open' });
-      open.onclick = () =>
-        void this.plugin.openCard(
-          ref.entity_type === 'company' ? 'company' : 'person',
-          ref.entity_id,
-          ref.display_name,
-        );
+      zone.createEl('p', { cls: 'myu-voice myu-brief-line', text: item.text ?? '' });
     }
 
     if (!this.briefExpanded && held > 0) {
-      const more = root.createEl('button', { cls: 'myu-affordance', text: `+${held} more` });
+      const more = zone.createEl('button', { cls: 'myu-affordance myu-link-button', text: `+${held} more` });
       more.onclick = () => {
         this.briefExpanded = true;
         this.render();
@@ -788,11 +913,377 @@ export class TodayView extends ItemView {
     const suppressed = this.brief?.suppressed_count ?? 0;
     if (suppressed > 0) {
       // R7: suppression is disclosed, never silent.
-      root.createEl('p', {
+      zone.createEl('p', {
         cls: 'myu-quiet',
-        text: suppressed === 1 ? '1 lower-confidence item held back' : `${suppressed} lower-confidence items held back`,
+        text: suppressed === 1 ? '1 less certain item hidden' : `${suppressed} less certain items hidden`,
       });
     }
+  }
+
+  // ── the rows: a meeting, a person, a company, a space — and Myu's line under it ──
+
+  /** The lines under one meeting's row: the occurrence first, the event otherwise. */
+  private linesForMeeting(m: Meeting): MyuLineLite[] {
+    const all = this.todayLines ?? [];
+    const isMeeting = (l: MyuLineLite, withKey: boolean) =>
+      (l.subjects ?? []).some(
+        (s) => s.type === 'meeting' && s.id === m.event_id && (!withKey || !s.occurrence_key || s.occurrence_key === String(m.startDate.getTime())),
+      );
+    const exact = all.filter((l) => isMeeting(l, true));
+    return exact.length ? exact : all.filter((l) => isMeeting(l, false));
+  }
+
+  private nonMeetingLines(): MyuLineLite[] {
+    // A space's line rides its space's row under "spaces", never a row here.
+    return (this.todayLines ?? []).filter((l) => (l.subjects?.[0]?.type ?? 'person') !== 'meeting' && !isSpaceLine(l));
+  }
+
+  /**
+   * One row as the mock draws it: the mark (a dot: lit when something new
+   * came in for the row, grey when a question there waits), the time, the
+   * title with who, Myu's line under it in the theme's accent (a tell in its
+   * success colour, a waiting line quiet), and the doors on the right.
+   */
+  private row(
+    host: HTMLElement,
+    r: {
+      /** What this row is about: keeps its fold open across a refresh. */
+      key: string;
+      time: string;
+      title: string;
+      small?: string;
+      lines: MyuLineLite[];
+      past?: boolean;
+      acts: Array<{ label: string; onClick: () => void }>;
+    },
+  ): void {
+    const row = host.createDiv({ cls: `myu-mrow${r.past ? ' myu-mrow-past' : ''}` });
+    const mark = row.createSpan({ cls: 'myu-mark' });
+    this.drawDot(mark, r.lines);
+    this.dotPainters().push(() => this.drawDot(mark, r.lines));
+    row.createSpan({ cls: 'myu-time', text: r.time });
+    const body = row.createDiv({ cls: 'myu-mrow-body' });
+    const ttl = body.createDiv({ cls: 'myu-ttl', text: r.title });
+    if (r.small) ttl.createSpan({ cls: 'myu-ttl-small', text: r.small });
+    // One line on the row, the rest behind a count: the backend writes many lines per subject.
+    // A question answered here comes first, with what Myu said back; the next one follows.
+    const { ui: lineUi, answered } = this.lineState();
+    const saidHere = r.lines.filter((l) => answered.has(l.line_id));
+    const stack = stackOf(r.lines.filter((l) => !answered.has(l.line_id)));
+    const say = (l: MyuLineLite) => {
+      // Outside a space a question is answered here, with its buttons; a space's line is answered
+      // in the space's own conversation, one ask at a time, so its row shows only the words.
+      if (!isSpaceLine(l)) {
+        renderLineAsk(body, l, lineUi.get(l.line_id) ?? {}, { press: (b) => void this.pressLine(l, b) });
+        return;
+      }
+      const cls = l.ask_kind === 'tell' ? 'myu-done' : l.ask_kind === 'wait' ? 'myu-quiet' : 'myu-line';
+      const line = body.createDiv({ cls, text: (l.text ?? '').trim(), attr: lineIdAttr(l.line_id) });
+      if (l.est && l.ask_kind !== 'tell' && l.ask_kind !== 'wait') line.createSpan({ cls: 'myu-est', text: l.est });
+    };
+    saidHere.forEach(say);
+    if (stack.top) say(stack.top);
+    if (stack.count) {
+      const open = this.openStacks.has(r.key);
+      const fold = body.createEl('button', { cls: 'myu-aff myu-fold-aff', text: `${stack.count} — ${open ? 'hide' : 'show'} ▸`, attr: { 'aria-expanded': String(open) } });
+      fold.onclick = () => {
+        if (open) this.openStacks.delete(r.key);
+        else this.openStacks.add(r.key);
+        this.render();
+      };
+      if (open) stack.rest.forEach(say);
+    }
+    // The doors sit under the title and its line, as the mock's `.ask` does.
+    if (r.acts.length === 0) return;
+    const acts = body.createDiv({ cls: 'myu-mrow-acts' });
+    for (const a of r.acts) {
+      const b = acts.createEl('button', { cls: 'myu-aff', text: a.label });
+      b.onclick = a.onClick;
+    }
+  }
+
+  /**
+   * One of a question's buttons: the answer (`POST /myu/lines/answer`), the pages it opens (a
+   * calendar consent, the invite's compose), what Myu said back, then the pane again.
+   */
+  private async pressLine(line: MyuLineLite, button: LineButton): Promise<void> {
+    const id = line.line_id;
+    const { ui, answered } = this.lineState();
+    if (ui.get(id)?.busy) return;
+    ui.set(id, { busy: true });
+    this.render();
+    const out = await pressLineButton({ answer: (lineId, answer) => this.plugin.backend.answerMyuLine(lineId, answer), apiBase: this.plugin.settings.base_url }, line, button);
+    // Closed under the press: read the list again and show what is open now; nothing about this one.
+    if (out.closed) {
+      ui.delete(id);
+      await this.refresh();
+      return;
+    }
+    for (const url of out.open) window.open(url, '_blank');
+    // The meeting arc's Now: the meeting's own conversation, where Myu wrote the first turn.
+    if (out.conversation) void this.plugin.openConversationRef(out.conversation, line.subjects?.[0]?.label ?? '');
+    ui.set(id, out.ui);
+    if (out.settled) answered.add(id);
+    this.render();
+    if (out.settled) await this.refresh();
+  }
+
+  /** "6 people" — a count, never who. */
+  private who(m: Meeting): string {
+    const n = m.attendee_emails?.length ?? 0;
+    return n > 1 ? `${n} people` : '';
+  }
+
+  /** talk ▸ — the chat pane opens about this meeting, Myu speaking first. */
+  private talkAboutMeeting(m: Meeting, phase: 'before' | 'after'): void {
+    const lines = this.linesForMeeting(m);
+    const line = stackOf(lines).top ?? lines.find((l) => (l.text ?? '').trim());
+    void this.plugin.openChatAbout('meeting', m.event_id, {
+      label: m.summary || 'Meeting',
+      occurrenceKey: String(m.startDate.getTime()),
+      phase,
+      line: line?.text,
+      lineObj: line,
+    });
+  }
+
+  /**
+   * The spaces this person belongs to: always here, under their own heading, one row each. Two
+   * doors: the space's own conversation with Myu (its words say where the person is in getting
+   * ready), and the team's retro (the questions, what people wrote, the tasks). An interview
+   * debrief's space has the first door only. Someone in many spaces sees the ones that need them
+   * and the first few; the rest sit behind "Show N more".
+   */
+  private renderSpaces(root: HTMLElement): void {
+    const rows = spaceRows(this.spaces, this.todayLines ?? []);
+    if (rows.length === 0) return;
+    const zone = root.createDiv({ cls: 'myu-zone' });
+    zone.createDiv({ cls: 'myu-whisper', text: 'spaces' });
+    const { shown, folded } = foldSpaceRows(rows, (r) => r.lines.some(lineNeedsYou));
+    for (const r of this.spacesOpen ? [...shown, ...folded] : shown) {
+      const first = stackOf(r.lines).top ?? r.lines[0];
+      this.row(zone, {
+        key: `space:${r.space_id}`,
+        time: '',
+        title: r.name,
+        small: r.small,
+        lines: r.lines,
+        // An interview debrief: one door, into its conversation. A team's space: its conversation and its retro.
+        acts: r.debrief
+          ? [{ label: DEBRIEF_PANE_WORDS.door, onClick: () => void this.plugin.openChatAbout('space', r.space_id, { label: r.name, line: first?.text, debrief: true }) }]
+          : [
+              { label: this.spaceDoors.get(r.space_id) ?? spaceDoorLabel(null), onClick: () => void this.plugin.openChatAbout('space', r.space_id, { label: r.name, line: first?.text }) },
+              { label: SPACE_RETRO_WORDS.show, onClick: () => void this.plugin.openChatAbout('space', r.space_id, { label: r.name, retro: true }) },
+            ],
+      });
+    }
+    if (folded.length === 0) return;
+    const more = zone.createEl('button', {
+      cls: 'myu-aff myu-fold-aff',
+      text: this.spacesOpen ? 'Show fewer ▸' : `Show ${folded.length} more ▸`,
+      attr: { 'aria-expanded': String(this.spacesOpen) },
+    });
+    more.onclick = () => {
+      this.spacesOpen = !this.spacesOpen;
+      this.render();
+    };
+  }
+
+  /**
+   * People and companies Myu has something to say about: ONE row each, its door the
+   * conversation. Rows that need you come first; past the first few the rest fold behind
+   * "Show N more", so a busy day cannot push the meetings off the pane.
+   */
+  private renderForYou(root: HTMLElement): void {
+    const groups = groupBySubject(this.nonMeetingLines());
+    if (groups.length === 0) return;
+    const zone = root.createDiv({ cls: 'myu-zone' });
+    zone.createDiv({ cls: 'myu-whisper', text: 'for you' });
+    const { shown, folded } = foldRows(groups);
+    for (const g of this.forYouOpen ? [...shown, ...folded] : shown) {
+      const first = stackOf(g.lines).top ?? g.lines[0];
+      this.row(zone, {
+        key: g.key,
+        time: '',
+        title: g.label,
+        lines: g.lines,
+        // A drafted interview debrief's row has no conversation behind it: its line is answered here.
+        acts: rowOpensConversation(g) ? [{ label: 'talk about this ▸', onClick: () => void this.plugin.openChatAbout(g.type, g.id, { label: g.label, line: first?.text, lineObj: first }) }] : [],
+      });
+    }
+    if (folded.length === 0) return;
+    const more = zone.createEl('button', {
+      cls: 'myu-aff myu-fold-aff',
+      text: this.forYouOpen ? 'Show fewer ▸' : `Show ${folded.length} more ▸`,
+      attr: { 'aria-expanded': String(this.forYouOpen) },
+    });
+    more.onclick = () => {
+      this.forYouOpen = !this.forYouOpen;
+      this.render();
+    };
+  }
+
+  /**
+   * Next, then Earlier — today's meetings as rows with Myu's line under each.
+   * `talk ▸` on every row; `prepare ▸` on the next meeting only. An earlier
+   * meeting's talk is the after-conversation ("how it went").
+   */
+  private renderNext(root: HTMLElement): void {
+    const now = Date.now();
+    // A 15-min grace keeps a just-started meeting under Next (you're walking
+    // in, prep still helps); everything earlier moves to Earlier.
+    const grace = now - 15 * 60 * 1000;
+    const meetings = this.meetings ?? [];
+    const upcoming = meetings.filter((m) => m.startDate.getTime() > grace);
+    const earlier = meetings.filter((m) => m.startDate.getTime() <= grace).reverse();
+
+    const zone = root.createDiv({ cls: 'myu-zone' });
+    zone.createDiv({ cls: 'myu-whisper', text: 'next' });
+    if (upcoming.length === 0) {
+      zone.createEl('p', { cls: 'myu-quiet', text: earlier.length > 0 ? 'Nothing more today.' : 'No meetings today.' });
+    }
+    upcoming.slice(0, 6).forEach((m, index) => {
+      const lines = this.linesForMeeting(m);
+      this.row(zone, {
+        key: `meeting:${m.event_id}:${m.startDate.getTime()}`,
+        time: timeLabel(m.startDate),
+        title: m.summary || 'Meeting',
+        small: this.who(m),
+        lines,
+        acts: [
+          { label: 'talk about this ▸', onClick: () => this.talkAboutMeeting(m, 'before') },
+          ...(index === 0 ? [{ label: 'prepare ▸', onClick: () => void this.plugin.openPrep(m.event_id) }] : []),
+        ],
+      });
+    });
+
+    if (earlier.length === 0) return;
+    const past = root.createDiv({ cls: 'myu-zone' });
+    past.createDiv({ cls: 'myu-whisper', text: 'earlier' });
+    for (const m of earlier.slice(0, 4)) {
+      const lines = this.linesForMeeting(m);
+      this.row(past, {
+        key: `meeting:${m.event_id}:${m.startDate.getTime()}`,
+        time: timeLabel(m.startDate),
+        title: m.summary || 'Meeting',
+        small: this.who(m),
+        lines,
+        past: true,
+        acts: [{ label: 'talk about this ▸', onClick: () => this.talkAboutMeeting(m, 'after') }],
+      });
+    }
+  }
+
+  // ── Open with you today ────────────────────────────────────────────────────
+
+  private folder(): string {
+    return this.plugin.settings?.materialize_folder || 'Myu';
+  }
+
+  /** `[[Myu/People/Dan Park|Dan Park]]` — their own page when they keep one. */
+  private openPerson(name: string): void {
+    const own = this.plugin.personIndex?.find(name)?.path ?? null;
+    const path = own ?? `${this.folder()}/People/${sanitizeName(name)}.md`;
+    void this.app.workspace.openLinkText(path, '', true);
+  }
+
+  /**
+   * The open commitments as Tasks checkboxes: owner as a wikilink, the words,
+   * the due date, where it came from. Soonest first, six shown, the rest in
+   * the Commitments file. Ticking marks it done in Myu through the same
+   * vault-interaction path the folder watcher uses for the files.
+   */
+  private renderOpenWithYou(root: HTMLElement): void {
+    const open = (this.commitments ?? []).filter((c) => !c.status || c.status === 'open');
+    if (open.length === 0) return;
+    const state: Record<string, boolean> = this.plugin.settings?.myu_checkbox_state ?? {};
+    const zone = root.createDiv({ cls: 'myu-zone myu-open-today' });
+    zone.createDiv({ cls: 'myu-whisper', text: 'open items today' });
+    const list = zone.createEl('ul', { cls: 'myu-tasks' });
+    const sorted = [...open].sort((a, b) => (a.deadline ?? '9999').localeCompare(b.deadline ?? '9999'));
+    for (const c of sorted.slice(0, 6)) {
+      const checked = !!state[c.commitment_id];
+      const li = list.createEl('li', { cls: `myu-task${checked ? ' myu-task-done' : ''}` });
+      const box = li.createEl('input', { attr: { type: 'checkbox', 'aria-label': 'Mark this done in Myu' } });
+      box.checked = checked;
+      const body = li.createSpan({ cls: 'myu-task-body' });
+      if (c.owner) {
+        const owner = c.owner;
+        const link = body.createSpan({ cls: 'myu-wl', text: owner });
+        link.onclick = () => this.openPerson(owner);
+        body.createSpan({ text: ' ' });
+      }
+      body.createSpan({ text: (c.content ?? '').trim() || '(encrypted — open in Myu)' });
+      if (c.deadline) body.createSpan({ cls: 'myu-task-date', text: ` 📅 ${c.deadline.slice(0, 10)}` });
+      if (c.meeting_title) body.createSpan({ cls: 'myu-task-from', text: ` (from ${c.meeting_title})` });
+      box.onchange = () => void this.tickCommitment(c, box.checked);
+    }
+    if (sorted.length > 6) {
+      const more = zone.createEl('button', { cls: 'myu-affordance myu-link-button', text: `+${sorted.length - 6} more in Commitments` });
+      more.onclick = () => void this.app.workspace.openLinkText(`${this.folder()}/Commitments.md`, '', true);
+    }
+  }
+
+  /**
+   * "what you owe ▸", folded (terminal parity, 2026-09-26): the web's Home and the phone's Today show the same two
+   * lists, "you owe" and "owed to you", each row `what · name · next check <day>` with the status as sent. A row
+   * opens the other person's conversation. Nothing running either way: nothing is drawn.
+   */
+  private renderWhatYouOwe(root: HTMLElement): void {
+    const fold = commitmentsFold(this.owed);
+    if (fold.empty) return;
+    const zone = root.createDiv({ cls: 'myu-zone myu-owed' });
+    const head = zone.createEl('button', {
+      cls: 'myu-affordance myu-link-button myu-whisper',
+      text: `${COMMITMENTS_FOLD_WORDS.title.toLowerCase()} ${this.owedOpen ? '▾' : '▸'}`,
+      attr: { 'aria-expanded': String(this.owedOpen) },
+    });
+    head.onclick = () => {
+      this.owedOpen = !this.owedOpen;
+      this.render();
+    };
+    if (!this.owedOpen) return;
+    const list = (title: string, rows: CommitmentRow[], more: number) => {
+      if (!rows.length) return;
+      zone.createDiv({ cls: 'myu-whisper', text: title });
+      for (const r of rows) {
+        const row = zone.createEl('button', { cls: 'myu-row myu-row-tappable myu-owed-row', text: r.text });
+        const open = r.open;
+        if (open) row.onclick = () => void this.plugin.openChatAbout(open.subject_type, open.subject_id, { label: open.label });
+        else row.disabled = true;
+      }
+      if (more > 0) zone.createDiv({ cls: 'myu-quiet', text: COMMITMENTS_FOLD_WORDS.more(more) });
+    };
+    list(COMMITMENTS_FOLD_WORDS.youOwe, fold.youOwe, fold.moreYouOwe);
+    list(COMMITMENTS_FOLD_WORDS.owedToYou, fold.owedToYou, fold.moreOwedToYou);
+  }
+
+  private async tickCommitment(c: VaultCommitment, checked: boolean): Promise<void> {
+    const s = this.plugin.settings;
+    const event: VaultInteractionEvent = {
+      myu_id: c.commitment_id,
+      kind: checked ? 'tick' : 'untick',
+      after: commitmentLine(c, checked),
+      source_timestamp: Date.now(),
+    };
+    const res = await safe(() => this.plugin.backend.vaultInteraction([event]));
+    if (!res?.ok) {
+      // Offline or refused: queue it exactly as the folder watcher does; the
+      // box keeps the tick so the pane says what you did.
+      s.vault_event_queue.push(event);
+      s.myu_checkbox_state[c.commitment_id] = checked;
+      await this.plugin.saveSettings();
+      this.render();
+      return;
+    }
+    for (const r of res.data?.results ?? []) {
+      if (r.kind === 'tick' && r.outcome === 'resolved') s.myu_checkbox_state[r.myu_id] = true;
+      else if (r.kind === 'untick') s.myu_checkbox_state[r.myu_id] = r.outcome === 'restored';
+    }
+    await this.plugin.saveSettings();
+    // The Commitments file and the person's file follow the server now, not on the next sweep.
+    void this.plugin.materializer?.refreshCommitmentSurfaces().catch(() => undefined);
+    await this.refresh();
   }
 
   /**
@@ -835,7 +1326,7 @@ export class TodayView extends ItemView {
     const loop = this.loop;
     if (!loop?.statement) return;
     const zone = root.createDiv({ cls: 'myu-zone myu-loop' });
-    zone.createDiv({ cls: 'myu-whisper', text: `the loop${loop.domain ? ` \u00b7 ${loop.domain}` : ''}` });
+    zone.createDiv({ cls: 'myu-whisper', text: `about you${loop.domain ? ` \u00b7 ${loop.domain}` : ''}` });
     zone.createDiv({ cls: 'myu-voice', text: loop.statement });
     for (const c of this.coupledLoops) {
       if (!c.other_statement) continue;
@@ -844,9 +1335,9 @@ export class TodayView extends ItemView {
       row.createSpan({ cls: 'myu-row-title', text: c.other_statement });
     }
     const rate = zone.createDiv({ cls: 'myu-chat-rating' });
-    if (this.loopRated) { rate.createSpan({ cls: 'myu-whisper', text: this.loopRated === 1 ? 'good read \u2014 noted' : 'off the mark \u2014 noted' }); return; }
-    for (const [rating, icon, label] of [[1, 'thumbs-up', 'Good read'], [-1, 'thumbs-down', 'Off the mark']] as const) {
-      const b = rate.createEl('button', { cls: 'myu-affordance myu-icon-button myu-rating-btn', attr: { 'aria-label': `${label} \u2014 rate this read` } });
+    if (this.loopRated) { rate.createSpan({ cls: 'myu-whisper', text: this.loopRated === 1 ? 'Marked as helpful' : 'Marked as not helpful' }); return; }
+    for (const [rating, icon, label] of [[1, 'thumbs-up', 'Helpful'], [-1, 'thumbs-down', 'Not helpful']] as const) {
+      const b = rate.createEl('button', { cls: 'myu-affordance myu-icon-button myu-rating-btn', attr: { 'aria-label': `${label} \u2014 rate this` } });
       setIcon(b, icon);
       b.onclick = () => {
         this.loopRated = rating;
@@ -878,7 +1369,7 @@ export class TodayView extends ItemView {
   private renderSyncBar(root: HTMLElement): void {
     if (this.staleSince) {
       const mins = Math.max(1, Math.round((Date.now() - this.staleSince) / 60000));
-      root.createDiv({ cls: 'myu-quiet', text: `Couldn\u2019t reach Myu ${mins === 1 ? 'a minute' : `${mins} minutes`} ago \u2014 showing what was here, trying again.` });
+      root.createDiv({ cls: 'myu-quiet', text: `Couldn\u2019t reach Myu ${mins === 1 ? 'a minute' : `${mins} minutes`} ago. Showing the last update and trying again.` });
     }
     const bar = root.createDiv({ cls: 'myu-sync-bar' });
     const sync = bar.createEl('button', { cls: 'myu-affordance myu-icon-button', attr: { 'aria-label': 'Sync everything from Myu now' } });
@@ -920,7 +1411,7 @@ export class TodayView extends ItemView {
 
     const zone = root.createDiv({ cls: 'myu-zone myu-mirror' });
     zone.createDiv({ cls: 'myu-whisper', text: 'noticed this month' });
-    zone.createEl('p', { cls: 'myu-quiet myu-mirror-caveat', text: 'Patterns, not verdicts — each may be wrong' });
+    zone.createEl('p', { cls: 'myu-quiet myu-mirror-caveat', text: 'These are patterns Myu noticed, not conclusions. Each may be wrong.' });
 
     for (const obs of this.mirror.observations) {
       this.renderMirrorObservation(zone, obs);
@@ -932,12 +1423,12 @@ export class TodayView extends ItemView {
     const state = this.mirrorFeedback.get(obs.observation_id) ?? 'idle';
 
     if (state === 'done') {
-      box.createEl('p', { cls: 'myu-quiet', text: 'Noted.' });
+      box.createEl('p', { cls: 'myu-quiet', text: 'Okay.' });
       return;
     }
 
     const line = box.createDiv({ cls: 'myu-voice myu-mirror-voice', text: obs.text });
-    if (obs.forming) line.createSpan({ cls: 'myu-mirror-forming', text: '  forming' });
+    if (obs.forming) line.createSpan({ cls: 'myu-mirror-forming', text: '  still forming' });
 
     const isMap = obs.layer === 'map';
     const actions = box.createDiv({ cls: 'myu-mirror-actions' });
@@ -993,8 +1484,8 @@ export class TodayView extends ItemView {
       refine.createSpan({ cls: 'myu-mirror-ctl-label', text: 'noted —' });
       const options: Array<[PatternFeedbackEvent, string]> = [
         ['wrong_facts', 'Wrong facts'],
-        ['wrong_reading', 'Wrong read'],
-        ['true_drop_it', 'True — drop it'],
+        ['wrong_reading', 'Wrong conclusion'],
+        ['true_drop_it', 'True, but drop it'],
       ];
       for (const [evt, label] of options) {
         const btn = refine.createEl('button', { cls: 'myu-mirror-ctl', text: label });
@@ -1025,69 +1516,6 @@ export class TodayView extends ItemView {
     void this.plugin.backend.submitPatternFeedback(eventType, obs.pattern_id, 'mirror_edition').catch(() => {});
   }
 
-  private renderNext(root: HTMLElement): void {
-    const now = Date.now();
-    // A 15-min grace keeps a just-started meeting under 'next' (you're walking
-    // in, prep still helps); everything earlier moves to its OWN section —
-    // labelling past meetings 'next' was simply wrong (operator, 2026-08-25).
-    const grace = now - 15 * 60 * 1000;
-    const upcoming = this.meetings.filter((m) => m.startDate.getTime() > grace);
-    const earlier = this.meetings.filter((m) => m.startDate.getTime() <= grace).reverse();
-
-    // ── earlier today: ended meetings, their door is your read/capture ──────
-    if (earlier.length > 0) {
-      const past = root.createDiv({ cls: 'myu-zone' });
-      past.createDiv({ cls: 'myu-whisper', text: 'earlier today' });
-      for (const meeting of earlier.slice(0, 4)) {
-        const row = past.createEl('button', { cls: 'myu-row myu-row-tappable' });
-        row.createSpan({ cls: 'myu-time', text: timeLabel(meeting.startDate) });
-        row.createSpan({ cls: 'myu-row-title myu-row-past', text: meeting.summary || 'Meeting' });
-        row.createSpan({ cls: 'myu-affordance-inline', text: 'Your read' });
-        row.onclick = () => void this.plugin.openPrep(meeting.event_id);
-      }
-    }
-
-    // ── next: upcoming only ─────────────────────────────────────────────────
-    const zone = root.createDiv({ cls: 'myu-zone' });
-    zone.createDiv({ cls: 'myu-whisper', text: 'next' });
-
-    if (upcoming.length === 0) {
-      zone.createEl('p', { cls: 'myu-quiet', text: earlier.length > 0 ? 'Nothing more today.' : 'No meetings today.' });
-    }
-
-    upcoming.slice(0, 5).forEach((meeting, index) => {
-      const row = zone.createEl('button', { cls: 'myu-row myu-row-tappable' });
-      row.createSpan({ cls: 'myu-time', text: timeLabel(meeting.startDate) });
-      row.createSpan({ cls: 'myu-row-title', text: meeting.summary || 'Meeting' });
-      row.createSpan({
-        cls: index === 0 ? 'myu-affordance-inline' : 'myu-chevron',
-        text: index === 0 ? 'Prep' : '›',
-      });
-      row.onclick = () => void this.plugin.openPrep(meeting.event_id);
-    });
-
-    // P8.8 — the agenda widens past today: day-labeled rows, each a door into
-    // prep. Not a grid (the vault's own calendar plugins do grids); a row of
-    // doors is what a calendar is FOR here.
-    if (this.weekAhead.length > 0) {
-      zone.createDiv({ cls: 'myu-whisper', text: 'this week' });
-      for (const meeting of this.weekAhead.slice(0, 6)) {
-        const row = zone.createEl('button', { cls: 'myu-row myu-row-tappable' });
-        row.createSpan({ cls: 'myu-time', text: dayLabel(meeting.startDate) });
-        row.createSpan({ cls: 'myu-row-title', text: meeting.summary || 'Meeting' });
-        row.createSpan({ cls: 'myu-chevron', text: '›' });
-        row.onclick = () => void this.plugin.openPrep(meeting.event_id);
-      }
-      const held = this.weekAhead.length - 6;
-      if (held > 0) {
-        zone.createEl('p', { cls: 'myu-quiet', text: `+${held} more later this week` });
-      }
-    }
-  }
-}
-
-function dayLabel(date: Date): string {
-  return date.toLocaleDateString([], { weekday: 'short' }).toLowerCase();
 }
 
 function parseEventTime(value: string): Date {

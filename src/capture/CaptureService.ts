@@ -30,7 +30,7 @@ import type { AskMyuSettings, QueuedCapture } from '../settings';
 import type { KeyHolder } from '../crypto/KeyHolder';
 import { encryptWithKey } from '../crypto/primitives';
 import { extractEntityHints } from './wikilinks';
-import { hashContent, readNoteMeta, stripFrontmatter } from './noteMeta';
+import { captureHash, isMyuGenerated, readNoteMeta, stripFrontmatter } from './noteMeta';
 
 const ENCRYPTION_VERSION = 1;
 
@@ -158,9 +158,12 @@ export class CaptureService {
   }
 
   /** One note → one upsert. Safe to call directly (backfill does). */
-  async capture(file: TFile, previousPath?: string): Promise<'sent' | 'queued' | 'skipped' | 'vetoed'> {
+  async capture(file: TFile, previousPath?: string): Promise<'sent' | 'queued' | 'skipped' | 'vetoed' | 'generated'> {
     const meta = readNoteMeta(this.deps.app, file);
     if (meta.vetoed) return 'vetoed';
+    // Myu wrote it (2026-10-06): never sent back as the person's writing. Decided from the metadata cache alone;
+    // nothing is read.
+    if (meta.myuGenerated) return 'generated';
 
     const raw = await this.deps.app.vault.cachedRead(file);
     const body = stripFrontmatter(raw);
@@ -168,7 +171,7 @@ export class CaptureService {
 
     const settings = this.deps.settings();
     const externalId = this.externalId(file.path);
-    const hash = await hashContent(body);
+    const hash = await captureHash(body, meta.webClipping);
 
     // Unchanged since the last successful capture — the Templater-boilerplate
     // case, and the "opened a note and closed it" case.
@@ -192,6 +195,8 @@ export class CaptureService {
       entity_hints: extractEntityHints(body),
       no_response: true,
       ...(previousPath ? { previous_external_id: this.externalId(previousPath) } : {}),
+      // A Web Clipper note is sent marked (beside the ciphertext, never inside it).
+      ...(meta.webClipping ? { web_clipping: true } : {}),
     };
 
     const res = await this.deps.api.upsertJournal(payload);
@@ -224,6 +229,7 @@ export class CaptureService {
       occurred_at: payload.occurred_at,
       entity_hints: payload.entity_hints ?? [],
       previous_external_id: payload.previous_external_id,
+      ...(payload.web_clipping ? { web_clipping: true } : {}),
       queued_at: Date.now(),
       attempts: 0,
     };
@@ -274,6 +280,7 @@ export class CaptureService {
         entity_hints: entry.entity_hints,
         no_response: true,
         ...(entry.previous_external_id ? { previous_external_id: entry.previous_external_id } : {}),
+        ...(entry.web_clipping ? { web_clipping: true } : {}),
       });
 
       if (res.ok) {
@@ -302,9 +309,9 @@ export class CaptureService {
 
   // ── backfill ──────────────────────────────────────────────────────────────
 
-  /** What a backfill would cover, for the scope confirmation. Reads no content. */
+  /** What a backfill would cover, for the scope confirmation. Reads no content. Notes Myu wrote are left out. */
   surveyBackfill(): { files: TFile[]; oldest: number | null } {
-    const files = this.deps.app.vault.getMarkdownFiles().filter((f) => this.isShared(f));
+    const files = this.deps.app.vault.getMarkdownFiles().filter((f) => this.isShared(f) && !this.isMyuGenerated(f));
     const oldest = files.reduce<number | null>((min, f) => (min === null || f.stat.mtime < min ? f.stat.mtime : min), null);
     return { files, oldest };
   }
@@ -336,7 +343,15 @@ export class CaptureService {
     return { sent, skipped, stopped };
   }
 
-  /** The shared notes' text + mtime, for the link survey. Reads from Obsidian's cache; capped so a huge vault stays quick. */
+  /** Myu wrote this note (`myu-generated: true`), by the metadata cache. */
+  private isMyuGenerated(file: TFile): boolean {
+    return isMyuGenerated(this.deps.app.metadataCache.getFileCache(file)?.frontmatter);
+  }
+
+  /**
+   * The shared notes' text + mtime, for the link survey. Reads from Obsidian's cache; capped so a huge vault stays
+   * quick. Notes Myu wrote are left out (the backfill's list leaves them out).
+   */
   async sharedNotesForSurvey(limit = 600): Promise<Array<{ text: string; mtime: number }>> {
     const files = this.surveyBackfill().files.sort((a, b) => b.stat.mtime - a.stat.mtime).slice(0, limit);
     const out: Array<{ text: string; mtime: number }> = [];

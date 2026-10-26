@@ -16,7 +16,7 @@ import test from 'node:test';
 
 import { assertEncrypted, PlaintextRefusedError, type EncryptedJournalPayload } from '../src/transport/assertEncrypted';
 import { extractEntityHints } from '../src/capture/wikilinks';
-import { stripFrontmatter } from '../src/capture/noteMeta';
+import { captureHash, hashContent, isMyuGenerated, isWebClipping, stripFrontmatter } from '../src/capture/noteMeta';
 import { generatePhrase, validatePhrase } from '../src/crypto/recovery';
 import { sectionBlocks } from '../src/views/cardSections';
 import { replaceSection, isoWeek, isWeeklyEditionFresh, editionToLines } from '../src/vault/WeeklyReviewWriter';
@@ -324,7 +324,7 @@ test('P8 — person file: frontmatter is the Bases contract, verdicts stay in th
 
 test('P8 — empty today is named, not blank', () => {
   const md = buildTodayMarkdown('2026-08-19', [{ title: 'noticing', items: [] }]);
-  assert.ok(md.includes('Nothing needs you yet today.'));
+  assert.ok(md.includes('Nothing needs your attention yet today.'));
 });
 
 test('P8 — the starter Base: canonical schema, formula column, two views', () => {
@@ -369,24 +369,45 @@ test('card sections — visual shapes degrade to honest rows instead of dropping
       { name: 'tension', intensity: 'partial' },
     ],
   });
-  assert.equal(weather.length, 2, 'every dimension becomes a row');
-  assert.equal(weather[0].meta, 'trust · filled');
+  // 2026-10-05: the server's reading, the dimension in words beside it; the bars' fill code never shows, and a dimension
+  // with no words has nothing to say here.
+  assert.equal(weather.length, 1, 'a dimension with the server\'s words becomes a row');
+  assert.equal(weather[0].meta, 'Trust');
   assert.ok(weather[0].text.includes('follow-through'), 'evidence text carries the row');
-  assert.equal(weather[1].text, 'tension', 'no evidence → the dimension name still shows');
+  assert.ok(!weather.some((b) => /\b(empty|partial|filled)\b|_/.test(`${b.text} ${b.meta ?? ''}`)), 'no fill code, no code name');
+  const outside = sectionBlocks({ section_type: 'weather', dimensions: [{ name: 'external_pressure', intensity: 'partial', evidence: 'Two market moves this month' }] });
+  assert.deepEqual(outside.map((b) => [b.text, b.meta]), [['Two market moves this month', 'Outside pressure']]);
+  const fallback = sectionBlocks({ section_type: 'patterns', patterns: [{ pattern_name: 'How driven you sounded', description: 'It changed a lot from one entry to the next on 28 Sep and 4 Oct.', trend: 'emerging', observation: true, instances: [{ date_range: '2026-09-28', context: 'Weighing the contract offer' }, { date_range: '2026-10-04' }] }] } as never);
+  const in2026 = (x?: string) => x?.replace(/(\d{1,2} (?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)) 2026\b/g, '$1'); // the code adds the fixtures' year once 2026 is past
+  assert.deepEqual(fallback.map((b) => [in2026(b.text), in2026(b.meta)]), [['How driven you sounded: It changed a lot from one entry to the next on 28 Sep and 4 Oct.', undefined], ['↳ Weighing the contract offer', '28 Sep'], ['↳ 4 Oct', undefined]], 'a fallback entry: no detail; an instance with nothing written is its day');
+  const placeholder = sectionBlocks({ section_type: 'patterns', patterns: [], sparse: true, placeholder_text: 'No patterns yet. Patterns emerge after multiple observations.' } as never);
+  assert.deepEqual(placeholder, [{ kind: 'narrative', text: 'No patterns yet. Patterns emerge after multiple observations.' }], 'nothing complete: the server\'s words, not an undrawn section');
 
   const energy = sectionBlocks({
     section_type: 'energy_map',
     entries: [{ display_name: 'Priya Raman', mention_count: 7, overall_trend: 'sustaining' }],
   });
   assert.equal(energy.length, 1);
-  assert.equal(energy[0].meta, '×7 · sustaining');
+  assert.equal(energy[0].meta, 'came up 7 times · sustaining');
 
+  // A timeline (2026-10-03): the day as a person says it, never the raw stamp; the self card's events carry a title
+  // only and come through; a shift's change_type is never the text.
   const timeline = sectionBlocks({
     section_type: 'timeline',
-    events: [{ description: 'Relationship warmed after the platform launch', date: '2026-06-02' }],
+    events: [
+      { description: 'Relationship warmed after the platform launch', date: '2026-06-02', change_type: 'TURNAROUND' },
+      { title: 'Started as CEO / Co-founder at askMyu', event_type: 'role_started', date_ms: Date.parse('2025-09-01T00:00:00Z'), source: 'career', current: true },
+      { title: 'Weighing a yes/no decision as the runway runs low.', event_type: 'situation', date: '2026-09-28T19:22:36Z', source: 'journal_chat' },
+      { change_type: 'DOWNTURN', date: '2026-05-01' },
+    ],
   });
-  assert.equal(timeline.length, 1);
-  assert.equal(timeline[0].meta, '2026-06-02');
+  assert.equal(timeline.length, 3, 'an event with nothing to say is not a row; a code is never the text');
+  assert.equal(timeline[0].text, 'Relationship warmed after the platform launch');
+  assert.ok(timeline[0].meta && !/2026-06-02/.test(timeline[0].meta) && /2/.test(timeline[0].meta), String(timeline[0].meta));
+  assert.equal(timeline[1].text, 'Started as CEO / Co-founder at askMyu (now) · from your career');
+  assert.ok(/2025/.test(timeline[1].meta ?? ''), String(timeline[1].meta));
+  assert.equal(timeline[2].text, 'Weighing a yes/no decision as the runway runs low. · from a conversation with Myu');
+  assert.ok(!timeline.some((b) => /TURNAROUND|DOWNTURN/.test(b.text)));
 
   const orgLens = sectionBlocks({
     section_type: 'org_lens',
@@ -475,7 +496,8 @@ test('person page carries the memory layer — the vault Jim is never thinner th
   assert.ok(md.includes('## Memories'), 'memories section renders');
   assert.ok(md.includes('Prefers early meetings'), 'memory_text shape');
   assert.ok(md.includes('Legacy-shaped memory row.'), 'text fallback shape');
-  assert.ok(md.includes('*(2026-04-02)*'), 'dated, date-only (no churn)');
+  assert.match(md, /\*\([23] Apr( 2026)?\)\*/, 'dated, the day only (no churn), in the card\'s words (2026-10-06), the reader\'s day');
+  assert.ok(!md.includes('2026-04-02'), 'never the machine date');
   const empty = buildPersonMarkdown(entity, null, [], () => false, null, []);
   assert.ok(!empty.includes('## Memories'), 'no empty section headers');
 });
@@ -629,4 +651,43 @@ test('prod base_url — the default points at the live backend, and a stored api
   }
   // Absent / junk falls back to the default rather than to undefined.
   assert.equal(normalizeSettings({}).base_url, 'https://myu.askmyu.com/api');
+});
+
+// ── pasted text (2026-10-06): what capture sends, and what it never does ──────
+
+test('capture: a note Myu wrote is known by its frontmatter, as true or as the string', () => {
+  assert.equal(isMyuGenerated({ 'myu-generated': true }), true);
+  assert.equal(isMyuGenerated({ 'myu-generated': 'true' }), true);
+  assert.equal(isMyuGenerated({ 'myu-generated': false }), false);
+  assert.equal(isMyuGenerated({ 'myu-generated': 'yes' }), false);
+  assert.equal(isMyuGenerated({}), false);
+  assert.equal(isMyuGenerated(undefined), false);
+});
+
+test('capture: a Web Clipper note is known by its clippings tag or a web source', () => {
+  assert.equal(isWebClipping({ tags: ['clippings'] }), true, 'a list');
+  assert.equal(isWebClipping({ tags: ['reading', '#Clippings'] }), true, '# and case ignored');
+  assert.equal(isWebClipping({ tags: 'clippings' }), true, 'a string');
+  assert.equal(isWebClipping({ tags: 'reading, clippings' }), true, 'a string split on commas');
+  assert.equal(isWebClipping({ tags: '#reading #clippings' }), true, 'a string split on spaces');
+  assert.equal(isWebClipping({ tags: ['clippingsarchive'] }), false, 'the whole tag, not a part of one');
+  assert.equal(isWebClipping({ source: 'https://example.com/article' }), true);
+  assert.equal(isWebClipping({ source: 'HTTP://example.com/article' }), true);
+  assert.equal(isWebClipping({ source: ['https://example.com/a', 'https://example.com/b'] }), true, 'the first of a list');
+  assert.equal(isWebClipping({ source: [42, 'https://example.com/a'] }), true, 'the first string of a list');
+  assert.equal(isWebClipping({ source: 'a book I read' }), false);
+  assert.equal(isWebClipping({ source: 'ftp://example.com/a' }), false);
+  assert.equal(isWebClipping({}), false);
+  assert.equal(isWebClipping(undefined), false);
+});
+
+test('capture: an unclipped note keeps exactly its old hash; a clipped one hashes differently', async () => {
+  const body = 'A note body, ZQX-PASTE-7.';
+  assert.equal(await captureHash(body, false), await hashContent(body), 'an upgrade re-sends nothing else');
+  assert.notEqual(await captureHash(body, true), await hashContent(body), 'adding or removing the tag sends the note again');
+});
+
+test('capture: a payload never carries pasted text; the Web Clipper mark goes beside the ciphertext', () => {
+  assert.throws(() => assertEncrypted(payload({ pasted_blocks: [{ id: 'p1', text: 'dear diary' }] } as Partial<EncryptedJournalPayload>)), PlaintextRefusedError);
+  assert.doesNotThrow(() => assertEncrypted(payload({ web_clipping: true })));
 });

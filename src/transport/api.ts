@@ -13,12 +13,27 @@
  * section.
  */
 
+import type { PasswordWrappedKey } from '../devicePassword';
 import type { Transport, ApiResponse, EncryptedJournalPayload } from './index';
-import type { SourceReferenceLite, SurfaceMutationLite, ChatBlock, ChatContext, CompositionSpecLite, EntityHeadline, PrepPayload } from '../wire';
+import type { SourceReferenceLite, SurfaceMutationLite, ChatBlock, ChatContext, CompositionSpecLite, EntityHeadline, MapFold, MapPeoplePage, PrepCardV2 } from '../wire';
 import type { CanvasReply } from '../composition/afterTurn';
+import type { SpaceAnswer, SpaceAnswerReply, SpaceConversationRead, SpacePrepMine, SpaceTurnReply } from '../wire';
+import type { GetCommitmentsResponse } from '../wire';
+import type { PastedBlockWire } from '../wire';
+import { normalizeCalendarEvents } from '../calendarMyu';
+import { readMenuMarks, type MenuItemKey, type MenuMarks } from '../menuMarks';
+import type { LinesSeenResponse } from '../linesSeen';
+import type { FeedbackFile } from '../feedbackFiles';
 
 /** A literal union the server may extend: the named values stay as hints, any other string is still allowed. */
 export type Loose<T extends string> = T | (string & Record<never, never>);
+
+/** `GET /feed/entities?tab=people|companies` — the ranked list; for people, the fold beside it (2026-10-03). */
+export interface EntityList {
+  entities?: EntityHeadline[];
+  server_time?: number;
+  map?: MapFold;
+}
 
 export interface ExchangeResult {
   auth_token: string;
@@ -154,6 +169,12 @@ export interface AskMyuApi {
   approveDeviceTransfer(requestId: string, verificationCode: string, encryptedMdek: string): Promise<ApiResponse>;
   denyDeviceTransfer(requestId: string): Promise<ApiResponse>;
   fetchRecoveryWrappedMDEK(): Promise<ApiResponse<{ wrapped_mdek_recovery: string }>>;
+  /**
+   * The password for new devices (2026-10-26): the account key wrapped under the password's key, with the parameters
+   * to derive it. `GET /account/password/wrapped-key`: 404 `no_password` when none is set; 429 `rate_limit_exceeded`
+   * with `retry_after` after too many reads. Read once when the connect window opens; the password opens the copy here.
+   */
+  fetchPasswordWrappedMDEK(): Promise<ApiResponse<PasswordWrappedKey>>;
 
   upsertJournal(payload: EncryptedJournalPayload): Promise<ApiResponse<JournalUpsertResult>>;
   getBrief(): Promise<ApiResponse>;
@@ -170,7 +191,8 @@ export interface AskMyuApi {
       the first guess at this shape cost Jim his memories twice. */
   getRelationshipMemories(relationshipId: string, limit?: number): Promise<ApiResponse<{ memories?: Record<string, unknown> }>>;
   /** The SELF card — the account's own arc/psych/career, /card/self. */
-  getSelfCard(): Promise<ApiResponse<{ card?: CardSpecLite }>>;
+  /** `GET /card/self` — the read level by default; `deep_dive` for the whole card (the vault's Me.md). */
+  getSelfCard(level?: 'read' | 'deep_dive'): Promise<ApiResponse<{ card?: CardSpecLite }>>;
   /** The account's meeting history (any source: calendar, vault, fireflies). */
   listMeetings(limit: number, offset: number): Promise<ApiResponse<{ meetings?: Array<Record<string, unknown>>; count?: number; has_more?: boolean }>>;
   /** One meeting, WHOLE: summary, key points, decisions, commitments, notes,
@@ -181,20 +203,80 @@ export interface AskMyuApi {
   /** The chat turns chained onto one journal entry — the conversation. */
   getJournalChats(journalId: string): Promise<ApiResponse<{ chats?: Array<Record<string, unknown>>; offer?: DeliveredOffer }>>;
 
-  /** The ranked entity list behind the People/Companies tabs on every surface. */
-  listEntities(tab: CardEntityType, opts?: { changedSince?: number }): Promise<ApiResponse<{ entities?: EntityHeadline[]; server_time?: number }>>;
+  /** The ranked entity list behind the People/Companies tabs on every surface. For people it leaves those on the
+      map out and carries `map: {count, line}` — the fold's line for the list's foot (2026-10-03). */
+  listEntities(tab: CardEntityType, opts?: { changedSince?: number }): Promise<ApiResponse<EntityList>>;
+  /** `GET /v2/relationships?map=only&limit=&offset=` — the people on the map, most recently seen first, one page. */
+  listMapPeople(limit: number, offset: number): Promise<ApiResponse<MapPeoplePage>>;
+  /** `POST /v2/relationships/keep {relationship_id}` — Keep: the person on the map becomes an ordinary relationship,
+      without opening their page (opening the page does the same). 404 for someone not the caller's. */
+  keepRelationship(relationshipId: string): Promise<ApiResponse<{ success?: boolean; relationship_id?: string; on_map?: boolean }>>;
   /** The six Today reads in one answer (flag `today_bundle`). */
   getTodayBundle(start: string, end: string, timezone: string): Promise<ApiResponse<TodayBundle>>;
   /** What changed in the vault's material since `since` (flag `vault_changes`), one page. */
   getVaultChanges(since: number, cursor?: string | null, pageSize?: number): Promise<ApiResponse<VaultChangesPage>>;
   getCard(entityType: CardEntityType, entityId: string): Promise<ApiResponse<{ card?: CardSpecLite; response_type?: string; suggestions?: Array<Record<string, unknown>>; linkedin_known?: boolean }>>;
 
+  // ─── One list, two lenses (slice 15) — reads for the vault-native surface ───
+  /** `GET /myu/lines?scope=today|people|spaces|calendar` — the lines under rows. */
+  getMyuLines(scope: 'today' | 'people' | 'spaces' | 'calendar'): Promise<ApiResponse<MyuLinesResult>>;
+  /**
+   * `GET /myu/menu-marks` (2026-10-06) — per place (Today, people, calendar, spaces, conversations, canvas): what came
+   * in since it was last opened, and Myu's questions there still waiting for an answer. Null while the server has no
+   * such door (404): nothing changes on screen. A read that failed otherwise throws; what is shown stays.
+   */
+  getMenuMarks(): Promise<MenuMarks | null>;
+  /** `POST /myu/menu-marks/opened {item}` — a place was opened here: its "new" is cleared; the marks as they are now. Null on 404. */
+  markMenuOpened(item: MenuItemKey): Promise<MenuMarks | null>;
+  /**
+   * `POST /myu/lines/seen {line_ids}` (2026-10-06) — lines that have been in view for a second; the server records the
+   * first time and ignores the rest (it reads the first 200 of a call, far more than the panes show at once). Null
+   * while the server has no such door (404), or for a session that may only read (403 `scope_required`): there is
+   * nothing to send again. Any other failure throws, so the caller reports them the next time they are in view.
+   * Nothing is ever shown.
+   */
+  markLinesSeen(lineIds: string[]): Promise<LinesSeenResponse | null>;
+  /** `GET /commitments` — what you owe and what is owed to you, between people (Today's "what you owe ▸"). */
+  getCommitments(): Promise<ApiResponse<GetCommitmentsResponse>>;
+  /** `GET /myu/log?...` — everything Myu read/assumed/said/did/waited (the Days log). */
+  getMyuLog(opts?: { since?: string; kind?: string; subjectType?: string; subjectId?: string; limit?: number }): Promise<ApiResponse<MyuLogResult>>;
+  /** `GET /card/person?level=deep_dive` — the full view with the four new sections. */
+  getCardDeep(entityType: CardEntityType, entityId: string): Promise<ApiResponse<{ card?: CardSpecLite; response_type?: string }>>;
+  /** `GET /retro?space_id=` — the team's retro: where it stands, the questions with what people wrote, the tasks. */
+  getRetro(spaceId: string): Promise<ApiResponse<RetroReadResult>>;
+  /** `POST /gattai/spaces` — the spaces this person belongs to, so a space can be opened whether or not Myu has a line about it today. */
+  listSpaces(): Promise<ApiResponse<{ spaces?: SpaceLite[] }>>;
+
+  // ─── Space mode (R14) — a space's own conversation, one ask at a time ───
+  /**
+   * `GET /myu/conversation?subject_type=&subject_id=` — for a space it says `mode: "space"`,
+   * the stage, what the box is for, and where this retro's stretch of the history starts.
+   * `earlier` asks for what came before `history_from`. A meeting's own conversation
+   * (`subject_type=meeting`, the event id, and the occurrence's start in ms when known) carries
+   * the question before it, the arc's session, and "Anything you didn't say in there?".
+   */
+  getSubjectConversation(subjectType: string, subjectId: string, opts?: { occurrenceKey?: string; earlier?: boolean }): Promise<ApiResponse<SpaceConversationRead>>;
+  /**
+   * `POST /journal_chats/add {conversation_id, content}` — typed words INTO that conversation.
+   * In a space the answer carries `space_mode {intent, handled, line_id?}` and `effects`. This is
+   * the only door for words typed in a space: a journal thread would not be read as space mode.
+   * In a meeting's conversation, words typed while its question is open are the answer to it.
+   * Pasted text (2026-10-06) goes beside the typed words as `pasted_blocks`, only when there is some.
+   */
+  addSubjectTurn(conversationId: string, content: string, pasted?: PastedBlockWire[]): Promise<ApiResponse<SpaceTurnReply>>;
+  /** `POST /myu/lines/answer {line_id, answer}` — a button on the ask that is up. */
+  answerMyuLine(lineId: string, answer: SpaceAnswer): Promise<ApiResponse<SpaceAnswerReply>>;
+  /** `GET /retro/prep/mine?space_id=` — the step I am at; the door's words come from it. 404 when nothing is running. */
+  getRetroPrepMine(spaceId: string): Promise<ApiResponse<SpacePrepMine>>;
+
   /** The mirror (A11) — same endpoint every review surface reads. */
   getMirrorEdition(): Promise<ApiResponse<{ edition?: MirrorEdition }>>;
 
-  getMeetingPrep(eventId: string): Promise<ApiResponse<{ prep?: PrepPayload }>>;
-  /** "who is this? ▸" — persists server-side, outranks future guesses, clears the stored prep. */
-  linkPrepSubject(eventId: string, relationshipId: string): Promise<ApiResponse>;
+  /**
+   * `GET /prep/meeting?event_id=` — the meeting's card, version 2 (2026-09-30). 404 when the event
+   * is unknown to this account. Read loosely: a card that is not version 2 is not drawn.
+   */
+  getMeetingPrep(eventId: string): Promise<ApiResponse<{ prep?: PrepCardV2 }>>;
   /** Mixed person+company search across ALL entities (long-tail included). */
   searchEntities(query: string): Promise<ApiResponse<{ results?: EntityHeadline[] }>>;
   /** Server weekly edition — `{edition:{period, sections[], generated_at}}`. */
@@ -271,8 +353,8 @@ export interface AskMyuApi {
   getAccountCareer(accountId: string): Promise<ApiResponse<{ status?: string; summary?: string; resume_summary?: string; linkedin_data_id?: string; linkedin_id?: string }>>;
   getPersonalLoop(): Promise<ApiResponse<{ loop?: PersonalLoop | null; coupled_loops?: CoupledLoop[] }>>;
   submitFeedbackSignal(body: FeedbackSignalBody): Promise<ApiResponse<{ success?: boolean; signal_id?: string }>>;
-  /** `POST /feedback/submit` — the web's feedback door and its 👍/👎 on a reply. */
-  submitFeedback(body: FeedbackBody): Promise<ApiResponse<{ success?: boolean; message?: string; error?: string; retry_after_minutes?: number }>>;
+  /** `POST /feedback/submit` — the web's feedback door and its 👍/👎 on a reply. `files_attached`: how many of the files it took (none from a server before files). */
+  submitFeedback(body: FeedbackBody): Promise<ApiResponse<{ success?: boolean; message?: string; error?: string; retry_after_minutes?: number; files_attached?: number }>>;
   /** `POST /composition/refresh` — the web's Refresh on an expired canvas: a fresh spec. */
   refreshComposition(compositionId: string): Promise<ApiResponse<{ composition?: CompositionSpecLite; composition_id?: string; success?: boolean; error?: string }>>;
   /**
@@ -297,10 +379,11 @@ export interface AskMyuApi {
    * P6 — the chat, mirroring the WEB's request shapes exactly: first message →
    * `POST /journal/add`, turns → `POST /journal_chats/add` chaining journal_id;
    * context under BOTH `feed_context` and `context_injection` (the 2026-07-27
-   * key-drift lesson — send both, land whichever the backend reads).
+   * key-drift lesson — send both, land whichever the backend reads). Pasted text (2026-10-06) goes beside the
+   * typed words as `pasted_blocks`, only when there is some; a paste-only message sends `content: ""`.
    */
-  createChatEntry(accountId: string, content: string, context?: ChatContext, templateType?: string, canvas?: ChatCanvasOptions): Promise<ApiResponse<ChatTurnResult>>;
-  addChatTurn(accountId: string, journalId: string, content: string, context?: ChatContext, canvas?: ChatCanvasOptions): Promise<ApiResponse<ChatTurnResult>>;
+  createChatEntry(accountId: string, content: string, context?: ChatContext, templateType?: string, canvas?: ChatCanvasOptions, pasted?: PastedBlockWire[]): Promise<ChatSendResponse>;
+  addChatTurn(accountId: string, journalId: string, content: string, context?: ChatContext, canvas?: ChatCanvasOptions, pasted?: PastedBlockWire[]): Promise<ChatSendResponse>;
   /** Denial doctrine: one tap, zero justification. Fire-and-forget at call sites. */
   submitPatternFeedback(eventType: PatternFeedbackEvent, patternId: string, sourceSurface: string): Promise<ApiResponse>;
 
@@ -436,9 +519,10 @@ export interface AskMyuApi {
   updateAccountState(accountId: string, update: { onboardingComplete?: boolean; myuScripts?: Record<string, unknown> }): Promise<ApiResponse>;
   /** Arc, beat 1: fetch + summarize a LinkedIn profile. */
   /** `body.code` passes an EnrichLayer failure through (dead/private profile) — branch on it, never summarize it. */
-  linkedinSeek(accountId: string, linkedinUrl: string): Promise<ApiResponse<{ body?: { content?: string; code?: number } }>>;
+  linkedinSeek(accountId: string, linkedinUrl: string): Promise<ApiResponse<{ body?: { content?: string; code?: number }; profile_name?: string; name_match?: string }>>;
   /** Persist the linkedin public identifier on the account. */
-  saveLinkedinId(accountId: string, linkedinId: string): Promise<ApiResponse>;
+  /** `identityConfirmed` (2026-10-15): the person said a profile in another name is theirs. */
+  saveLinkedinId(accountId: string, linkedinId: string, identityConfirmed?: boolean): Promise<ApiResponse>;
   /** Extract current employment from the arc source just provided. */
   queryCurrentEmployment(accountId: string, source: 'linkedin' | 'resume'): Promise<ApiResponse>;
   /** Persist the extracted employment; empty {} answer = no CURRENT role found. */
@@ -449,8 +533,9 @@ export interface AskMyuApi {
   /** Persist the uploaded resume id on the account (the web's updateAccountResume). */
   saveResumeId(accountId: string, resumeId: string): Promise<ApiResponse>;
   /** Moment, beat 2: classify "where are you right now" (server also writes the
-      onboard_moment_* myu_scripts flags — attempt count included). */
-  classifyCareerMoment(accountId: string, content: string): Promise<ApiResponse<MomentClassifyResult>>;
+      onboard_moment_* myu_scripts flags — attempt count included). Pasted text goes as `pasted_blocks`,
+      as the web and the phone send it; the server classifies the typed words and the blocks together. */
+  classifyCareerMoment(accountId: string, content: string, pasted?: PastedBlockWire[]): Promise<ApiResponse<MomentClassifyResult>>;
 }
 
 export interface MirrorReceipt {
@@ -631,6 +716,44 @@ export interface ChatTurnResult {
   similar_entries?: Array<{ journal_id?: string; content_preview?: string }>;
   /** The reply's canvas side — mutations for the thread's composition (see composition/afterTurn.ts). */
   canvas?: CanvasReply;
+  /** How many pasted blocks the server received (2026-10-06); absent from a server without pasted text (pastedTextLost). */
+  pasted_blocks_received?: number;
+}
+
+/**
+ * A chat send's answer. A refusal carries the server's own sentence when it sent one (`message`): a pasted block
+ * too long, or too many (`pasted_text_too_long`), is said in the server's words.
+ */
+export type ChatSendResponse = ApiResponse<ChatTurnResult> & { message?: string };
+
+/** The reply parsed, or the refusal with the server's sentence. */
+function chatSendAnswer(res: ApiResponse): ChatSendResponse {
+  if (res.ok) return { ...res, data: parseChatTurn(res.data) };
+  const message = res.data && typeof res.data.message === 'string' ? res.data.message.trim() : '';
+  return { ...res, data: null, ...(message ? { message } : {}) };
+}
+
+/**
+ * The menu-marks door's answer (2026-10-06), as the web's lines client reads it: the marks; null when the server has
+ * no such door (404); a throw for any other failure (offline, a pause, a refusal, a body that is not the marks), so
+ * the caller keeps what it shows.
+ */
+export function menuMarksOf(res: ApiResponse<unknown>, what: string): MenuMarks | null {
+  if (res.status === 404) return null;
+  const marks = res.ok ? readMenuMarks(res.data) : null;
+  if (!marks) throw new Error(`${what}: ${res.error ?? `http_${res.status}`}`);
+  return marks;
+}
+
+/**
+ * The seen door's answer (2026-10-06): what the server recorded; null when it has no such door (404) or refuses this
+ * session every time (one that may only read, 403 `scope_required`); a throw for any other failure, so the lines are
+ * reported the next time they are in view.
+ */
+export function linesSeenOf(res: ApiResponse<LinesSeenResponse>): LinesSeenResponse | null {
+  if (res.status === 404 || res.error === 'scope_required') return null;
+  if (!res.ok) throw new Error(`lines seen: ${res.error ?? `http_${res.status}`}`);
+  return res.data ?? {};
 }
 
 /** What the chat sends about the canvas it can see — the web's `chatOptions`. */
@@ -652,7 +775,7 @@ export type HelpMyuItem =
   | { item_type: 'merge_candidate'; source: { relationship_id: string; display_name: string; subtitle?: string; email_primary?: string }; target: { relationship_id: string; display_name: string; subtitle?: string; email_primary?: string }; reason?: string };
 export interface RelatedPerson { relationship_id: string; display_name: string; subtitle?: string; weight?: number }
 export interface RelatedMemory { memory_id: string; relationship_id?: string; content?: string; memory_date?: string; memory_type?: string; source_type?: string; source_id?: string; entity_display_name?: string }
-export interface SourceDetail { source_type: string; source_id: string; title: string; subtitle?: string; timestamp?: number; memories?: Array<{ memory_id: string; content: string; memory_type?: string; memory_date?: number }>; tasks?: Array<{ task_id: string; title: string; status?: string; due_date?: number }>; events?: Array<{ event_id: string; title: string; start_time?: number }> }
+export interface SourceDetail { source_type: string; source_id: string; title: string; subtitle?: string; timestamp?: number; memories?: Array<{ memory_id: string; content: string; memory_type?: string; memory_date?: number }>; tasks?: Array<{ task_id: string; title: string; status?: string; due_date?: string }>; events?: Array<{ event_id: string; title: string; start_time?: string }> }
 export interface DriveSuggestion { id: string; file_id: string; file_url?: string; file_type?: string; source_email_subject?: string; source_email_sender?: string; source_email_date?: string; meeting_likelihood_score?: number; meeting_signals?: string[] }
 export interface FeedSearchResults { people?: CardSpecLite[]; companies?: CardSpecLite[]; feed_items?: Array<{ feed_item_id?: string; title?: string; summary?: string }>; total_count?: number }
 
@@ -679,8 +802,11 @@ export interface FeedbackBody {
   app: string;
   version: string;
   context?: Record<string, unknown>;
-  /** The web's shape: the transcript as text (no screenshot from a plugin). */
-  attachments?: { attached_content?: string; attached_summary?: string };
+  /**
+   * The web's shape: the transcript as text (no screenshot from a plugin), and the files the person added (2026-10-14):
+   * each `{name, content_type, size_bytes, base64}`, on the email and nowhere else.
+   */
+  attachments?: { attached_content?: string; attached_summary?: string; files?: FeedbackFile[] };
 }
 
 /** `POST /composition/action` — the union the web's executeAction reads. */
@@ -834,6 +960,8 @@ export function parseChatTurn(data: unknown): ChatTurnResult {
   const canvas = parseCanvasSide(record.canvas);
   // So does the delivered offer (top level on every shape; mirrored under `journal`).
   const offer = record.offer && typeof record.offer === 'object' ? (record.offer as DeliveredOffer) : undefined;
+  // And the count of pasted blocks received (2026-10-06): the servlet adds it to the answer it sends.
+  const received = typeof record.pasted_blocks_received === 'number' ? record.pasted_blocks_received : undefined;
   if (record.journal && typeof record.journal === 'object') record = record.journal as Record<string, unknown>;
 
   const journalId = typeof record.journal_id === 'string' ? record.journal_id : undefined;
@@ -866,6 +994,7 @@ export function parseChatTurn(data: unknown): ChatTurnResult {
   if (canvas) out.canvas = canvas;
   if (references.length) out.references = references;
   if (similar.length) out.similar_entries = similar;
+  if (received !== undefined) out.pasted_blocks_received = received;
   return out;
 }
 
@@ -908,11 +1037,22 @@ export interface CardSpecLite {
     linkedin_url?: string;
     email_primary?: string;
     website_url?: string;
+    /** The person's pronouns ("she/her"), when known (2026-10-02). */
+    pronouns?: string | null;
+    /**
+     * People Myu isn't keeping track of yet (2026-10-03): true for a person who was only on some of the viewer's
+     * emails. The card shows the state and "Keep track of <First>"; opening the card changes nothing. shared
+     * `CardHeader.on_map`, held by name in `wire/parity.ts`.
+     */
+    on_map?: boolean;
   };
   /** Person card, `per_card_offer` on and no mail source connected: the server-composed mail offer (MailOfferBuilder). Absent otherwise. */
   mail_offer?: MailOffer;
   /** Self card, `self_card_legible` on: what Myu knows, each line with its source and whether it is a fact, a read, or not yet. */
-  known_facts?: Array<{ key?: string; value?: string; source?: Loose<'linkedin' | 'you' | 'calendar' | 'mail' | 'read'>; kind?: Loose<'fact' | 'read' | 'not_yet'> }>;
+  known_facts?: Array<{ key?: string; value?: string; full?: string; source?: Loose<'linkedin' | 'you' | 'calendar' | 'mail' | 'read'>; kind?: Loose<'fact' | 'read' | 'not_yet'> }>;
+  /** The card's tiles and its one pressing item (the self card's deep dive shows them too, 2026-10-05). */
+  tiles?: Array<{ label?: string; value?: string; sub_value?: string; tap_section_type?: string }>;
+  hot_item?: { text?: string; urgency?: string } | null;
   sections?: Array<{
     section_id?: string;
     section_type?: string;
@@ -921,7 +1061,133 @@ export interface CardSpecLite {
     /** `actionable` sections of type patterns/predictions/threads/weather get the web's per-section "Discuss with Myu". */
     actionable?: boolean;
     items?: Array<{ text?: string; date?: string; source_type?: string; source_id?: string; title?: string; subtitle?: string }>;
+    /** One list, two lenses (slice 6): the four new agentic sections + log carry
+     *  structured `data` and the new/experiment markers. Rendered vault-native. */
+    is_new?: boolean;
+    is_experiment?: boolean;
+    note?: string;
+    data?: Record<string, unknown>;
+    source?: string;
   }>;
+}
+
+/** The card's header on its own, for the parity holds. */
+export type CardHeaderLite = NonNullable<CardSpecLite['header']>;
+
+/** `GET /myu/lines` — the lines under rows (slice 15). Loose so the builder maps. */
+export interface MyuLineLite {
+  line_id: string;
+  subjects?: Array<{ type?: string; id?: string; occurrence_key?: string; label?: string }>;
+  text?: string;
+  needs_you?: boolean;
+  ask_kind?: string;
+  choices?: Array<{ id?: string; label?: string; readback?: string }>;
+  /** Picking several, and a typed name (2026-10-03): see `SpaceAsk` in the wire shapes and `src/pickMany.ts`. */
+  select?: 'many';
+  send?: string;
+  typed?: string;
+  assumed?: { claim?: string; changeable?: boolean };
+  est?: string;
+  state?: string;
+  conversation?: { subject_type?: string; subject_id?: string; occurrence_key?: string; conversation_id?: string };
+  provenance?: { source?: string; detail?: string };
+  /** ISO-8601 instant. */
+  created_at?: string;
+  /** When the line was released to the person (ISO), when the server sends it: when it "came in" (the entry's dot). */
+  released_at?: string;
+}
+export interface MyuLinesResult {
+  success?: boolean;
+  day?: string;
+  budget?: { released?: number; limit?: number };
+  lines?: MyuLineLite[];
+}
+
+/** `GET /myu/log` — the log (slice 15). */
+export interface MyuLogItemLite {
+  receipt_id: string;
+  at?: string;
+  kind?: string;
+  text?: string;
+  purpose?: string;
+  subject?: { type?: string; id?: string; label?: string };
+  provenance?: { surface?: string; agent?: string; client?: string };
+}
+export interface MyuLogResult {
+  success?: boolean;
+  items?: MyuLogItemLite[];
+  next_cursor?: string;
+}
+
+/** `GET /retro` — the room pin + threads (F3 links out; the vault renders the pin/state). */
+export interface RetroReadResult {
+  success?: boolean;
+  retro?: {
+    retro_id?: string;
+    number?: number;
+    state?: string;
+    /** The state in words, from the backend; none while people get ready (R21). */
+    state_text?: string;
+    first_retro?: boolean;
+    scheduled_at?: string;
+    /** k and m of the top line: who has shared, of how many. */
+    reflects?: { pushed?: number; members?: number };
+    /** R20: when the questions go up, in words in the reader's zone ("on Thursday at 2pm"). */
+    agenda_when?: string | null;
+    /** R20: while the questions are up, until when, in words ("Friday"). */
+    open_until?: string | null;
+  };
+  /** R20: the schedule sentence and the rules, one text, folded under "How this works". */
+  how_it_works?: string;
+  pinned?: {
+    first_retro?: boolean;
+    results?: { text?: string; author?: string; items?: Array<{ what?: string; outcome?: string; source?: string; owner?: { name?: string } }> };
+  };
+  threads?: RetroThreadLite[];
+  todos?: RetroTodoLite[];
+  can_start?: boolean;
+}
+/** One question of the team's retro, with what people wrote under it. Text is locked words until the space is unlocked. */
+export interface RetroThreadLite {
+  thread_id?: string;
+  position?: number;
+  kind?: string;
+  text?: string;
+  author?: { participant_id?: string; name?: string };
+  /** `team_myu` posts are labelled "Myu, for the team". */
+  author_kind?: string;
+  state?: string;
+  state_text?: string;
+  reply_count?: number;
+  /** "I'm done with this question": how many, of how many (never who). */
+  done?: { count?: number; of?: number; mine?: boolean };
+  /** The vote: how many have voted, of how many. */
+  ranking?: { ranked_count?: number; ranker_count?: number };
+  replies?: Array<{ reply_id?: string; participant?: { participant_id?: string; name?: string }; text?: string; at?: string }>;
+  /** The summary the team chose, once it is shown. */
+  merged?: { wording_id?: string; text?: string; revealed_at?: string };
+}
+export interface RetroTodoLite {
+  todo_id?: string;
+  text?: string;
+  state?: string;
+  owner?: { name?: string };
+  status?: string;
+  check_at?: string;
+  /** The standing in words, from the backend. */
+  status_text?: string;
+}
+/** A space the person belongs to (`POST /gattai/spaces`). */
+export interface SpaceLite {
+  space_id: string;
+  name?: string | null;
+  kind?: string;
+  /** R20: the kind in the backend's words ("Small team", "One-to-one"). */
+  kind_label?: string | null;
+  status?: string;
+  member_count?: number;
+  /** The kind of work the space is for: "retro" or "debrief" (an interview debrief, 2026-09-29). */
+  work?: string;
 }
 
 /**
@@ -1022,6 +1288,11 @@ export class Api implements AskMyuApi {
     return this.transport.get<{ wrapped_mdek_recovery: string }>('/account/recovery/wrapped-key');
   }
 
+  fetchPasswordWrappedMDEK() {
+    // GET, as the recovery door: PasswordRetrieve answers a signed-in session before it has a key.
+    return this.transport.get<PasswordWrappedKey>('/account/password/wrapped-key');
+  }
+
   upsertJournal(payload: EncryptedJournalPayload) {
     // Goes through postJournal — the only door with the plaintext assertion on it.
     // /journal/add is CreateJournalEntry; its external_id branch is the
@@ -1037,8 +1308,12 @@ export class Api implements AskMyuApi {
     return this.transport.get('/feed/brief');
   }
 
-  getCalendarEvents(start: string, end: string) {
-    return this.transport.post('/calendar/events', { start_date: start, end_date: end });
+  async getCalendarEvents(start: string, end: string) {
+    const res = await this.transport.post('/calendar/events', { start_date: start, end_date: end });
+    // 2026-09-29: Myu's own entries (for someone with no calendar synced) in the synced events' shape, for every reader.
+    const data = res.data as { events?: unknown[] } | undefined;
+    if (data && Array.isArray(data.events)) data.events = normalizeCalendarEvents(data.events);
+    return res;
   }
 
   listEntities(tab: CardEntityType, opts: { changedSince?: number } = {}) {
@@ -1046,9 +1321,18 @@ export class Api implements AskMyuApi {
     // panel use — people and companies both, so the lookup covers both.
     // `changed_since` (server ms) filters server-side, before sentence generation.
     const since = opts.changedSince && opts.changedSince > 0 ? `&changed_since=${opts.changedSince}` : '';
-    return this.transport.get<{ entities?: EntityHeadline[]; server_time?: number }>(
+    return this.transport.get<EntityList>(
       `/feed/entities?tab=${tab === 'company' ? 'companies' : 'people'}${since}`,
     );
+  }
+
+  listMapPeople(limit: number, offset: number) {
+    // The fold (2026-10-03): only the people on the map, the server's order (most recently seen first), one page.
+    return this.transport.get<MapPeoplePage>(`/v2/relationships?map=only&limit=${Math.max(1, Math.floor(limit))}&offset=${Math.max(0, Math.floor(offset))}`);
+  }
+
+  keepRelationship(relationshipId: string) {
+    return this.transport.post<{ success?: boolean; relationship_id?: string; on_map?: boolean }>('/v2/relationships/keep', { relationship_id: relationshipId });
   }
 
   getTodayBundle(start: string, end: string, timezone: string) {
@@ -1071,12 +1355,77 @@ export class Api implements AskMyuApi {
     );
   }
 
-  getMeetingPrep(eventId: string) {
-    return this.transport.get<{ prep?: PrepPayload }>(`/prep/meeting?event_id=${encodeURIComponent(eventId)}`);
+  // ─── One list, two lenses (slice 15) ───
+  getCardDeep(entityType: CardEntityType, entityId: string) {
+    // The full view (slice 6) carries the four new agentic sections + log. The
+    // vault materializes People pages from this so the paper copy is never the
+    // lesser copy.
+    return this.transport.get<{ card?: CardSpecLite; response_type?: string }>(
+      `/card/${entityType}?entity_id=${encodeURIComponent(entityId)}&level=deep_dive`,
+    );
   }
 
-  linkPrepSubject(eventId: string, relationshipId: string) {
-    return this.transport.post('/prep/subject/link', { event_id: eventId, relationship_id: relationshipId });
+  getMyuLines(scope: 'today' | 'people' | 'spaces' | 'calendar') {
+    return this.transport.get<MyuLinesResult>(`/myu/lines?scope=${scope}`);
+  }
+
+  async getMenuMarks(): Promise<MenuMarks | null> {
+    return menuMarksOf(await this.transport.get<unknown>('/myu/menu-marks'), 'menu marks');
+  }
+
+  async markMenuOpened(item: MenuItemKey): Promise<MenuMarks | null> {
+    return menuMarksOf(await this.transport.post<unknown>('/myu/menu-marks/opened', { item }), 'menu marks opened');
+  }
+
+  async markLinesSeen(lineIds: string[]): Promise<LinesSeenResponse | null> {
+    if (!lineIds.length) return null;
+    return linesSeenOf(await this.transport.post<LinesSeenResponse>('/myu/lines/seen', { line_ids: lineIds }));
+  }
+
+  getCommitments() {
+    return this.transport.get<GetCommitmentsResponse>('/commitments');
+  }
+
+  getMyuLog(opts?: { since?: string; kind?: string; subjectType?: string; subjectId?: string; limit?: number }) {
+    const q: string[] = [];
+    if (opts?.since) q.push(`since=${encodeURIComponent(opts.since)}`);
+    if (opts?.kind) q.push(`kind=${encodeURIComponent(opts.kind)}`);
+    if (opts?.subjectType) q.push(`subject_type=${encodeURIComponent(opts.subjectType)}`);
+    if (opts?.subjectId) q.push(`subject_id=${encodeURIComponent(opts.subjectId)}`);
+    if (opts?.limit) q.push(`limit=${opts.limit}`);
+    return this.transport.get<MyuLogResult>(`/myu/log${q.length ? `?${q.join('&')}` : ''}`);
+  }
+
+  getRetro(spaceId: string) {
+    return this.transport.get<RetroReadResult>(`/retro?space_id=${encodeURIComponent(spaceId)}`);
+  }
+
+  listSpaces() {
+    // The web's exact request (gattaiApi.listSpaces): POST, archived spaces left out.
+    return this.transport.post<{ spaces?: SpaceLite[] }>('/gattai/spaces', { include_archived: false });
+  }
+
+  getSubjectConversation(subjectType: string, subjectId: string, opts?: { occurrenceKey?: string; earlier?: boolean }) {
+    const q = [`subject_type=${encodeURIComponent(subjectType)}`, `subject_id=${encodeURIComponent(subjectId)}`];
+    if (opts?.occurrenceKey) q.push(`occurrence_key=${encodeURIComponent(opts.occurrenceKey)}`);
+    if (opts?.earlier) q.push('earlier=true');
+    return this.transport.get<SpaceConversationRead>(`/myu/conversation?${q.join('&')}`);
+  }
+
+  addSubjectTurn(conversationId: string, content: string, pasted?: PastedBlockWire[]) {
+    return this.transport.post<SpaceTurnReply>('/journal_chats/add', { conversation_id: conversationId, content, ...(pasted?.length ? { pasted_blocks: pasted } : {}) });
+  }
+
+  answerMyuLine(lineId: string, answer: SpaceAnswer) {
+    return this.transport.post<SpaceAnswerReply>('/myu/lines/answer', { line_id: lineId, answer });
+  }
+
+  getRetroPrepMine(spaceId: string) {
+    return this.transport.get<SpacePrepMine>(`/retro/prep/mine?space_id=${encodeURIComponent(spaceId)}`);
+  }
+
+  getMeetingPrep(eventId: string) {
+    return this.transport.get<{ prep?: PrepCardV2 }>(`/prep/meeting?event_id=${encodeURIComponent(eventId)}`);
   }
 
   searchEntities(query: string) {
@@ -1123,7 +1472,28 @@ export class Api implements AskMyuApi {
     return this.transport.post<{ success?: boolean; ack?: boolean; response_generating?: boolean; responses?: Array<Record<string, unknown>> }>('/composition/interaction', { events, timing: {}, generate_response: generateResponse });
   }
 
-  getHelpMyuQueue() { return this.transport.get<{ queue?: HelpMyuItem[]; total_count?: number }>('/feed/help-myu'); }
+  async getHelpMyuQueue() {
+    // One list, two lenses (slice 4): the help-myu queue is gone; the
+    // confirmation producer turns "people Myu cannot place" into lines on the
+    // people scope. Map the person-subject confirm lines back to the pane's
+    // shape so the Today "people Myu cannot place" zone reads from lines.
+    const res = await this.getMyuLines('people');
+    if (!res.ok) return res as unknown as ApiResponse<{ queue?: HelpMyuItem[]; total_count?: number }>;
+    const lines = res.data?.lines ?? [];
+    const queue: HelpMyuItem[] = [];
+    for (const l of lines) {
+      if (l.ask_kind !== 'yes_no' && l.ask_kind !== 'choice' && l.ask_kind !== 'assume') continue;
+      const subj = (l.subjects ?? []).find((s) => s.type === 'person');
+      if (!subj?.id) continue;
+      queue.push({
+        item_type: 'linkedin_disambiguation',
+        relationship_id: subj.id,
+        display_name: subj.label ?? 'someone',
+        suggestion_count: l.choices?.length,
+      });
+    }
+    return { ...res, data: { queue, total_count: queue.length } } as ApiResponse<{ queue?: HelpMyuItem[]; total_count?: number }>;
+  }
   getRelatedPersons(relationshipId: string, limit = 5) { return this.transport.get<{ related?: RelatedPerson[] }>(`/feed/related-persons?relationship_id=${encodeURIComponent(relationshipId)}&limit=${limit}`); }
   getRelatedMemories(relationshipId: string, limit = 5) { return this.transport.get<{ related?: RelatedMemory[] }>(`/feed/related-memories?relationship_id=${encodeURIComponent(relationshipId)}&limit=${limit}`); }
   getEntityDispatch(entityType: CardEntityType, entityId: string) { return this.transport.get<{ dispatch_sentence?: string; dispatch_category?: string; dispatch_receipt?: Record<string, unknown> }>(`/feed/entities/dispatch?entity_type=${encodeURIComponent(entityType)}&entity_id=${encodeURIComponent(entityId)}`); }
@@ -1152,7 +1522,7 @@ export class Api implements AskMyuApi {
   submitFeedbackSignal(body: FeedbackSignalBody) { return this.transport.post<{ success?: boolean; signal_id?: string }>('/feedback/signal', body as unknown as Record<string, unknown>); }
 
   submitFeedback(body: FeedbackBody) {
-    return this.transport.post<{ success?: boolean; message?: string; error?: string; retry_after_minutes?: number }>('/feedback/submit', body as unknown as Record<string, unknown>);
+    return this.transport.post<{ success?: boolean; message?: string; error?: string; retry_after_minutes?: number; files_attached?: number }>('/feedback/submit', body as unknown as Record<string, unknown>);
   }
 
   refreshComposition(compositionId: string) {
@@ -1180,7 +1550,7 @@ export class Api implements AskMyuApi {
     );
   }
 
-  async createChatEntry(accountId: string, content: string, context?: ChatContext, templateType?: string, canvas?: ChatCanvasOptions) {
+  async createChatEntry(accountId: string, content: string, context?: ChatContext, templateType?: string, canvas?: ChatCanvasOptions, pasted?: PastedBlockWire[]) {
     const body: Record<string, unknown> = { account_id: accountId, content, surface_mode: canvas?.surfaceMode ?? 'journal' };
     if (canvas?.continuesCompositionId) body.continues_composition_id = canvas.continuesCompositionId;
     if (templateType) body.template_type = templateType;
@@ -1188,11 +1558,11 @@ export class Api implements AskMyuApi {
       body.feed_context = context;
       body.context_injection = context;
     }
-    const res = await this.transport.post('/journal/add', body);
-    return { ...res, data: res.ok ? parseChatTurn(res.data) : null };
+    if (pasted?.length) body.pasted_blocks = pasted;
+    return chatSendAnswer(await this.transport.post('/journal/add', body));
   }
 
-  async addChatTurn(accountId: string, journalId: string, content: string, context?: ChatContext, canvas?: ChatCanvasOptions) {
+  async addChatTurn(accountId: string, journalId: string, content: string, context?: ChatContext, canvas?: ChatCanvasOptions, pasted?: PastedBlockWire[]) {
     const body: Record<string, unknown> = {
       account_id: accountId,
       chatter_id: accountId,
@@ -1207,8 +1577,8 @@ export class Api implements AskMyuApi {
       body.feed_context = context;
       body.context_injection = context;
     }
-    const res = await this.transport.post('/journal_chats/add', body);
-    return { ...res, data: res.ok ? parseChatTurn(res.data) : null };
+    if (pasted?.length) body.pasted_blocks = pasted;
+    return chatSendAnswer(await this.transport.post('/journal_chats/add', body));
   }
 
   getMirrorEdition() {
@@ -1343,8 +1713,8 @@ export class Api implements AskMyuApi {
     );
   }
 
-  getSelfCard() {
-    return this.transport.get<{ card?: CardSpecLite }>('/card/self');
+  getSelfCard(level?: 'read' | 'deep_dive') {
+    return this.transport.get<{ card?: CardSpecLite }>(level ? `/card/self?level=${level}` : '/card/self');
   }
 
   getMeetingDetail(meetingId: string) {
@@ -1522,11 +1892,16 @@ export class Api implements AskMyuApi {
 
   linkedinSeek(accountId: string, linkedinUrl: string) {
     const qs = `?account_id=${encodeURIComponent(accountId)}&summarize=true&regenerate=false&linkedin_url=${encodeURIComponent(linkedinUrl)}`;
-    return this.transport.get<{ body?: { content?: string; code?: number } }>(`/linkedin/seek${qs}`);
+    return this.transport.get<{ body?: { content?: string; code?: number }; profile_name?: string; name_match?: string }>(`/linkedin/seek${qs}`);
   }
 
-  saveLinkedinId(accountId: string, linkedinId: string) {
-    return this.transport.post('/account/career/update', { account_id: accountId, linkedin_id: linkedinId });
+  /** `identityConfirmed`: the person said a profile in another name is theirs (2026-10-15); the server refuses a mismatch without it. */
+  saveLinkedinId(accountId: string, linkedinId: string, identityConfirmed = false) {
+    return this.transport.post('/account/career/update', {
+      account_id: accountId,
+      linkedin_id: linkedinId,
+      ...(identityConfirmed ? { identity_confirmed: true } : {}),
+    });
   }
 
   queryCurrentEmployment(accountId: string, source: 'linkedin' | 'resume') {
@@ -1566,7 +1941,7 @@ export class Api implements AskMyuApi {
     return this.transport.post('/account/career/update', { account_id: accountId, resume_id: resumeId });
   }
 
-  classifyCareerMoment(accountId: string, content: string) {
-    return this.transport.post<MomentClassifyResult>('/onboard/classify_career_moment', { account_id: accountId, content });
+  classifyCareerMoment(accountId: string, content: string, pasted?: PastedBlockWire[]) {
+    return this.transport.post<MomentClassifyResult>('/onboard/classify_career_moment', { account_id: accountId, content, ...(pasted?.length ? { pasted_blocks: pasted } : {}) });
   }
 }

@@ -23,6 +23,10 @@ export interface NoteMeta {
   occurredAt: number;
   /** `myu: false` in frontmatter — a per-note veto that beats any allowlist. */
   vetoed: boolean;
+  /** `myu-generated: true`: Myu wrote it (2026-10-06), so it is never sent back as the person's writing. */
+  myuGenerated: boolean;
+  /** A Web Clipper capture (2026-10-06): sent marked, so the server reads it as quoted material. */
+  webClipping: boolean;
 }
 
 export function readNoteMeta(app: App, file: TFile): NoteMeta {
@@ -31,7 +35,26 @@ export function readNoteMeta(app: App, file: TFile): NoteMeta {
 
   const vetoed = fm?.myu === false || fm?.myu === 'false';
 
-  return { occurredAt: resolveOccurredAt(fm, file), vetoed };
+  return { occurredAt: resolveOccurredAt(fm, file), vetoed, myuGenerated: isMyuGenerated(fm), webClipping: isWebClipping(fm) };
+}
+
+/** Myu wrote this note: every file it writes carries `myu-generated: true` (myuFiles.ts, ConversationWriter.ts). */
+export function isMyuGenerated(fm: Record<string, unknown> | null | undefined): boolean {
+  const value = fm?.['myu-generated'];
+  return value === true || value === 'true';
+}
+
+/**
+ * Web Clipper made this note: its `clippings` tag (tags as a list, or a string split on commas and spaces; `#` and
+ * case ignored), or a web address as its `source` (a string, or the first string of a list).
+ */
+export function isWebClipping(fm: Record<string, unknown> | null | undefined): boolean {
+  const tags = fm?.tags;
+  const list = Array.isArray(tags) ? tags : typeof tags === 'string' ? tags.split(/[\s,]+/) : [];
+  if (list.some((t) => typeof t === 'string' && t.trim().replace(/^#/, '').toLowerCase() === 'clippings')) return true;
+  const source = fm?.source;
+  const first = Array.isArray(source) ? source.find((s): s is string => typeof s === 'string') : source;
+  return typeof first === 'string' && /^https?:\/\//i.test(first.trim());
 }
 
 function resolveOccurredAt(fm: Record<string, unknown> | undefined, file: TFile): number {
@@ -86,6 +109,15 @@ export async function hashContent(content: string): Promise<string> {
   return Array.from(new Uint8Array(digest))
     .map((b) => b.toString(16).padStart(2, '0'))
     .join('');
+}
+
+/**
+ * The capture hash: the body's, and for a Web Clipper note the body's with its mark (2026-10-06), so adding or
+ * removing the `clippings` tag sends the note again. An unclipped note keeps exactly its old hash, so the upgrade
+ * sends nothing else again.
+ */
+export function captureHash(body: string, webClipping: boolean): Promise<string> {
+  return webClipping ? hashContent(body + '\u0000web_clipping') : hashContent(body);
 }
 
 /**

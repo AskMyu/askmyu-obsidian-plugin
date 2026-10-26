@@ -52,7 +52,7 @@ export class AddSourceModal extends Modal {
       text:
         this.kind === 'imap'
           ? 'Any mailbox with IMAP — Fastmail, Proton via bridge, your own server. Myu reads it the way it reads Gmail.'
-          : 'Any CalDAV calendar — Fastmail, iCloud, Nextcloud. Myu preps those meetings too.',
+          : 'Any CalDAV calendar — Fastmail, iCloud, Nextcloud. Myu prepares you for those meetings too.',
     });
 
     new Setting(contentEl).setName('Email').addText((t) => {

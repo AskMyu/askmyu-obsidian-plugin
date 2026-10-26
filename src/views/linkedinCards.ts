@@ -117,7 +117,7 @@ function renderAsCanvasCard(root: HTMLElement, component: CompositionComponentLi
       if (resolve === 'reject' && onReject) { if (!res?.ok) console.warn('[askmyu] linkedin reject not recorded', res?.error); onReject(); return { ok: true, message: 'noted \u2713' }; }
       if (!res?.ok) return { ok: false, message: res?.error || "That didn\u2019t work. Try again." };
       if (resolve === 'confirm' || resolve === 'manual_url') notifyStatus('Linked.');
-      if (resolve === 'no_linkedin') notifyStatus("Noted \u2014 Myu won\u2019t keep guessing.");
+      if (resolve === 'no_linkedin') notifyStatus("Okay. Myu won\u2019t suggest more profiles.");
       host.onResolved();
       return { ok: true, message: resolve === 'reject' ? 'noted \u2713' : 'linked \u2713' };
     },
@@ -187,7 +187,7 @@ export function renderLinkedInMatchesInline(root: HTMLElement, suggestions: Link
         none.disabled = true;
         const res = await resolve({ action: 'no_linkedin', relationship_id: host.relationshipId });
         if (!res.ok) { say(row, res.message ?? ''); none.disabled = false; return; }
-        notifyStatus('Noted \u2014 Myu won\u2019t keep guessing.');
+        notifyStatus('Okay. Myu won\u2019t suggest more profiles.');
         host.onResolved();
       })();
     };

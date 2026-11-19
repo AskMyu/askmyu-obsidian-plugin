@@ -3,12 +3,15 @@
  * right-click the person note (file-menu), the command palette on the active
  * note, and the card's edit modal. One list, so the doors never disagree.
  *
- * Web kebab (EntityListPanel): Discuss with Myu · Merge into… · This card
+ * Web kebab (EntityListPanel): Discuss with Myu · Same person as… · This card
  * isn't right (archive) · This is me. Discuss and archive/forget already
- * existed here; merge and this-is-me are new (2026-08-29).
+ * existed here; "Same person" and this-is-me are new (2026-08-29). Since
+ * 2026-11-15 the first is "Same person" on every screen, never the old word
+ * (BRIEF_FRONTEND_ONE_COLLEAGUE_ONE_PERSON), and it can be undone.
  */
 
 import type { EntityHeadline } from '../transport/api';
+import { IDENTITY_WORDS } from '../personIdentities';
 
 export interface PersonRef { id: string; name: string }
 
@@ -24,11 +27,18 @@ export function mergeCandidates(entities: EntityHeadline[], sourceId: string): E
 
 /** The words each confirm uses — plain about what happens, including what does NOT. */
 export const PERSON_ACTION_COPY = {
-  merge: (source: string, target: string) => ({
-    title: `Merge ${source} into ${target}?`,
-    body: `Everything Myu knows about ${source} (memories, open items, history) moves to ${target}. ${source} is removed from your people, and their note in the Myu folder goes to the trash. This cannot be undone here.`,
-    cta: 'Merge',
+  /**
+   * "Same person" (2026-11-15), the web's words: `source` moves, `target` is kept. `note`, beside it only when Myu keeps notes in
+   * the vault: the vault's own part (the note of the one who moves goes to the trash).
+   */
+  samePerson: (source: string, target: string, opts: { vaultNotes?: boolean } = {}) => ({
+    title: `${source} and ${target} are the same person?`,
+    body: `Everything kept under ${source} moves to ${target}: what was said, the promises, the mail and the meetings. You can undo it.`,
+    cta: IDENTITY_WORDS.samePerson,
+    ...(opts.vaultNotes ? { note: `${source}’s note in the Myu folder goes to the trash.` } : {}),
   }),
+  /** The menu item, the command and the card's edit window that open the picker. */
+  samePersonAs: 'Same person as…',
   self: (name: string) => ({
     title: `Is ${name} you?`,
     // Backend folds the person into the self (memories, threads, names) as of

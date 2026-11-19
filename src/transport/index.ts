@@ -76,9 +76,27 @@ export function isWafRefusal(status: number, data: unknown): boolean {
   return !('err' in d) && !('error' in d);
 }
 
-/** A 403 from the encryption gate, as distinct from any other forbidden. */
+/**
+ * Doors whose 429 is an ANSWER, not a request to rest (2026-11-17). The held-address question's fifth wrong password is
+ * answered 429 `too_many_attempts` and ends that question; resting the door for a minute would refuse, without a byte
+ * on the wire, every answer to the new question the person gets on going back to the start and signing in again.
+ */
+const ANSWER_429_DOORS = new Set(['/auth/address-held']);
+
+export function isAnswer429(path: string): boolean {
+  return ANSWER_429_DOORS.has(RequestBudget.keyOf(path));
+}
+
+/**
+ * The server's working copy of the key is not with this session: the encryption gate's 403 `enc`, or `key_needed` / `no_working_copy`
+ * (the backend's word since 11 Nov; on an accept, 2026-11-17) on 403, 409 or 423, as shared `deviceOpening.ts` isNoWorkingCopy reads it.
+ */
 export function isEncryptionBlocked(status: number, data: unknown): boolean {
-  return status === 403 && !!data && typeof data === 'object' && (data as { err?: unknown }).err === 'enc';
+  if (status !== 403 && status !== 409 && status !== 423) return false;
+  const d = data && typeof data === 'object' ? (data as { err?: unknown; error?: unknown; code?: unknown }) : null;
+  if (!d) return false;
+  if (status === 403 && d.err === 'enc') return true;
+  return [d.err, d.error, d.code].some((v) => v === 'no_working_copy' || v === 'key_needed');
 }
 
 export class Transport {
@@ -212,8 +230,9 @@ export class Transport {
    * everything.
    */
   private noteRefusal(path: string, res: RequestUrlResponse, data: unknown): void {
-    if (res.status === 429) this.budget.pause(path, retryAfterMs(res.headers, data));
-    else if (isWafRefusal(res.status, data)) this.budget.pauseAll();
+    if (res.status === 429) {
+      if (!isAnswer429(path)) this.budget.pause(path, retryAfterMs(res.headers, data));
+    } else if (isWafRefusal(res.status, data)) this.budget.pauseAll();
   }
 
   /** Authenticated POST. Every backend call in the plugin goes through here. */

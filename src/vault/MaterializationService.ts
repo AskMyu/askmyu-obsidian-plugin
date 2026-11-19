@@ -32,7 +32,9 @@ import { decryptWithKey } from '../crypto/primitives';
 import { readPastedBlocks } from '../pastedText';
 import { isWeeklyEditionFresh } from './WeeklyReviewWriter';
 import { WEAVE_NOTE } from './weaveRecipes';
-import { firstPresent, parseWhen, flattenMemoryPayload, buildSelfMarkdown, type JournalDayEntry, buildDayMarkdown, buildMonthCalendarMarkdown, buildMeetingHistoryMarkdown, buildJournalDayMarkdown, buildCompanyMarkdown,
+import type { MeetingRecordLite } from '../wire';
+import { meetingRecordCounts } from '../meetingPost';
+import { firstPresent, parseWhen, flattenMemoryPayload, buildSelfMarkdown, type JournalDayEntry, type DayMeetingLink, buildDayMarkdown, buildMonthCalendarMarkdown, buildMeetingHistoryMarkdown, buildJournalDayMarkdown, buildCompanyMarkdown,
   buildCommitmentsMarkdown,
   buildPeopleBase,
   buildCompaniesBase,
@@ -89,6 +91,11 @@ export class MaterializationService {
   private lastNetCall = 0;
   /** True while a full sweep runs — the ambient ratchet must not start a second one. */
   private sweeping = false;
+  /**
+   * Each meeting record's note → its calendar meeting and the ledger's counts (2026-10-30), from the last meeting list
+   * read: the calendar's days open a record's meeting page first.
+   */
+  private recordPages = new Map<string, { event_id: string | null; counts: string | null; title: string }>();
 
   /** Wait until the next per-item call may go. */
   private async paced(): Promise<void> {
@@ -242,6 +249,11 @@ export class MaterializationService {
     const when = whenDate ? whenDate.toISOString().slice(0, 10) : '';
     const name = sanitizeName(`${when ? `${when} ` : ''}${title}`.trim() || id);
     const path = `${this.folder}/Meetings/${name}.md`;
+    // The list row's calendar event and the ledger's counts (2026-10-30): the record's note and its day open the
+    // meeting's page first. Kept for the calendar's days whether or not the note is written this pass.
+    const record = row as MeetingRecordLite;
+    const page = { event_id: typeof record.calendar_event_id === 'string' && record.calendar_event_id ? record.calendar_event_id : null, counts: meetingRecordCounts(record) || null, title };
+    this.recordPages.set(`Meetings/${name}`, page);
     const exists = this.deps.app.vault.getAbstractFileByPath(normalizePath(path)) !== null;
     if (exists && !fullRefresh) return;
     this.deps.onProgress(`Myu is writing your meeting history — ${i} of ${total} · ${title}`);
@@ -263,7 +275,7 @@ export class MaterializationService {
         participation: d?.participation,
       };
     }
-    await this.writeHeld(path, buildMeetingHistoryMarkdown(meeting));
+    await this.writeHeld(path, buildMeetingHistoryMarkdown(meeting, page));
   }
 
   /** The memories payload, flattened and DECRYPTED: rows carry `content` or
@@ -346,7 +358,7 @@ export class MaterializationService {
     }
 
     // Meetings + journal presence by day, from what's already on paper.
-    const meetingsByDay = new Map<string, string[]>();
+    const meetingsByDay = new Map<string, Array<string | DayMeetingLink>>();
     const journalDays = new Set<string>();
     const folder = this.folder;
     for (const file of this.deps.app.vault.getMarkdownFiles()) {
@@ -354,7 +366,11 @@ export class MaterializationService {
         const day = file.basename.slice(0, 10);
         if (/^\d{4}-\d{2}-\d{2}$/.test(day)) {
           const bucket = meetingsByDay.get(day) ?? [];
-          bucket.push(`Meetings/${file.basename}`);
+          const link = `Meetings/${file.basename}`;
+          const page = this.recordPages.get(link);
+          // The record's own object first: built where `link` would be read against a plain string, a newer lint takes it for String's old `link()`.
+          const record = page ? { link, title: page.title, event_id: page.event_id, counts: page.counts } : null;
+          bucket.push(record ?? link);
           meetingsByDay.set(day, bucket);
         }
       } else if (file.path.startsWith(`${folder}/Journal/`)) {

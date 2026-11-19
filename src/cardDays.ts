@@ -56,3 +56,21 @@ export function cardMonthWords(raw: unknown): string | null {
   const d = new Date(ms);
   return `${MONTH_WORDS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
 }
+
+const WEEKDAY_LONG = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const MONTH_LONG = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+/**
+ * A check day as it reads (17 Nov): "next check <the day as shown here>" while it is today or ahead; once it has passed, "the check
+ * was Monday 16 November", as the server says it in a person's item history, never "next check mon" as if it were ahead.
+ */
+export function checkWords(raw: unknown, ahead: (raw: unknown) => string, now: Date = new Date()): string {
+  const ms = cardStampMs(raw);
+  if (ms == null) return `next check ${ahead(raw)}`;
+  const d = new Date(ms);
+  const dateOnly = typeof raw === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(raw.trim());
+  const [y, m, day, wd] = dateOnly ? [d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), d.getUTCDay()] : [d.getFullYear(), d.getMonth(), d.getDate(), d.getDay()];
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  if (new Date(y, m, day).getTime() >= today) return `next check ${ahead(raw)}`;
+  return `the check was ${WEEKDAY_LONG[wd]} ${day} ${MONTH_LONG[m]}${y === now.getFullYear() ? '' : ` ${y}`}`;
+}

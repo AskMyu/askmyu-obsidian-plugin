@@ -161,3 +161,23 @@ export function foldRows(groups: SubjectGroup[], limit: number = FOR_YOU_ROWS): 
   const keep = Math.max(limit, ordered.filter((g) => g.needsYou).length);
   return { shown: ordered.slice(0, keep), folded: ordered.slice(keep) };
 }
+
+/**
+ * Today's lines after a read: the open ones, and those answered here (their readback stays). A question closed elsewhere while it
+ * was on screen and pressed here (2026-11-15, "Already answered.") stays too, though the read no longer carries it: the person sees
+ * why its buttons went. Any other line the read no longer carries is gone.
+ */
+export function linesAfterRead(read: MyuLineLite[], before: MyuLineLite[], answeredHere: ReadonlySet<string>, closedHere: ReadonlySet<string> = new Set()): MyuLineLite[] {
+  const open = read.filter((l) => !l.state || l.state === 'queued' || l.state === 'released' || answeredHere.has(l.line_id));
+  const have = new Set(open.map((l) => l.line_id));
+  // Kept as closed: it no longer waits for the person, so its row's dot does not say it does.
+  return [...open, ...before.filter((l) => closedHere.has(l.line_id) && !have.has(l.line_id)).map((l) => ({ ...l, state: 'expired', needs_you: false }))];
+}
+
+/**
+ * Whether a line that changed on the server (`line_updated`, with its id) is a reason for Today to read its lines again
+ * (2026-11-15: a question answered elsewhere leaves without a reload): only a line Today shows and has not answered here.
+ */
+export function readsAgainFor(lineId: unknown, shown: MyuLineLite[] | null | undefined, answeredHere: ReadonlySet<string>): boolean {
+  return typeof lineId === 'string' && !!lineId && !answeredHere.has(lineId) && (shown ?? []).some((l) => l.line_id === lineId);
+}

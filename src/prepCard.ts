@@ -84,7 +84,7 @@ export function prepEvidenceFor(prep: Pick<PrepCardV2, 'evidence'>, ids: string[
 
 /** A person's block has more than its first line (who they are to you). */
 export function prepPersonHasMore(p: PrepPerson): boolean {
-  return !!(p.stands || p.works_best || p.stance || p.last_time || p.you_owe.length || p.they_owe.length);
+  return !!(p.stands || p.works_best || p.stance || p.last_time || p.you_owe.length || p.they_owe.length || (p.decided ?? []).length || (p.told ?? []).length);
 }
 
 /** Before or after the meeting (the capture after it tells Myu `prep_phase: 'after'`). */
@@ -121,6 +121,7 @@ export function prepTextLines(prep: Pick<PrepCardV2, 'top' | 'people' | 'room' |
     push(p.stance);
     for (const o of p.you_owe) push(`You owe ${p.name}: ${o}`);
     for (const o of p.they_owe) push(`${p.name} owes you: ${o}`);
+    for (const r of [...(p.decided ?? []), ...(p.told ?? [])]) push(r.said && (r.quote || r.text) ? `${r.said}: “${(r.quote || r.text)!.trim()}”` : null);
   }
   for (const l of prep.room?.lines ?? []) push(l.text);
   push(prep.before_you_go?.agenda);
@@ -164,6 +165,18 @@ export const PREP_VIEW_WORDS = {
   notesLoading: 'Opening the notes…',
   notesEmpty: 'Nothing in those notes yet.',
   notesFailed: 'Those notes didn’t open. Try again in a moment.',
+  /** 2026-10-29: a change to the list that did not reach the server (it is put back). */
+  listFailed: 'That didn’t save. Try again in a moment.',
+  /** The meeting's notes did not save; the next key saves them again. */
+  notesNotSaved: 'Your notes didn’t save yet. They save again as you type.',
+  /** After the meeting: the reminder Myu read in the notes, as a row ("Remind you · to ask about the rota"). */
+  remindYou: 'Remind you',
+  /** Whose action item it is, when it is the person's own (another's is their name). */
+  you: 'You',
+  /** The past 1:1s, while they are read and when they could not be. */
+  historyLoading: 'Opening your past meetings…',
+  historyEmpty: 'No past meetings with a list yet.',
+  historyFailed: 'Your past meetings didn’t open. Try again in a moment.',
 } as const;
 
 /** "Thursday 2 October, 11am" (the web card's words for when). */

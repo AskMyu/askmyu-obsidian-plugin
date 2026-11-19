@@ -19,6 +19,11 @@ import { knownFactLabel, knownFactSource, knownFactText } from '../selfCard';
 import { cardDayWords } from '../cardDays';
 import { standingWords } from '../standing';
 import { groupBySubject, isWaitingLine, lineNeedsYou, rowOpensConversation, stackOf } from '../todayLines';
+import { chartSourceCaption } from '../chartSource';
+import { chartTable } from '../chartSpec';
+import { MEETING_POST_WORDS, betweenRow, olderLine } from '../meetingPost';
+import { PREP_LIST_WORDS } from '../prepList';
+import type { BetweenRow } from '../wire';
 
 export const MYU_GENERATED_KEY = 'myu-generated';
 
@@ -193,8 +198,10 @@ export function parseCheckboxes(contents: string): ParsedCheckbox[] {
     key points, decisions, commitments, notes, transcript. The list rows are
     thin; the detail endpoint carries the substance (operator finding,
     2026-08-25: "only getting the summaries"). Every section is optional —
-    render what exists, skip what doesn't, never an empty header. */
-export function buildMeetingHistoryMarkdown(meeting: Record<string, unknown>): string {
+    render what exists, skip what doesn't, never an empty header.
+    2026-10-30: a record of a calendar meeting opens the meeting's page first (`page`), its counts from the ledger beside
+    the door; this note is the source itself, one step from the page. */
+export function buildMeetingHistoryMarkdown(meeting: Record<string, unknown>, page: { event_id?: string | null; counts?: string | null } = {}): string {
   const title = String(meeting.title ?? meeting.meeting_title ?? 'Meeting');
   const whenDate = parseWhen(firstPresent(meeting.meeting_date, meeting.occurred_at, meeting.created_at));
   const when = whenDate ? whenDate.toISOString().slice(0, 10) : '';
@@ -216,6 +223,9 @@ export function buildMeetingHistoryMarkdown(meeting: Record<string, unknown>): s
     ['source', String(meeting.source ?? '') || null],
   ]);
   const parts: string[] = [head, '', `# ${title}`];
+  const door = page.event_id ? `[${PREP_LIST_WORDS.open}](${prepLink(page.event_id, title)})` : '';
+  const doorLine = [door, page.counts?.trim() ?? ''].filter(Boolean).join(' · ');
+  if (doorLine) parts.push('', doorLine);
   if (attendees.length > 0) {
     parts.push('', `**Attendees:** ${attendees.map((a) => `[[${sanitizeName(a)}]]`).join(', ')}`);
   }
@@ -343,10 +353,24 @@ export function buildJournalDayMarkdown(date: string, entries: JournalDayEntry[]
     user's daily notes via the {{date}} template snippet, which is how the
     BASE Calendar plugin's grid becomes a Myu calendar (its dots and clicks
     are daily notes — the one integration surface it has). */
+/** The meeting's page from a note: before, NOW, or its record after (`obsidian://myu-prep`). */
+export function prepLink(eventId: string, title?: string | null): string {
+  const t = (title ?? '').trim();
+  return `obsidian://myu-prep?event=${encodeURIComponent(eventId)}${t ? `&title=${encodeURIComponent(t)}` : ''}`;
+}
+
+/** A meeting record on a day: its note, and — for a calendar meeting — the meeting's page and the ledger's counts. */
+export interface DayMeetingLink {
+  link: string;
+  title?: string;
+  event_id?: string | null;
+  counts?: string | null;
+}
+
 export function buildDayMarkdown(
   date: string,
   events: Array<{ title?: string; start_time?: string; all_day?: boolean; event_id?: string }>,
-  meetingLinks: string[],
+  meetingLinks: Array<string | DayMeetingLink>,
   hasJournal: boolean,
   memoryPeople: string[] = [],
 ): string {
@@ -362,14 +386,26 @@ export function buildDayMarkdown(
     for (const e of events) {
       const time = e.all_day ? 'all day' : (e.start_time ?? '').slice(11, 16) || '—';
       // Every line is a DOOR (operator, 2026-08-25: calendar items must link
-      // back to their thing): prep opens in the pane via the deep link.
-      const door = e.event_id ? ` [prepare ▸](obsidian://myu-prep?event=${e.event_id})` : '';
+      // back to their thing): the meeting's page opens in the pane via the deep link — before, NOW, or its record
+      // after (2026-10-30), with the meeting's conversation behind it in the chat pane.
+      const door = e.event_id ? ` [${PREP_LIST_WORDS.open}](${prepLink(e.event_id, e.title)})` : '';
       parts.push(`- **${time}** ${e.title ?? 'Busy'}${door}`);
     }
   }
   if (meetingLinks.length > 0) {
     parts.push('', '## Meetings');
-    for (const link of meetingLinks) parts.push(`- [[${link}]]`);
+    // A record of a calendar meeting opens the meeting's page first; its note (the source) is the second door.
+    for (const m of meetingLinks) {
+      if (typeof m === 'string' || !m.event_id) {
+        const link = typeof m === 'string' ? m : m.link;
+        const counts = typeof m === 'string' ? '' : (m.counts?.trim() ?? '');
+        parts.push(`- [[${link}]]${counts ? ` · ${counts}` : ''}`);
+        continue;
+      }
+      const title = m.title?.trim() || m.link.replace(/^Meetings\//, '');
+      const bits = [`**${title}**`, m.counts?.trim() || '', `[${PREP_LIST_WORDS.open}](${prepLink(m.event_id, title)})`, `[[${m.link}|${MEETING_POST_WORDS.openNotes}]]`].filter(Boolean);
+      parts.push(`- ${bits.join(' · ')}`);
+    }
   }
   if (hasJournal) {
     parts.push('', `## Journal`, '', `![[Journal/${date}]]`);
@@ -698,6 +734,13 @@ function rowsToTable(value: unknown, columnsOverride?: string[]): string[] {
     `| ${columns.map(() => '---').join(' | ')} |`,
     ...rows.map((r) => `| ${columns.map((c) => cellOf(c, r[c])).join(' | ')} |`),
   ];
+}
+
+/** A table the chart reader built (`chartTable`), as markdown; a pipe inside a value is escaped. */
+function tableLines(t: { columns: string[]; rows: string[][] }): string[] {
+  if (!t.rows.length) return [];
+  const cell = (v: string) => v.replace(/\|/g, '\\|');
+  return [`| ${t.columns.map(cell).join(' | ')} |`, `| ${t.columns.map(() => '---').join(' | ')} |`, ...t.rows.map((r) => `| ${r.map(cell).join(' | ')} |`)];
 }
 
 /** Bullets from an array: strings as-is, objects by their readable field. */
@@ -1218,7 +1261,9 @@ export function componentMarkdown(
       const code = textOf(data.source) || textOf(data.mermaid) || textOf(data.definition) || textOf(data.code);
       if (!code) return joinBlock(heading, textOf(data.fallback_text), []);
       const caption = textOf(data.caption);
-      return joinBlock(heading, '', ['```mermaid', code, '```', ...(caption ? ['', `*${caption}*`] : [])], false);
+      // Where it came from (2026-10-30, DIAGRAM_VENN_CONTRACT), as under a chart.
+      const source = textOf(data.data_source);
+      return joinBlock(heading, '', ['```mermaid', code, '```', ...(caption ? ['', `*${caption}*`] : []), ...(source ? ['', source] : [])], false);
     }
     case 'chart': {
       // A chart's DATA is a table — that is its text form, and it is a better
@@ -1230,11 +1275,14 @@ export function componentMarkdown(
       const rc = (data.recharts_config ?? {}) as Record<string, unknown>;
       const vl = (data.vega_lite_spec ?? {}) as Record<string, unknown>;
       const vlData = (vl.data ?? {}) as Record<string, unknown>;
-      const rows = rowsToTable(rc.data ?? vlData.values ?? data.data ?? data.rows);
+      // A heatmap (its grid) and a box plot (five numbers per group) have no rows of their own (2026-10-28).
+      const shaped = rc.type === 'heatmap' || rc.type === 'box_plot' ? chartTable(rc) : null;
+      const rows = shaped ? tableLines(shaped) : rowsToTable(rc.data ?? vlData.values ?? data.data ?? data.rows);
       const caption = textOf(data.fallback_text) || textOf(data.summary) || textOf(data.caption);
-      const src = textOf(data.data_source);
+      // Where the numbers came from (2026-10-28): the server's sentence as it is, in italics under the chart.
+      const src = chartSourceCaption(data.data_source);
       if (rows.length === 0 && !caption) return joinBlock(heading, '', ['*No data in this chart yet.*'], false);
-      return joinBlock(heading, '', [...rows, ...(caption ? ['', caption] : []), ...(src ? ['', `*source: ${src}*`] : [])], false);
+      return joinBlock(heading, '', [...rows, ...(caption ? ['', caption] : []), ...(src ? ['', `*${src}*`] : [])], false);
     }
     case 'connection_overlay': {
       const from = nameOfSibling(data.from_id);
@@ -1293,10 +1341,14 @@ export function componentMarkdown(
       const rows = sets.map((s) => `- **${textOf(s.label)}** — ${cellOf('size', s.size)}`);
       const inter = Array.isArray(data.intersections) ? (data.intersections as Array<Record<string, unknown>>) : [];
       for (const i of inter) {
-        const names = (Array.isArray(i.sets) ? (i.sets as string[]) : []).map((id) => setName.get(id) || id).join(' ∩ ');
+        // The overlap in words, as the web says it ("In both", "In all three", "In Migration and Hiring"), not "∩".
+        const ids = Array.isArray(i.sets) ? (i.sets as string[]) : [];
+        const names = vennOverlapLabel(textOf(i.label), ids.map((id) => setName.get(id) || id), sets.length);
         const members = bulletsOf(i.members).map((m) => m.slice(2)).join(', ');
         rows.push(`- **${names}** — ${cellOf('size', i.size)}${members ? `: ${members}` : ''}`);
       }
+      const source = textOf(data.data_source);
+      if (source) rows.push('', source);
       return joinBlock(heading, '', rows, false);
     }
     case 'card_section': {
@@ -1463,8 +1515,15 @@ type LooseAgenticSection = {
   data?: Record<string, unknown>;
 };
 
-/** Render one of the five new agentic sections into vault-native markdown. */
-export function renderAgenticSection(section: LooseAgenticSection, webUrl: string): string[] {
+/** A Between you row on paper: "**Reid owes** Refine the website copy · due Mon 2 Nov *(from the Gemini notes · 1:1, 29 Oct)*". */
+function betweenLine(r: BetweenRow, first: string): string | null {
+  const b = betweenRow(r, first);
+  if (!b.text) return null;
+  return `**${b.label}** ${b.text}${b.right ? ` · ${b.right}` : ''}${b.sub ? ` *(${b.sub})*` : ''}`;
+}
+
+/** Render one of the five new agentic sections into vault-native markdown. `firstName`: the page's person ("Reid owes"). */
+export function renderAgenticSection(section: LooseAgenticSection, webUrl: string, firstName = ''): string[] {
   const out: string[] = [];
   const title = section.title?.trim() || section.section_type || 'Notes';
   const data = section.data ?? {};
@@ -1482,6 +1541,22 @@ export function renderAgenticSection(section: LooseAgenticSection, webUrl: strin
       const link = spaceId ? `obsidian://myu-chat?about=${encodeURIComponent(`space:${spaceId}`)}` : webUrl;
       out.push(`- **[${name}](${link})**${line ? ` — ${line}` : ''}`);
     }
+    return out;
+  }
+
+  // Between you (2026-10-30): the one ledger's rows, newest first, each with its source and meeting; the older ones in a
+  // folded callout that says what they are. A server from before the rows writes the commitments as checkboxes.
+  if (section.section_type === 'commitments_between' && Array.isArray(data.rows)) {
+    const rows = (data.rows as BetweenRow[]).map((r) => betweenLine(r, firstName)).filter((l): l is string => !!l);
+    const older = data.older && typeof data.older === 'object' ? (data.older as { count?: number; note?: string | null; rows?: BetweenRow[] }) : null;
+    const fold = olderLine(older);
+    if (!rows.length && !fold) return out;
+    out.push('', `## ${title}`);
+    for (const l of rows) out.push(`- ${l}`);
+    const olderRows = (older?.rows ?? []).map((r) => betweenLine(r, firstName)).filter((l): l is string => !!l);
+    // The older ones in a folded callout; counted with none sent, the line alone, in quiet type.
+    if (fold && olderRows.length) out.push('', `> [!note]- ${fold}`, ...olderRows.map((l) => `> - ${l}`));
+    else if (fold) out.push('', `*${fold}*`);
     return out;
   }
 
@@ -1513,7 +1588,7 @@ export function renderAgenticSection(section: LooseAgenticSection, webUrl: strin
         r.words === 'alike' ? 'You read this alike' : r.words === 'differently' ? 'You see this differently. Worth a conversation' : 'Not shared';
       out.push(`| ${dim} | ${words} |`);
     }
-    out.push('', '*Words only. The numbers are an experiment, and both of you need to turn them on.*');
+    out.push('', '*Words only. The numbers are an experiment, and everyone in the space needs to turn them on.*');
     return out;
   }
 
@@ -1604,7 +1679,7 @@ export function buildPersonMarkdown(
     // room, checkboxes for commitments, a words-first table for readings).
     const agentic = rawSection as LooseAgenticSection;
     if (AGENTIC_SECTIONS.has(agentic.section_type ?? '')) {
-      parts.push(...renderAgenticSection(agentic, webUrl));
+      parts.push(...renderAgenticSection(agentic, webUrl, (entity.display_name ?? '').trim().split(/\s+/)[0] ?? ''));
       continue;
     }
     // A titled section with nothing in it was a bare heading — five of them on a
@@ -1890,4 +1965,15 @@ export function buildPeopleBase(peopleFolder: string): string {
     '      - formula.threads',
     '',
   ].join('\n');
+}
+
+/**
+ * The words before a Venn overlap's members (2026-10-30): the same as shared `vennOverlapLabel` (composition.ts), which
+ * the plugin cannot import (shared types only); `tests/ceremony.test.ts` holds the words. The server's own label wins.
+ */
+export function vennOverlapLabel(own: string, setNames: string[], setCount: number): string {
+  if (own.trim()) return own.trim();
+  if (setNames.length >= setCount && setCount === 2) return 'In both';
+  if (setNames.length >= setCount && setCount === 3) return 'In all three';
+  return `In ${setNames.filter(Boolean).join(' and ')}`;
 }

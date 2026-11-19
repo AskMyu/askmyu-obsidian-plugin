@@ -25,6 +25,7 @@
  *    costs nothing and survives `kill -9`.
  */
 
+import { addressInUseOf } from '../addressInUse';
 import type { AskMyuApi } from '../transport/api';
 import { unwrapWithPassword, validPasswordKdf, type PasswordWrappedKey } from '../devicePassword';
 import type { UnlockState } from '../crypto/KeyHolder';
@@ -48,6 +49,14 @@ import {
 } from '../crypto/primitives';
 import { deriveKEKFromPhrase } from '../crypto/recovery';
 import type { ApiResponse } from '../transport/index';
+import { addressHeldOf, signupConfirmationOf, signupConfirmationWords, type AddressHeld } from '../addressHeld';
+import { doorAnswerOf, doorAnswerWords, notNowPauseMs } from '../doorAnswers';
+
+/**
+ * What redeeming a mailed link came to. `{ held }` (2026-11-17): the address the link proved is held by a password
+ * account nobody confirmed; the server asked before using the link, so the same link goes again once that is answered.
+ */
+export type MagicLinkOutcome = 'ceremony' | 'existing_account' | 'invalid' | 'error' | { held: AddressHeld };
 
 /** Backend error codes that mean the token is genuinely gone (not transient). */
 const TERMINAL_AUTH_ERRORS = new Set(['invalid_token', 'token_revoked', 'token_used', 'token_expired', 'token_not_found']);
@@ -74,6 +83,11 @@ export interface PersistedAuth {
   device_id: string | null;
   /** mDEK wrapped under the KEK the SERVER holds. Useless on its own. */
   wrapped_mdek: string | null;
+  /**
+   * Keys the server refused as not the account's (2026-11-18), set aside, never deleted: one per refusal with its time, as stored then
+   * (wrapped under this device's KEK on the server). Never opened or lent; kept so that a wrong refusal can be put right. Nothing shows it.
+   */
+  refused_keys?: Array<{ at: string; device_id: string | null; wrapped_mdek: string; why?: string }>;
   /** Session from the last exchange. Short-lived; re-minted from the token. */
   session_token: string | null;
   account_id: string | null;
@@ -143,6 +157,14 @@ export class UnlockMachine {
   /** The one re-mint / re-escrow in flight — every 401 / 403-enc of a burst joins it. */
   private remint: Promise<boolean> | null = null;
   private reescrow: Promise<boolean> | null = null;
+  /**
+   * The server refused this device's key as not the account's (409 `key_not_yours`, 2026-11-18): it is lent no more, dropped here, and the
+   * device waits for approval as one never approved. A new key (approval or the recovery phrase) ends it.
+   */
+  private refused = false;
+  /** "Not now" from the lending door (18 Nov): how many in a row, and until when the next lending waits. */
+  private notNowTries = 0;
+  private notNowUntil = 0;
   private transferKeys: ECDHKeyPair | null = null;
   private pollTimer: number | null = null;
   private approvalState: ApprovalProgress | null = null;
@@ -174,6 +196,7 @@ export class UnlockMachine {
   }
 
   private setState(next: UnlockState, detail?: string): void {
+    if (next === 'unlocked') this.refused = false;
     this.state = next;
     this.deps.onState(next, detail);
   }
@@ -260,15 +283,45 @@ export class UnlockMachine {
     deviceId: string,
     /** The beta-terms bundle the person agreed to at the door (2026-09-02). */
     termsVersion?: string,
-  ): Promise<'ceremony' | 'existing_account' | 'email_not_allowed' | 'error'> {
+  ): Promise<'ceremony' | 'existing_account' | 'email_not_allowed' | 'address_in_use' | 'error'> {
+    this.signupRefused = null;
     const created = await this.deps.api.createAccount(email, name, password, termsVersion);
     if (!created.ok || !created.data?.autoken || !created.data.account_id) {
       // 401 here is the closed-beta email gate, not a wrong password.
-      return created.status === 401 ? 'email_not_allowed' : 'error';
+      if (created.status === 401) return 'email_not_allowed';
+      // An address an account already holds (2026-11-17): nothing is made; the server's sentence, and the mailed sign-in instead.
+      const inUse = addressInUseOf(created.status, created.error, created.data);
+      if (inUse) {
+        this.signupRefused = inUse;
+        return 'address_in_use';
+      }
+      return 'error';
     }
+
+    // A password does not confirm the address; the server mails a link to it (2026-11-17). The sentence about it is
+    // kept for the sign-up window to say once.
+    this.signupSaid = signupConfirmationWords(signupConfirmationOf(created.data, email));
 
     // CreateAccount only succeeds for a NEW email — genesis is always right here.
     return this.bootstrapFreshSession(created.data.autoken, created.data.account_id, deviceId, false);
+  }
+
+  /** The server's sentence when the last sign-up was refused for its address. */
+  private signupRefused: string | null = null;
+
+  /** Why the last sign-up was refused for its address (the server's sentence), or null. */
+  signupRefusal(): string | null {
+    return this.signupRefused;
+  }
+
+  /** The sentence the last sign-up left about its address; null when there is nothing to say. */
+  private signupSaid: string | null = null;
+
+  /** Take the sign-up's sentence: it is said once, so taking it clears it. */
+  takeSignupWords(): string | null {
+    const said = this.signupSaid;
+    this.signupSaid = null;
+    return said;
   }
 
   /**
@@ -276,11 +329,11 @@ export class UnlockMachine {
    * obsidian:// handler or pasted from the landing page). ValidateMagicLink
    * creates the account when the email is new, so this IS signup.
    */
-  async completeMagicLink(
-    token: string,
-    deviceId: string,
-  ): Promise<'ceremony' | 'existing_account' | 'invalid' | 'error'> {
+  async completeMagicLink(token: string, deviceId: string): Promise<MagicLinkOutcome> {
     const res = await this.deps.api.validateMagicLink(token);
+    // 409 address_held (2026-11-17): asked before the link is used, so the link stays good for the redo.
+    const held = addressHeldOf(res.status, res.data);
+    if (held) return { held };
     if (!res.ok || !res.data?.auth_token || !res.data.account_id) {
       // A used/expired token is NOT a clean 4xx: the servlet's error arms
       // REDIRECT to the web error page (302) — and requestUrl may follow it,
@@ -416,6 +469,15 @@ export class UnlockMachine {
     await this.forget('remote_logout');
   }
 
+  /**
+   * The rule (18 Nov): a key this device keeps is never deleted without being set aside first, except by the person's own Disconnect.
+   * The stored copy goes into `refused_keys` with its time and why; returns the list to save.
+   */
+  private asideWith(why: string, wrapped: string | null = this.deps.load().wrapped_mdek): Array<{ at: string; device_id: string | null; wrapped_mdek: string; why?: string }> {
+    const kept = this.deps.load().refused_keys ?? [];
+    return wrapped ? [...kept, { at: new Date().toISOString(), device_id: this.deps.load().device_id, wrapped_mdek: wrapped, why }] : kept;
+  }
+
   private async forget(reason: string): Promise<void> {
     this.stopPolling();
     this.transferKeys = null;
@@ -423,7 +485,9 @@ export class UnlockMachine {
     this.pendingGenesisDeviceId = null;
     this.deps.keys.clear();
     this.deps.onSession(null);
-    await this.deps.save({ token: null, session_token: null, wrapped_mdek: null, account_id: null });
+    // The person's own Disconnect (18 Nov) takes the set-aside copies too, nothing of theirs left in the vault; a token the server ended
+    // or a remote sign-out keeps them.
+    await this.deps.save({ token: null, session_token: null, wrapped_mdek: null, account_id: null, refused_keys: reason === 'disconnected_by_user' ? [] : this.asideWith(reason) });
     this.setState('disconnected', reason);
   }
 
@@ -449,7 +513,7 @@ export class UnlockMachine {
       // without re-approval. Rate-limit (429), 5xx, and offline are transient:
       // retain the blob, stay relocked, retry (REVIEW H2).
       if (res.status === 404 || res.error === 'kek_not_found') {
-        await this.deps.save({ wrapped_mdek: null });
+        await this.deps.save({ wrapped_mdek: null, refused_keys: this.asideWith('device_revoked') });
         this.setState('blocked', 'device_revoked');
       } else if (res.status === 403 || res.error === 'token_revoked') {
         // Token dead, KEK alive: need a new token, keep custody material.
@@ -465,12 +529,14 @@ export class UnlockMachine {
       const kek = await importKEK(res.data.device_kek);
       const mdek = await unwrapMDEK(auth.wrapped_mdek, kek);
       this.deps.keys.set(mdek);
-      await this.escrowToSession(auth.device_id);
+      await this.escrowToSession(auth.device_id, auth.wrapped_mdek);
+      // Refused at the door (2026-11-18): the refusal stands; never "unlocked" after it.
+      if (this.refused) return;
       this.setState('unlocked');
     } catch {
       // Blob and KEK don't match — a half-finished approval, or storage that was
-      // restored from a backup out of step with the server.
-      await this.deps.save({ wrapped_mdek: null });
+      // restored from a backup out of step with the server. Set aside, never deleted (18 Nov).
+      await this.deps.save({ wrapped_mdek: null, refused_keys: this.asideWith('key_mismatch') });
       this.setState('blocked', 'key_mismatch');
     }
   }
@@ -616,14 +682,17 @@ export class UnlockMachine {
    * unlockWithRecoveryPhrase's unwrap, so a phrase written here works on the
    * web and vice versa. The phrase itself never leaves the device.
    */
-  async setupRecoveryPhrase(phrase: string): Promise<'ok' | 'locked' | 'error'> {
+  async setupRecoveryPhrase(phrase: string): Promise<'ok' | 'locked' | 'error' | { said: string }> {
     const mdek = this.deps.keys.get();
     if (!mdek) return 'locked';
     try {
       const recoveryKEK = await deriveKEKFromPhrase(phrase);
       const wrapped = await wrapMDEK(mdek, recoveryKEK);
       const res = await this.deps.api.setupRecovery(wrapped);
-      return res.ok ? 'ok' : 'error';
+      if (res.ok) return 'ok';
+      // A second key, another device finishing its set-up, "not now" (18 Nov): the door's own words; nothing changed here.
+      const said = doorAnswerWords(res.status, res.data ?? { error: res.error });
+      return said ? { said } : 'error';
     } catch {
       return 'error';
     }
@@ -635,13 +704,15 @@ export class UnlockMachine {
    * and hand it to the server with the 4-digit code the user read off the new
    * device. The raw key never leaves this function.
    */
-  async approvePendingDevice(requestId: string, verificationCode: string, requesterPublicKey: string): Promise<'ok' | 'bad_code' | 'error'> {
+  async approvePendingDevice(requestId: string, verificationCode: string, requesterPublicKey: string): Promise<'ok' | 'bad_code' | 'error' | 'not_now'> {
     const mdek = this.deps.keys.get();
     if (!mdek) return 'error';
     try {
       const blob = await encryptMDEKForTransfer(mdek, requesterPublicKey);
       const res = await this.deps.api.approveDeviceTransfer(requestId, verificationCode, blob);
       if (res.ok) return 'ok';
+      // "Not now" (18 Nov): nothing changed; the device asking waits.
+      if (doorAnswerOf(res.status, res.data ?? { error: res.error }) === 'not_now') return 'not_now';
       return res.error === 'invalid_verification_code' || res.status === 400 ? 'bad_code' : 'error';
     } catch {
       return 'error';
@@ -739,6 +810,8 @@ export class UnlockMachine {
   private async adoptMDEK(mdek: CryptoKey): Promise<boolean> {
     const auth = this.deps.load();
     if (!auth.device_id) return false;
+    // A key from outside (approval, the phrase, the password, genesis) is a new one: the server tries it afresh (2026-11-18).
+    this.refused = false;
 
     const kek = await generateKEK();
     const wrapped = await wrapMDEK(mdek, kek);
@@ -756,7 +829,9 @@ export class UnlockMachine {
       this.deps.keys.clear();
       return false;
     }
-    await this.escrowToSession(auth.device_id);
+    await this.escrowToSession(auth.device_id, wrapped);
+    // Refused at the door (2026-11-18): the refused copy is set aside, never saved as this device's; the device waits for approval.
+    if (this.refused) return false;
 
     await this.deps.save({ wrapped_mdek: wrapped });
 
@@ -793,7 +868,7 @@ export class UnlockMachine {
    * closed here costs a user some server-side freshness; failing open would
    * hand over a key they declined to give.
    */
-  private async escrowToSession(deviceId: string): Promise<boolean> {
+  private async escrowToSession(deviceId: string, wrapped: string | null = this.deps.load().wrapped_mdek): Promise<boolean> {
     // Session escrow is the PLATFORM's session contract, not a plugin choice:
     // EncryptionEnforcementFilter blocks every non-whitelisted endpoint for an
     // encryption-enabled account until the session holds its escrowed key —
@@ -802,8 +877,22 @@ export class UnlockMachine {
     // visits (its ceremony and enforcement are server-side); withholding
     // session escrow client-side was a plugin-special misreading (live-run
     // finding, 2026-08-22) that left Tier-1 sessions unable to call anything.
+    if (this.refused) return false;
     try {
       const res = await this.deps.api.escrowMDEK(await this.deps.keys.exportForEscrow(), deviceId);
+      if (!res.ok && res.status === 409 && (res.error === 'key_not_yours' || (res.data as { error?: unknown } | null)?.error === 'key_not_yours')) {
+        await this.refuseThisKey(deviceId, wrapped);
+        return false;
+      }
+      if (!res.ok && doorAnswerOf(res.status, res.data ?? { error: res.error }) === 'not_now') {
+        this.notNowTries += 1;
+        this.notNowUntil = Date.now() + notNowPauseMs(this.notNowTries);
+        return false;
+      }
+      if (res.ok) {
+        this.notNowTries = 0;
+        this.notNowUntil = 0;
+      }
       return res.ok;
     } catch {
       // Escrow failing doesn't cost us the local key; the next call that needs
@@ -811,6 +900,17 @@ export class UnlockMachine {
       // re-escrow on that answer. Don't block unlock on it.
       return false;
     }
+  }
+
+  /** A refused key: not lent again, gone from memory and from what this device keeps, and the device waits for approval. */
+  private async refuseThisKey(deviceId: string | null, wrapped: string | null): Promise<void> {
+    this.refused = true;
+    this.deps.keys.clear();
+    // Set aside, never deleted (2026-11-18): one per refusal, with its time.
+    const kept = this.deps.load().refused_keys ?? [];
+    const asideNow = wrapped ? [...kept, { at: new Date().toISOString(), device_id: deviceId, wrapped_mdek: wrapped, why: 'refused' }] : kept;
+    await this.deps.save({ wrapped_mdek: null, refused_keys: asideNow });
+    this.setState('blocked', 'not_this_account');
   }
 
   /** Transport saw a 401 — the session died mid-flight. */
@@ -869,6 +969,8 @@ export class UnlockMachine {
    * request is worth sending again.
    */
   onEncryptionBlocked(): Promise<boolean> {
+    // After "not now" (503, 18 Nov) the lending waits, longer each time: never a tight loop, nothing dropped.
+    if (Date.now() < this.notNowUntil) return Promise.resolve(false);
     if (!this.reescrow) {
       this.reescrow = (async () => {
         const auth = this.deps.load();

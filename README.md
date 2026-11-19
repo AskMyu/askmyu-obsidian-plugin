@@ -35,8 +35,8 @@ encrypted before they leave your computer, and shows your day in a pane beside y
 - **Help Myu.** People Myu cannot place, such as a LinkedIn profile to confirm, appear as rows
   in Today. One decision each.
 - **Correcting a person.** From a card: fix a fact (name, role, company, email), correct or
-  delete a memory, merge two people who are the same person, archive, or delete for good after
-  confirming.
+  delete a memory, say two people are the same person (and undo it), archive, or delete for good
+  after confirming.
 - **People from your mail.** People who were only on some of your emails stay out of the
   people list. "Keep track" brings one back. Search still finds them.
 - **Spaces.** Every space you belong to has a row under Spaces in Today. It opens that space's
@@ -161,8 +161,10 @@ What this means for you:
   files Myu wrote. It writes only under the `Myu/` folder, after your consent, plus one CSS
   file in your vault's settings folder (`.obsidian/snippets/myu-look.css`) when you press
   *Install the look*. Never outside the vault.
-- **Clipboard**: only when you press a copy button: your recovery phrase, or a snippet from
-  Weave Myu in. The plugin reads the clipboard only to clear the phrase you just copied.
+- **Clipboard**: only when you press a copy button: your recovery phrase, the passphrase of a
+  data download, a message Myu drafted for you, or a snippet from Weave Myu in. The plugin
+  reads the clipboard only to clear the phrase you just copied. When you paste into one of its
+  text boxes, it reads what you pasted, as any text box does.
 - **Account**: required. askMyu is a service, and the plugin is a way to use it.
 - **Cost**: free during the beta. Creating an account means agreeing to the
   [Beta Participation Terms](https://www.askmyu.com/beta-program-participation-terms) and the
@@ -181,9 +183,10 @@ lists all of it. The plugin talks only to the askMyu server (`myu.askmyu.com`). 
 services, no analytics, no ad networks.
 
 **Links that open in your browser.** A few buttons open a web page: the terms and the privacy
-policy on askmyu.com, the askMyu web app, the look file on github.com, and a person's
-LinkedIn profile from their card. The page opens only when you press the button. The plugin
-itself never loads those sites.
+policy on askmyu.com, the askMyu web app, the look file on github.com, a person's LinkedIn
+profile from their card or from Myu's question about them, and a document linked from a
+meeting's page. The page opens only when you press the button. The plugin itself never loads
+those sites.
 
 **Other web addresses in the code, never contacted.** A few more addresses appear in the
 plugin's code, and the plugin never connects to any of them:
@@ -223,6 +226,7 @@ which signed-in account asked.
 | `POST /account/recovery/setup` | setting up your recovery phrase | your key, locked with the phrase. **The phrase itself never leaves this device** |
 | `POST /account/create` | creating an account from the plugin, with a password | your email, name, password, and which terms you agreed to |
 | `POST /auth/magic-link/request` · `GET /auth/magic-link/validate` | creating an account from the plugin, with an emailed link | your email, name, and which terms you agreed to; then the single-use code from the email |
+| `POST /auth/address-held` | signing in with an emailed link when an account was made at that address with a password and never confirmed: the one question it asks | your answer: that account's password, typed to open it (which confirms the address), or that you start your own account |
 | `GET /terms` | opening the create-account screen | nothing. It is public and says which version of the terms to show |
 | `POST /account/terms/accept` | the "Before you start" screen | which terms you agreed to |
 | `POST /account/background-work/set` | the settings switch for work between visits | your choice |
@@ -234,6 +238,11 @@ which signed-in account asked.
 | `POST /journal/add` | capturing a journal note | your note, **encrypted on this device first** |
 | `POST /meetings/ingest_note` | capturing a meeting note (only if you turned that on) | the note, **readable by the server. The consent screen says so** |
 | `POST /journal/add` · `POST /journal_chats/add` | chatting with Myu | your messages, and any text, note or selection you paste in, marked as pasted |
+| `POST /prep/items/add` · `/prep/items/update` · `/prep/items/remove` | adding to a meeting's list (on its page, or under its row in Today), ticking an item, changing its words or its place, taking it off; adding one of Myu's suggestions (after a meeting, it goes onto the next one's list, or waits for it) | the words you put on the list and which meeting they are for (or, when there is no next meeting yet, which person or which recurring meeting); the tick, the new words or the new place |
+| `POST /prep/notes/save` | typing in a meeting's notes while the meeting is on. Saved as you type | your notes for that meeting, as you typed them. Myu reads them after the meeting for its report; nobody else sees them |
+| `POST /prep/done` | *Done* on a meeting's page | which meeting |
+| `POST /prep/action/remove` · `POST /prep/reminder/answer` | after a meeting: × on something Myu read in your notes; *Yes* or × on the reminder it offers | which meeting, which one, and your answer |
+| `POST /commitments/update` | after a meeting: × on something under *Yours* that you owe | which one, and that you dropped it |
 
 ### Reading your day
 
@@ -242,8 +251,9 @@ which signed-in account asked.
 | `GET /feed/brief` · `/review/weekly` · `/initiative/mirror` · `/card/self` | the Today pane, every five minutes | nothing but the request |
 | `GET /card/self?level=deep_dive` | writing `Myu/Me.md`, your own card in full | nothing but the request |
 | `POST /calendar/events` | the Today pane and the calendar. The answer includes Myu's own entries, such as an interview time you set by hand | the dates to show |
-| `GET /prep/meeting` | opening a meeting's card | which meeting |
-| `GET /feed/entities` · `/feed/entities/search` · `/card/person` · `/card/company` | looking someone up; opening a person's or a company's card | what you typed, or which person or company |
+| `GET /prep/meeting` | opening a meeting's page; again every few seconds while Myu is still reading it, after *Done* until Myu's report is there, and once a minute after a meeting until its notes come in | which meeting |
+| `GET /prep/history` | *Past 1:1s with …* or *Earlier …* on a meeting's page; *Past 1:1s* on a person's card | which person, or which recurring meeting |
+| `GET /feed/entities` · `/feed/entities/search` · `/card/person` · `/card/company` | looking someone up; opening a person's or a company's card; typing under *Who is it?* when Myu asks who someone is | what you typed, or which person or company |
 | `POST /card/board-lite` | a card's extra views | which person or company |
 | `POST /card/identity/confirm` · `/v2/relationships/linkedin/suggestion/resolve` | confirming who someone is on a card | the person you picked |
 | `GET /memories/relationship/{id}` | writing a person's page | which person |
@@ -259,12 +269,12 @@ which signed-in account asked.
 | `POST /myu/lines/seen` | one of Myu's lines has been on screen for a second, in the Today pane, the chat pane or a meeting's card. Each line is reported once (again if it comes back after *Not now*, or after six hours). Not reported from a hidden window or a pane behind another tab | which lines you have seen, so Myu knows. An interview debrief Myu drafted sends its invitations a few minutes after you have seen it, if you turned that on |
 | `GET /commitments` | Today's *what you owe* | nothing but the request |
 | `POST /gattai/spaces` | the Today pane: the spaces you belong to | nothing but the request |
-| `GET /myu/conversation` · `POST /myu/lines/answer` · `GET /retro/prep/mine` | a space's or a meeting's conversation: reading it, pressing a button on Myu's question, and the words on the space's row in Today | which space or meeting, and the answer you pressed. Words you type go through `POST /journal_chats/add` (above) |
+| `GET /myu/conversation` · `POST /myu/lines/answer` · `GET /retro/prep/mine` | a space's or a meeting's conversation: reading it, pressing a button on Myu's question, and the words on the space's row in Today | which space or meeting, and the answer you pressed. When Myu asks who someone is and you answer *No, someone else*, also the person you chose or the name you typed. Words you type go through `POST /journal_chats/add` (above) |
 | `GET /retro` | *See the team's retro* | which space |
 | `GET /feed/related-persons` · `/feed/related-memories` · `/feed/entities/dispatch` · `/feed/search` · `/card/source-detail` | a card's "around them"; "what's up with X"; Search Myu; "where this came from" | which person, or the words you typed into search |
 | `POST /experiments/relationships/mark-as-self` · `POST /relationships/archive` | "This is me" on a person; archiving or restoring a person | which person |
 | `POST /v2/relationships/profile/update` · `POST /v2/relationships/memories/edit` | correcting a person from their card: a fact (name, role, company, email); a memory you correct or delete | which person, and the fact or correction you typed |
-| `POST /v2/relationships/merge` · `POST /v2/relationships/purge` | merging two people who are the same person; deleting a person for good, after you confirm | which two people and why; which person and your confirmation |
+| `POST /relationships/merge` · `POST /myu/person/undo` · `POST /v2/relationships/purge` | *Same person* on two people who are one person; *Undo* after it, or after you answer Myu's question about who someone is; *Not the same* on a Help Myu row; deleting a person for good, after you confirm | which two people and your answer; which change to put back; which person and your confirmation |
 | `GET /v2/relationships?map=only` · `POST /v2/relationships/keep` | the list of people from your mail that Myu is not keeping track of; *Keep track* on one of them | nothing but the request; which person you keep track of |
 | `POST /composition/action` · `/composition/mutate` · `GET /composition/for-journal` | pressing a control on a canvas; editing a canvas; reopening a past conversation | which canvas and card, and what you pressed or changed; which conversation |
 | `POST /feed/entities/dismiss` · `POST /v2/relationships/linkedin/{id}` (unlink) | dismissing a suggestion; Unlink LinkedIn | which person |
@@ -292,9 +302,11 @@ which signed-in account asked.
 | `POST /oauth/google/init` · `/oauth/microsoft/init` | connecting Google or Microsoft (calendar, mail and meeting notes each on their own) | nothing. You give consent in your browser |
 | `GET /oauth/google/status` · `/oauth/microsoft/status` · `/slack/connections` · `/zulip/connections` | the settings page, to show what is connected | nothing but the request |
 | `POST /oauth/{google,microsoft}/disconnect` · `/oauth/{google,microsoft}/credential/set-primary` · `/slack/connect` · `/slack/disconnect` · `/zulip/connect` · `/zulip/disconnect` | the settings buttons for those connections | which account; for Zulip, the server address, email and key you typed (sent once, kept on the server) |
+| `POST /oauth/{google,microsoft}/credential/settings` | Settings → a connected Google or Microsoft account → Mail: how far back Myu reads | which account, and the date Myu reads mail back to (or that it reads everything) |
 | `POST /account/update` · `GET /account/career` | Settings → Account | your name; otherwise nothing but the request |
 | `GET /account/devices` · `POST /account/device/remove` · `/account/device/rename` | Settings → Account → your devices | which device; its new name |
-| `GET /account/emails/list` · `POST /account/emails/add` · `/resend` · `/remove` · `/set-primary` | Settings → Account → your email addresses | the address you typed or chose |
+| `GET /account/emails/list` · `POST /account/emails/add` · `/resend` · `/remove` · `/set-primary` | Settings → Account → your email addresses; *Mail the confirmation again* on your own address | the address you typed or chose; your own address |
+| `GET /account/get` | Settings → Account → your email addresses: whether your own address is confirmed | nothing but the request |
 | `GET /account/preferences/get` · `POST /account/preferences/update` | Settings → Account → preferences; also at sign-in and when the vault opens | the preferences you changed; this computer's time zone when it differs from the saved one, so your morning brief follows your day |
 | `POST /account/data/export-request` | Settings → Download your data | nothing but the request. The link comes by email |
 | `POST /account/delete` | Settings → Delete account, after you type the confirmation | the confirmation you typed |

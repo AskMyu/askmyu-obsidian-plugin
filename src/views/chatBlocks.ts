@@ -158,8 +158,10 @@ export function chatBlockMarkdown(block: ChatBlock): string | null {
     }
     case 'diagram': {
       const source = s(b.source) || s(b.mermaid);
-      if (!source) return s(b.caption) || s(b.title) || null;
-      return [s(b.title) ? `**${s(b.title)}**\n` : '', '```mermaid', source, '```', s(b.caption) ? `\n*${s(b.caption)}*` : ''].filter((x) => x !== '').join('\n');
+      // No drawing: the same thing in words (2026-10-30, DIAGRAM_VENN_CONTRACT `fallback_text`).
+      if (!source) return s(b.fallback_text) || s(b.caption) || s(b.title) || null;
+      // Where it came from goes last, as under a chart.
+      return [s(b.title) ? `**${s(b.title)}**\n` : '', '```mermaid', source, '```', s(b.caption) ? `\n*${s(b.caption)}*` : '', s(b.data_source) ? `\n${s(b.data_source)}` : ''].filter((x) => x !== '').join('\n');
     }
     case 'separator':
       return s(b.label) ? `---\n*${s(b.label)}*` : '---';

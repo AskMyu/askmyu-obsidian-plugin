@@ -26,6 +26,8 @@
 import { App, Modal, Setting } from 'obsidian';
 import type AskMyuPlugin from '../main';
 import { notifyError, notifyStatus } from '../notify';
+import { IDENTITY_WORDS } from '../personIdentities';
+import { PERSON_ACTION_COPY } from './personActions';
 
 export interface EditableMemory {
   memory_id: string;
@@ -81,9 +83,9 @@ export class PersonEditModal extends Modal {
 
     new Setting(contentEl).setName('This person').setHeading();
     new Setting(contentEl)
-      .setName('Merge into\u2026')
-      .setDesc('This is a duplicate of someone else Myu knows.')
-      .addButton((b) => b.setButtonText('Choose who stays').onClick(() => { this.close(); this.plugin.mergePerson({ id: this.relationshipId, name: this.displayName }); }));
+      .setName(PERSON_ACTION_COPY.samePersonAs)
+      .setDesc(IDENTITY_WORDS.samePersonHint(this.displayName))
+      .addButton((b) => b.setButtonText(IDENTITY_WORDS.chooseWho).onClick(() => { this.close(); this.plugin.mergePerson({ id: this.relationshipId, name: this.displayName }); }));
     new Setting(contentEl)
       .setName('This is me')
       .setDesc('Myu created this person by mistake. It is actually you.')

@@ -429,8 +429,10 @@ export class FuzzySuggestModal<T> {
   modalEl = new FakeEl('div');
   resultContainerEl = new FakeEl('div');
   emptyStateText = '';
+  /** What the box says before anything is typed. */
+  placeholder = '';
   constructor(public app: unknown) {}
-  setPlaceholder(_t: string): void {}
+  setPlaceholder(t: string): void { this.placeholder = t; }
   onOpen(): void {}
   onClose(): void {}
   open(): void {

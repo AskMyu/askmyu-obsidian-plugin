@@ -270,6 +270,10 @@ export class SetupRecoveryModal extends Modal {
     } else if (outcome === 'locked') {
       notifyError('Unlock first, then set up recovery.');
       this.close();
+    } else if (typeof outcome === 'object' && outcome && 'said' in outcome) {
+      // The door's own words (18 Nov): a second key, another device finishing its set-up, "not now".
+      notifyError(outcome.said);
+      button.disabled = false;
     } else {
       notifyError("Couldn't save the recovery key. Check the connection and try again.");
       button.disabled = false;

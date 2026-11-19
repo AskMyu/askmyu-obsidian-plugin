@@ -16,6 +16,7 @@
 import type { PasswordWrappedKey } from '../devicePassword';
 import type { Transport, ApiResponse, EncryptedJournalPayload } from './index';
 import type { SourceReferenceLite, SurfaceMutationLite, ChatBlock, ChatContext, CompositionSpecLite, EntityHeadline, MapFold, MapPeoplePage, PrepCardV2 } from '../wire';
+import type { LinesMeeting, LinesWaiting, LinesYesterday, PrepHistoryResponse, PrepListItem, PrepNotes, PrepState } from '../wire';
 import type { CanvasReply } from '../composition/afterTurn';
 import type { SpaceAnswer, SpaceAnswerReply, SpaceConversationRead, SpacePrepMine, SpaceTurnReply } from '../wire';
 import type { GetCommitmentsResponse } from '../wire';
@@ -24,6 +25,7 @@ import { normalizeCalendarEvents } from '../calendarMyu';
 import { readMenuMarks, type MenuItemKey, type MenuMarks } from '../menuMarks';
 import type { LinesSeenResponse } from '../linesSeen';
 import type { FeedbackFile } from '../feedbackFiles';
+import { IDENTITY_PATHS, type IdentityChangeResult, type LineIdentity, type UndoResult } from '../personIdentities';
 
 /** A literal union the server may extend: the named values stay as hints, any other string is still allowed. */
 export type Loose<T extends string> = T | (string & Record<never, never>);
@@ -139,9 +141,34 @@ export interface SignupResult {
   /** Session token — CreateAccount returns `autoken` on the account object. */
   autoken?: string;
   account_id?: string;
+  /**
+   * The address to confirm (2026-11-17, read by `signupConfirmationOf` in `addressHeld.ts`): a password does not confirm
+   * the address, so the server mails a link to it now. The address as the server keeps it, whether it is confirmed,
+   * whether the mail went ("sent" | "not_sent") and the server's sentence. An older server sends none of them.
+   */
+  email?: string;
+  email_confirmed?: boolean;
+  email_confirmation?: string;
+  email_message?: string;
+  /** A refusal's own words (`address_in_use`, 2026-11-17). */
+  message?: string;
+  error?: string;
 }
 
-/** ValidateMagicLink JSON mode (X-Client-Type: obsidian). */
+/**
+ * The account itself, as `GET /account/get` answers (only what the plugin reads). `email_confirmed` (2026-11-17): whether
+ * the account's own address is confirmed; an older server leaves it out, and then nothing is said about it.
+ */
+export interface AccountInfo {
+  account_id?: string;
+  email?: string | null;
+  email_confirmed?: boolean;
+}
+
+/**
+ * ValidateMagicLink JSON mode (X-Client-Type: obsidian). Since 2026-11-17 a 409 can answer instead: the address is held
+ * by a password account nobody confirmed (`address_held`, read by `addressHeldOf`), asked BEFORE the link is used.
+ */
 export interface MagicLinkSession {
   auth_token?: string;
   account_id?: string;
@@ -238,6 +265,11 @@ export interface AskMyuApi {
   markLinesSeen(lineIds: string[]): Promise<LinesSeenResponse | null>;
   /** `GET /commitments` — what you owe and what is owed to you, between people (Today's "what you owe ▸"). */
   getCommitments(): Promise<ApiResponse<GetCommitmentsResponse>>;
+  /**
+   * `POST /commitments/update {commitment_id, status?}` (2026-10-30) — a row of the one ledger changed by hand: × on
+   * one of yours after a meeting is `dropped`.
+   */
+  updateCommitment(commitmentId: string, change: { status?: string }): Promise<ApiResponse<{ success?: boolean }>>;
   /** `GET /myu/log?...` — everything Myu read/assumed/said/did/waited (the Days log). */
   getMyuLog(opts?: { since?: string; kind?: string; subjectType?: string; subjectId?: string; limit?: number }): Promise<ApiResponse<MyuLogResult>>;
   /** `GET /card/person?level=deep_dive` — the full view with the four new sections. */
@@ -277,6 +309,31 @@ export interface AskMyuApi {
    * is unknown to this account. Read loosely: a card that is not version 2 is not drawn.
    */
   getMeetingPrep(eventId: string): Promise<ApiResponse<{ prep?: PrepCardV2 }>>;
+
+  // ─── The person's list for a meeting, its notes, and after (2026-10-29) ───
+  /**
+   * `POST /prep/items/add {event_id, occurrence_key?, text, source?}` — onto the meeting's list: a text with several
+   * lines makes one item per line. `myu_offer` for one of Myu's offers (its suggestions on the page, its offers under a
+   * reply); the person's own otherwise. The items made, in their order. In place of the meeting, `relationship_id` or
+   * `series_id` (a suggestion in Myu's report after a meeting with no next one yet): the item waits for that person's
+   * or that series' next meeting.
+   */
+  addPrepItems(target: PrepItemTarget, text: string, source?: 'user' | 'myu_offer'): Promise<ApiResponse<{ success?: boolean; items?: PrepListItem[] }>>;
+  /** `POST /prep/items/update {item_id, text?, done?, position?}` — tick, untick, edit or move an item: the item as it now is. */
+  updatePrepItem(itemId: string, change: { text?: string; done?: boolean; position?: number }): Promise<ApiResponse<{ success?: boolean; item?: PrepListItem }>>;
+  /** `POST /prep/items/remove {item_id}` — off the list (× on an item; Drop on a carried copy). */
+  removePrepItem(itemId: string): Promise<ApiResponse<{ success?: boolean }>>;
+  /** `POST /prep/notes/save {event_id, occurrence_key?, text}` — the meeting's notes as typed (last write wins). */
+  savePrepNotes(meeting: PrepMeetingRef, text: string): Promise<ApiResponse<{ success?: boolean; notes?: PrepNotes; state?: PrepState }>>;
+  /** `POST /prep/done {event_id, occurrence_key?}` — Done, the person's: what had no tick carries, Myu's report comes. */
+  prepDone(meeting: PrepMeetingRef): Promise<ApiResponse<{ success?: boolean; state?: PrepState }>>;
+  /** `POST /prep/action/remove {event_id, occurrence_key?, action_id}` — an action item Myu read in the notes, removed before it is kept. */
+  removePrepAction(meeting: PrepMeetingRef, actionId: string): Promise<ApiResponse<{ success?: boolean }>>;
+  /** `POST /prep/reminder/answer {event_id, occurrence_key?, reminder_id, yes}` — the reminder Myu offered, taken or let go. */
+  answerPrepReminder(meeting: PrepMeetingRef, reminderId: string, yes: boolean): Promise<ApiResponse<{ success?: boolean }>>;
+  /** `GET /prep/history?relationship_id=&limit=` (the past 1:1s with a person) or `?event_series=` (a recurring meeting's), newest first. */
+  getPrepHistory(of: PrepHistoryOf, limit?: number): Promise<ApiResponse<PrepHistoryResponse>>;
+
   /** Mixed person+company search across ALL entities (long-tail included). */
   searchEntities(query: string): Promise<ApiResponse<{ results?: EntityHeadline[] }>>;
   /** Server weekly edition — `{edition:{period, sections[], generated_at}}`. */
@@ -405,6 +462,10 @@ export interface AskMyuApi {
   /** P9 passwordless — redeem the emailed token (the mobile pattern: the app
       validates via API). Creates the account when the email is new. */
   validateMagicLink(token: string): Promise<ApiResponse<MagicLinkSession>>;
+  /** The one question when the address a link proved is held by a password account nobody confirmed (2026-11-17):
+      `POST /auth/address-held` with `addressHeldBody(...)`. No session yet and none made here; after a 200 the same
+      link is redeemed again. */
+  answerAddressHeld(body: Record<string, string>): Promise<ApiResponse<Record<string, unknown>>>;
   /** P9 — durable custody of the session: mint the plugin token in-flow. */
   createPluginToken(label: string): Promise<ApiResponse<{ token?: string; token_id?: string }>>;
   /** P8.7 — the card's "yes, that's them" (identity_status → confirmed). */
@@ -457,7 +518,10 @@ export interface AskMyuApi {
       so there is no verify method here — the vault cannot open mail. */
   listAccountEmails(): Promise<ApiResponse<{ emails?: Array<Record<string, unknown>> }>>;
   addAccountEmail(email: string): Promise<ApiResponse>;
+  /** Also mails the account's OWN address again while it is not confirmed (2026-11-17): `{success, email_confirmation, email_message}`. */
   resendAccountEmail(email: string): Promise<ApiResponse>;
+  /** `GET /account/get` — the account's own address and whether it is confirmed (2026-11-17). */
+  getAccount(): Promise<ApiResponse<AccountInfo>>;
   removeAccountEmail(email: string): Promise<ApiResponse>;
   setPrimaryAccountEmail(email: string): Promise<ApiResponse>;
 
@@ -482,12 +546,14 @@ export interface AskMyuApi {
   /** Archive or restore — reversible, unlike purge. */
   archiveRelationship(relationshipId: string, action: 'archive' | 'unarchive'): Promise<ApiResponse>;
   /**
-   * Merge `source` INTO `target` — the web's "Merge into…" (MergePickerModal →
-   * feedApi.mergeRelationships): `POST /v2/relationships/merge`, persons only,
-   * never self, never the source itself. Everything about the source moves to
-   * the target; the source is soft-deleted (`merged_into_id`).
+   * "Same person" (2026-11-15, BRIEF_FRONTEND_ONE_COLLEAGUE_ONE_PERSON §5): `POST /relationships/merge {source_id, target_id,
+   * action: "confirm"}`, as the web's picker and help row call it. The one kept holds everything of both (names, addresses, the ways
+   * they were met, what was said, the promises, the mail and the meetings); the answer says how many things moved in the server's
+   * words ("Now one person. 5 things moved to Tess Colleague.") and carries `move_id` for the undo. Replaced `/v2/relationships/merge`.
    */
-  mergeRelationships(sourceId: string, targetId: string, reason?: string): Promise<ApiResponse<{ success?: boolean; message?: string }>>;
+  samePerson(sourceId: string, targetId: string): Promise<ApiResponse<IdentityChangeResult>>;
+  /** `POST /myu/person/undo {move_id}` — puts a "Same person" back as it was (`{success, moved_back, kind}`). */
+  undoPersonChange(moveId: string): Promise<ApiResponse<UndoResult>>;
   /**
    * "This is me": the person is merged into the account's self — memories,
    * threads, names — and removed from people, search and the graph. (Until
@@ -1095,13 +1161,68 @@ export interface MyuLineLite {
   created_at?: string;
   /** When the line was released to the person (ISO), when the server sends it: when it "came in" (the entry's dot). */
   released_at?: string;
+  /** The pages the line is about (2026-10-28, a LinkedIn match question's profile): see `src/lineLinks.ts`. */
+  links?: Array<{ url?: string; choice_id?: string }>;
+  /** What the line is about when it is one of its own kind, e.g. `new_device` (someone signing in). */
+  kind?: string | null;
+  /**
+   * Why the line was written (2026-11-15: read for its evidence; the question about who someone is carries one of kind
+   * `identity`, its ref the way they were met, until the server serves `kind` and `identity`). See `src/identityLines.ts`.
+   */
+  why?: { fired_because?: string; evidence?: Array<{ kind?: string; ref?: string; count?: number }>; loop?: string } | null;
+  /** 2026-11-15: the way someone was met, on the question about who they are and the assumed tie, when the server serves it. */
+  identity?: LineIdentity | null;
 }
 export interface MyuLinesResult {
   success?: boolean;
   day?: string;
   budget?: { released?: number; limit?: number };
   lines?: MyuLineLite[];
+  /**
+   * 2026-10-29, `scope=today` only: the meetings with the person's list on them (today's with items; the upcoming ones
+   * with an open list question or items, `later`), and the carried items waiting for a next meeting under their person.
+   */
+  meetings?: LinesMeeting[];
+  waiting?: LinesWaiting[];
+  /** 2026-10-30: yesterday's meetings with a record or a page the person acted on (Today's "Yesterday"). */
+  yesterday?: LinesYesterday[];
 }
+
+/** A meeting occurrence the list's doors name: the event, and its start in ms for a recurring one. */
+export interface PrepMeetingRef {
+  event_id: string;
+  occurrence_key?: string | null;
+}
+
+/** The meeting as the doors take it: the occurrence only when known. */
+export function meetingBody(m: PrepMeetingRef): { event_id: string; occurrence_key?: string } {
+  return { event_id: m.event_id, ...(m.occurrence_key ? { occurrence_key: String(m.occurrence_key) } : {}) };
+}
+
+/**
+ * Where an add goes (2026-10-29): a meeting, or — for a suggestion after a meeting with no next one yet — the person or
+ * the recurring series whose next meeting it waits for (shared `prepSuggestionTarget`).
+ */
+export interface PrepItemTarget {
+  event_id?: string;
+  occurrence_key?: string | null;
+  relationship_id?: string;
+  series_id?: string;
+}
+
+/** The add's target as the door takes it: the meeting when there is one, else the person, else the series. */
+export function targetBody(t: PrepItemTarget): { event_id?: string; occurrence_key?: string; relationship_id?: string; series_id?: string } {
+  if (t.event_id) return meetingBody({ event_id: t.event_id, occurrence_key: t.occurrence_key });
+  if (t.relationship_id) return { relationship_id: t.relationship_id };
+  return t.series_id ? { series_id: t.series_id } : {};
+}
+
+/** Whose past meetings: a person's 1:1s, or a recurring meeting's series. */
+export interface PrepHistoryOf {
+  relationship_id?: string;
+  event_series?: string;
+}
+
 
 /** `GET /myu/log` — the log (slice 15). */
 export interface MyuLogItemLite {
@@ -1382,6 +1503,10 @@ export class Api implements AskMyuApi {
     return linesSeenOf(await this.transport.post<LinesSeenResponse>('/myu/lines/seen', { line_ids: lineIds }));
   }
 
+  updateCommitment(commitmentId: string, change: { status?: string }) {
+    return this.transport.post<{ success?: boolean }>('/commitments/update', { commitment_id: commitmentId, ...change });
+  }
+
   getCommitments() {
     return this.transport.get<GetCommitmentsResponse>('/commitments');
   }
@@ -1399,6 +1524,7 @@ export class Api implements AskMyuApi {
   getRetro(spaceId: string) {
     return this.transport.get<RetroReadResult>(`/retro?space_id=${encodeURIComponent(spaceId)}`);
   }
+
 
   listSpaces() {
     // The web's exact request (gattaiApi.listSpaces): POST, archived spaces left out.
@@ -1426,6 +1552,39 @@ export class Api implements AskMyuApi {
 
   getMeetingPrep(eventId: string) {
     return this.transport.get<{ prep?: PrepCardV2 }>(`/prep/meeting?event_id=${encodeURIComponent(eventId)}`);
+  }
+
+  addPrepItems(target: PrepItemTarget, text: string, source: 'user' | 'myu_offer' = 'user') {
+    return this.transport.post<{ success?: boolean; items?: PrepListItem[] }>('/prep/items/add', { ...targetBody(target), text, source });
+  }
+
+  updatePrepItem(itemId: string, change: { text?: string; done?: boolean; position?: number }) {
+    return this.transport.post<{ success?: boolean; item?: PrepListItem }>('/prep/items/update', { item_id: itemId, ...change });
+  }
+
+  removePrepItem(itemId: string) {
+    return this.transport.post<{ success?: boolean }>('/prep/items/remove', { item_id: itemId });
+  }
+
+  savePrepNotes(meeting: PrepMeetingRef, text: string) {
+    return this.transport.post<{ success?: boolean; notes?: PrepNotes; state?: PrepState }>('/prep/notes/save', { ...meetingBody(meeting), text });
+  }
+
+  prepDone(meeting: PrepMeetingRef) {
+    return this.transport.post<{ success?: boolean; state?: PrepState }>('/prep/done', meetingBody(meeting));
+  }
+
+  removePrepAction(meeting: PrepMeetingRef, actionId: string) {
+    return this.transport.post<{ success?: boolean }>('/prep/action/remove', { ...meetingBody(meeting), action_id: actionId });
+  }
+
+  answerPrepReminder(meeting: PrepMeetingRef, reminderId: string, yes: boolean) {
+    return this.transport.post<{ success?: boolean }>('/prep/reminder/answer', { ...meetingBody(meeting), reminder_id: reminderId, yes });
+  }
+
+  getPrepHistory(of: PrepHistoryOf, limit = 10) {
+    const by = of.relationship_id ? `relationship_id=${encodeURIComponent(of.relationship_id)}` : `event_series=${encodeURIComponent(of.event_series ?? '')}`;
+    return this.transport.get<PrepHistoryResponse>(`/prep/history?${by}&limit=${limit}`);
   }
 
   searchEntities(query: string) {
@@ -1611,8 +1770,23 @@ export class Api implements AskMyuApi {
       client: 'obsidian',
       ...(termsVersion ? { terms_version: termsVersion } : {}),
     });
+    // A refusal keeps its body whole (`address_in_use` and its sentence, 2026-11-17).
+    if (!res.ok) return res;
     const flat = res.data?.account ?? res.data ?? null;
-    return { ...res, data: flat ? { autoken: flat.autoken, account_id: flat.account_id } : null };
+    // The address to confirm rides the same answer (2026-11-17); kept for the one sentence after sign-up.
+    return {
+      ...res,
+      data: flat
+        ? {
+            autoken: flat.autoken,
+            account_id: flat.account_id,
+            email: flat.email,
+            email_confirmed: flat.email_confirmed,
+            email_confirmation: flat.email_confirmation,
+            email_message: flat.email_message,
+          }
+        : null,
+    };
   }
 
   createPluginToken(label: string) {
@@ -1657,6 +1831,11 @@ export class Api implements AskMyuApi {
       `/auth/magic-link/validate?token=${encodeURIComponent(token)}`,
       { headers: { 'X-Client-Type': 'obsidian' } },
     );
+  }
+
+  answerAddressHeld(body: Record<string, string>) {
+    // Anonymous: there is no session at this point, and a 401 here is a wrong password, never a dead session to re-mint.
+    return this.transport.post<Record<string, unknown>>('/auth/address-held', body, { anonymous: true });
   }
 
   resolveLinkedInSuggestion(body: Record<string, unknown>) {
@@ -1811,6 +1990,11 @@ export class Api implements AskMyuApi {
     return this.transport.post('/account/emails/resend', { email });
   }
 
+  getAccount() {
+    // GET, as the web reads it (backendMethods.ts, pronounsApi.ts).
+    return this.transport.get<AccountInfo>('/account/get');
+  }
+
   removeAccountEmail(email: string) {
     return this.transport.post('/account/emails/remove', { email });
   }
@@ -1852,8 +2036,12 @@ export class Api implements AskMyuApi {
     });
   }
 
-  mergeRelationships(sourceId: string, targetId: string, reason = 'user_initiated_merge') {
-    return this.transport.post<{ success?: boolean; message?: string }>('/v2/relationships/merge', { source_id: sourceId, target_id: targetId, reason });
+  samePerson(sourceId: string, targetId: string) {
+    return this.transport.post<IdentityChangeResult>(IDENTITY_PATHS.merge, { source_id: sourceId, target_id: targetId, action: 'confirm' });
+  }
+
+  undoPersonChange(moveId: string) {
+    return this.transport.post<UndoResult>(IDENTITY_PATHS.undo, { move_id: moveId });
   }
 
   markRelationshipAsSelf(relationshipId: string) {

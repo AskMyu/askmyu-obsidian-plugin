@@ -9,6 +9,7 @@
 import { App, Modal, Setting } from 'obsidian';
 import type AskMyuPlugin from '../main';
 import { notifyError, notifyStatus } from '../notify';
+import { DOOR_WORDS } from '../doorAnswers';
 
 export class ApproveDeviceModal extends Modal {
   private code = '';
@@ -67,6 +68,9 @@ export class ApproveDeviceModal extends Modal {
       notifyStatus('Approved — the new device is unlocking now.');
       this.close();
       this.onFinished();
+    } else if (outcome === 'not_now') {
+      notifyError(DOOR_WORDS.notNow);
+      button.disabled = false;
     } else if (outcome === 'bad_code') {
       notifyError('That code doesn’t match. Check the code on the new device and try again.');
       button.disabled = false;

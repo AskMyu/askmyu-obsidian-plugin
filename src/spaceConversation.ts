@@ -24,9 +24,11 @@
 import type { AskMyuApi, MyuLineLite } from './transport/api';
 import type { PastedBlockWire, SpaceAnswer, SpaceAsk, SpaceChoice, SpaceConversationRead, SpacePrepMine, SpaceTurn } from './wire';
 import { PASTE_WORDS, canPutBack, chipAdded, chipsBack, pastedBlocksProblem, pastedTextLost, putBackText, readPastedBlocks, undoChip, type PasteUndo } from './pastedText';
-import { lineClosed, quietWaysOut } from './lineAnswers';
+import { LINE_ANSWER_WORDS, lineClosed, quietWaysOut } from './lineAnswers';
 import { canSendPicks, isPickMany, pickManyAnswer, pickManyParts, togglePick, typedAnswer, typedHint } from './pickMany';
 import { DEBRIEF_PANE_WORDS, debriefEffectSteps, isDebriefConversation } from './debriefPane';
+import { listOffersOf } from './prepList';
+import { PREP_VIEW_WORDS } from './prepCard';
 import {
   SPACE_MODE_WORDS,
   afterChoice,
@@ -126,7 +128,8 @@ function webOrigin(apiBase: string | undefined): string {
 }
 
 export interface SpaceConversationDeps {
-  backend: Pick<AskMyuApi, 'getSubjectConversation' | 'addSubjectTurn' | 'answerMyuLine' | 'getMyuLines'>;
+  /** `addPrepItems` (2026-10-29): Myu's offers under a reply in a meeting's conversation go onto its list. */
+  backend: Pick<AskMyuApi, 'getSubjectConversation' | 'addSubjectTurn' | 'answerMyuLine' | 'getMyuLines'> & Partial<Pick<AskMyuApi, 'addPrepItems'>>;
   /** Put this session's key back where Myu can use it. True when it worked. Never a navigation. */
   unlock: () => Promise<boolean>;
   /** "Take it there": the journal, with this text in the box, unsent, focused. */
@@ -142,6 +145,8 @@ export interface SpaceConversationDeps {
   openPage?: (url: string) => void;
   /** A meeting's arc, Now: the conversation it names, when it is another one (the occurrence's own). */
   openConversation?: (ref: { subject_type: string; subject_id: string; occurrence_key?: string }) => void;
+  /** One of Myu's offers went onto the meeting's list: its page and Today read again. */
+  onListChanged?: (eventId: string) => void;
 }
 
 export interface ScreenTurn {
@@ -152,6 +157,18 @@ export interface ScreenTurn {
   parts: ReadbackParts | null;
   /** A 'you' turn's pasted text (2026-10-06), drawn as folded cards under its words. */
   pasted?: PastedBlockWire[];
+  /**
+   * 2026-10-29: in a meeting's conversation, what Myu offers for the list under its reply ("+ {text}", one press each);
+   * `added` once it is on the list, `busy` while it goes. `note` under them when one did not go.
+   */
+  offers?: ScreenOffer[];
+  offersNote?: string | null;
+}
+
+export interface ScreenOffer {
+  text: string;
+  added: boolean;
+  busy: boolean;
 }
 
 /** A `select: "many"` ask (2026-10-03): the people as toggles, the send, the singles. */
@@ -307,6 +324,11 @@ export class SpaceConversation {
   private typedMode: string | null = null;
   private typedKept: string | null = null;
   private pickLineId: string | null = null;
+  /**
+   * Myu's offers for the meeting's list on its last reply (2026-10-29, `list_offers`): the reply's words they ride
+   * under, the phrases, which went onto the list, which are on their way, and what did not go. A new message clears them.
+   */
+  private offers: { reply: string; texts: string[]; added: Set<string>; busy: Set<string>; note: string | null } | null = null;
 
   /**
    * `spaceId` is the subject's id: the space's, for a meeting the calendar event's, for the account's own
@@ -541,6 +563,7 @@ export class SpaceConversation {
     this.undo = null;
     this.pastedNote = null;
     this.note = null;
+    this.offers = null;
     const mine: SpaceTurn = { turn_id: `local-${++this.seq}`, from: 'you', at: new Date((this.deps.now ?? Date.now)()).toISOString(), text: content, ...(pasted.length ? { pasted_blocks: pasted } : {}) };
     this.local.push(mine);
     this.reading = true;
@@ -569,8 +592,46 @@ export class SpaceConversation {
       this.undo = null;
       this.pastedNote = PASTE_WORDS.lost;
     }
+    // 2026-10-30 (IMPL_LIST_WORDS): the words put something on the meeting's list ("add X to the agenda") and the
+    // server did; the reply is Myu's readback. The meeting's page and its Today row read the list again at once.
+    const listAdded = res.ok ? res.data?.list_added : undefined;
+    if (listAdded?.event_id) this.deps.onListChanged?.(listAdded.event_id);
+    // In a meeting's conversation the reply can carry what belongs on the list, in the person's words or Myu's.
+    const offers = this.isMeeting && res.ok ? listOffersOf(res.data) : [];
+    if (offers.length) this.offers = { reply: (res.data?.content ?? '').trim(), texts: offers, added: new Set(), busy: new Set(), note: null };
     await this.run(afterTyped(res.data ?? { error: res.error ?? undefined }));
     this.deps.onChange();
+  }
+
+  /** "+ {text}" under Myu's reply: onto the meeting's list as Myu's offer (`/prep/items/add`). Myu never adds by itself. */
+  async addOffer(text: string): Promise<void> {
+    const o = this.offers;
+    const backend = this.deps.backend;
+    if (!o || !this.isMeeting || !backend.addPrepItems || o.added.has(text) || o.busy.has(text)) return;
+    o.busy.add(text);
+    o.note = null;
+    this.deps.onChange();
+    const occurrence = this.subject.occurrenceKey ?? this.conv?.subject?.occurrence_key ?? null;
+    const res = await backend.addPrepItems({ event_id: this.spaceId, occurrence_key: occurrence }, text, 'myu_offer').catch(() => null);
+    o.busy.delete(text);
+    if (res?.ok) {
+      o.added.add(text);
+      this.deps.onListChanged?.(this.spaceId);
+    } else {
+      o.note = res?.error === 'offline' ? LINE_ANSWER_WORDS.offline : PREP_VIEW_WORDS.listFailed;
+    }
+    this.deps.onChange();
+  }
+
+  /** The offers ride under the reply they came with: the last of Myu's turns with its words (shown ahead of the read, or read). */
+  private withOffers(turns: ScreenTurn[], after: ScreenTurn[]): void {
+    const o = this.offers;
+    if (!o) return;
+    const all = [...turns, ...after];
+    const at = [...all].reverse().find((t) => t.from === 'myu' && (!o.reply || t.text.trim() === o.reply));
+    if (!at) return;
+    at.offers = o.texts.map((text) => ({ text, added: o.added.has(text), busy: o.busy.has(text) }));
+    at.offersNote = o.note;
   }
 
   /**
@@ -778,9 +839,14 @@ export class SpaceConversation {
     const typing = !!this.typedMode;
     const box: SpaceScreen['box'] = { show: this.hasDoor || typing, placeholder: typing ? typedHint(null) : SPACE_MODE_WORDS.placeholder, hints: [], hintsLead: SPACE_MODE_WORDS.hintsLead, draft: this.draft };
     if (!conv) {
-      return { kind, title, loading: this.loading, failed: this.failed, earlier: null, turns: [], status: null, ask: null, after: this.local.map(screenTurn), note: this.note, empty: null, reading: this.reading, answering: this.answering, unlock: { show: false, busy: false, failed: false }, box };
+      const after = this.local.map(screenTurn);
+      this.withOffers([], after);
+      return { kind, title, loading: this.loading, failed: this.failed, earlier: null, turns: [], status: null, ask: null, after, note: this.note, empty: null, reading: this.reading, answering: this.answering, unlock: { show: false, busy: false, failed: false }, box };
     }
     const view = spaceModeView(conv, this.focusLineId);
+    const turns = view.turns.map(screenTurn);
+    const after = this.local.map(screenTurn);
+    this.withOffers(turns, after);
     const anyLocked = conv.history.some((t) => isLockedText(t.text)) || (!!view.ask && isLockedText(view.ask.text));
     return {
       kind,
@@ -788,10 +854,10 @@ export class SpaceConversation {
       loading: this.loading,
       failed: this.failed,
       earlier: this.earlier === 'loading' ? 'loading' : this.earlier === 'none' ? (this.showNothingEarlier ? 'none' : null) : view.earlier ? 'link' : null,
-      turns: view.turns.map(screenTurn),
+      turns,
       status: view.status,
       ask: view.ask ? this.screenAsk(view.ask) : null,
-      after: this.local.map(screenTurn),
+      after,
       note: this.note,
       empty: !this.hasDoor && !view.ask && !this.loading && this.local.length === 0 ? LINE_CONVERSATION_WORDS.nothingOpen : null,
       reading: this.reading,

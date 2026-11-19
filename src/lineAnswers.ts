@@ -13,6 +13,20 @@
  *    a line with its own way out, "Leave it" or its own "Not now", keeps only its own)
  *   choice → its choices ({choice_id}; a fourth "Leave it" sits quiet), then the two quiet ways out,
  *            unless the line carries its own (mirror of shared `quietWaysOut` / `carriesWayOut`)
+ *   what else falls on that day (2026-11-13, kind `full_day`) → Keep · Move it · Not a promise, nothing else; "Move it" asks
+ *            "Which day?" first and answers {choice_id: "move", day} (`opens: 'day'`; the pane draws the days)
+ *   "Add it?" (2026-11-13, kinds `answer_bears_on`, `report_bears_on`) → Add it · No, nothing else
+ *   (both the server's own choices, else the contract's words; `lastMomentsVault.ts`)
+ *   a promise someone else's decision affects (2026-11-13, kind `check_promise`) → Tell <name> · Let it go · Keep it, nothing else
+ *            (the server's own, else shared's words; `checkPromise.ts`); Tell's message comes back as an effect, shown with Copy
+ *   the question about who someone is (2026-11-15, `identity_ask`, or its evidence until the kind is served) → its choices as the
+ *            server sends them (Yes · No, someone else · Not a person · Not now), nothing else; "No, someone else" opens "Who is
+ *            it?" first and answers {choice_id: "someone_else", relationship_id} or {…, text} (`opens: 'who'`; the pane draws it)
+ *   the assumed tie (2026-11-15, `identity_assumed`) → the claim, and "Not her?" as its change ({change: true}) (`identityLines.ts`)
+ * What the server said back: its `said` effect when the answer carries one (2026-11-15), else the readback. When that effect carries
+ * a `move_id` (the follow-up: "Yes", "Choose who", "Not her?"), the press says so (`undo`), and the pane offers Undo beside the
+ * sentence. A question about who someone is that was closed elsewhere (409 `line_closed`) keeps its words with "Already answered."
+ * in place of its buttons.
  * The answer goes to the same door as everywhere (`POST /myu/lines/answer`). A space's lines are
  * not drawn this way: they are answered in the space's own conversation, one at a time.
  *
@@ -24,9 +38,16 @@ import type { MyuLineLite } from './transport/api';
 import type { SpaceAnswer, SpaceAnswerReply, SpaceChoice, SpaceEffect } from './wire';
 import { isPickMany, typedChoiceOf } from './pickMany';
 import { isAsk, layoutChoices, readbackText } from './spaceModeLogic';
+import { isBearsOnLine, isFullDayLine } from './lastMoments';
+import { answerDraftOf, bearsOnChoices, fullDayChoices } from './lastMomentsVault';
+import { CHECK_PROMISE_CHOICES, isCheckPromiseLine } from './checkPromise';
+import { identityChoices, identityLine, isIdentityAsk, isIdentityAssumed, notThemLabel } from './identityLines';
+import { IDENTITY_WORDS, saidBack, saidMoveId } from './personIdentities';
 
 /** The words the vault owns here; the web's own words for the same buttons and notes. */
 export const LINE_ANSWER_WORDS = {
+  /** Someone signing in (2026-11-11): the key goes from a device that holds it, never from a line's button here. */
+  newDevice: 'Answer this in Myu in your browser: it shows the number to compare.',
   yes: 'Yes',
   no: 'No',
   /** The two quiet ways out (mirror of shared `WAY_OUT_WORDS`). */
@@ -49,6 +70,9 @@ export const LINE_ANSWER_WORDS = {
   copied: 'Copied',
   copyFailed: 'It did not copy. Select the message and copy it yourself.',
   draftLink: 'Open the link',
+  /** "Myu has no connection with Ana" answered Invite (2026-11-13): the invitation carries the question only with its id. */
+  inviteWithQuestion: (who: string, questionId: string | null) =>
+    `To send the invitation${questionId ? ' with your question' : ''}, in the terminal: myu invite ${/\s/.test(who) ? `"${who}"` : who}${questionId ? ` --question ${questionId}` : ''}`,
 } as const;
 
 /** R19 `draft_ready`: the message, and the link it is about ("Open the pull request"). Nothing is sent. */
@@ -58,6 +82,8 @@ export interface LineDraft {
   /** The link's label; `LINE_ANSWER_WORDS.draftLink` when the effect names none. */
   label: string;
   to_name?: string;
+  /** The line over the message (2026-11-13): "Myu's message to Priya:" after Move it, "To prd-review in Slack" after Add it. */
+  lead?: string;
 }
 
 export interface LineButton {
@@ -67,6 +93,12 @@ export interface LineButton {
   answer: SpaceAnswer;
   /** The quiet way out (Skip, Not now, Leave it): drawn as quiet text, not a button. */
   quiet: boolean;
+  /**
+   * "Move it" on a full-day line (2026-11-13): pressed, it opens "Which day?" and nothing is answered; the day picked there answers it
+   * (`moveAnswer`, with the day in `answer.day`). "No, someone else" on the question about who someone is (2026-11-15, `who`): it
+   * opens "Who is it?"; the person picked or the name typed there answers it (`someoneElseAnswer`).
+   */
+  opens?: 'day' | 'who';
 }
 
 const known = (choices: MyuLineLite['choices']): SpaceChoice[] =>
@@ -102,8 +134,46 @@ export function quietWaysOut(line: Pick<MyuLineLite, 'choices'>): LineButton[] {
   ];
 }
 
+/**
+ * The invitation to connect, as a line (2026-11-12): "{inviter} invites you to connect on askMyu." with Accept and Not now. The kinds
+ * mirror shared `invites.ts` CONNECT_LINE_KINDS (held equal by a test); a line with no kind is known by its words.
+ */
+export const CONNECT_LINE_KINDS = ['connect_invite', 'invite_connect', 'connect_invitation', 'invitation_connect'] as const;
+export function isConnectLine(line: Pick<MyuLineLite, 'kind' | 'text'>): boolean {
+  if (line.kind) return (CONNECT_LINE_KINDS as readonly string[]).includes(line.kind);
+  return /invites you to connect on askMyu\b/.test((line.text ?? '').trim());
+}
+
+/** The sentences a line carries beside its words (the Friday line's, one per count), none its words already hold. */
+export function lineSentences(line: MyuLineLite): string[] {
+  const raw = (line as { sentences?: unknown }).sentences;
+  const text = line.text ?? '';
+  return (Array.isArray(raw) ? raw : []).filter((x): x is string => typeof x === 'string' && !!x.trim() && !text.includes(x.trim())).map((x) => x.trim());
+}
+
 /** The buttons a line gets in the vault, kind by kind, as the web draws them. */
 export function lineButtons(line: MyuLineLite): LineButton[] {
+  // Someone signing in: the line's Approve would only close it on the server, so it offers no button here (see `renderLineAsk`).
+  if (line.kind === 'new_device') return [];
+  // An invitation to connect: the server's own two, Accept and Not now, and no other way out.
+  if (isConnectLine(line)) return known(line.choices).map((c) => ({ id: c.id, label: c.label, answer: { choice_id: c.id }, quiet: c.id === 'not_now' }));
+  // Who someone is (2026-11-15): the question's own choices and no other way out; the assumed tie's change is "Not her?".
+  if (isIdentityAsk(line)) return identityChoices(line).map((c) => ({ id: c.id, label: c.label, answer: { choice_id: c.id }, quiet: c.quiet, ...(c.opens ? { opens: c.opens } : {}) }));
+  if (isIdentityAssumed(line)) return line.assumed?.changeable ? [{ id: 'change', label: notThemLabel(line), answer: { change: true }, quiet: false }] : [];
+  // What else falls on that day, and "Add it?" (2026-11-13): the person's own to answer, with their own choices and no other way out,
+  // as the web and the terminal draw them. A tell, a wait or an assume of these kinds is drawn as every one is.
+  if (isAsk(line) && line.ask_kind !== 'assume' && (isFullDayLine(line) || isBearsOnLine(line) || isCheckPromiseLine(line))) {
+    // A promise someone else's decision affects: Tell <name> first, Let it go and Keep it quieter beside it (as the web draws them).
+    if (isCheckPromiseLine(line)) {
+      const own = known(line.choices);
+      return (own.length ? own : CHECK_PROMISE_CHOICES.map((c) => ({ id: c.id, label: c.label }))).map((c) => ({ id: c.id, label: c.label, answer: { choice_id: c.id }, quiet: c.id === 'let_go' || c.id === 'keep' }));
+    }
+    const answerFor = (id: string): SpaceAnswer => (line.ask_kind === 'yes_no' && (id === 'yes' || id === 'no') ? { yes: id === 'yes' } : { choice_id: id });
+    if (isFullDayLine(line)) {
+      return fullDayChoices(line).map((c) => ({ id: c.id, label: c.label, answer: answerFor(c.id), quiet: false, ...(c.role === 'move' ? { opens: 'day' as const } : {}) }));
+    }
+    return bearsOnChoices(line).map((c) => ({ id: c.id, label: c.label, answer: answerFor(c.id), quiet: c.role === 'no' }));
+  }
   switch (line.ask_kind) {
     case 'tell':
     case 'wait':
@@ -224,6 +294,17 @@ export function lineEffectActions(effects: SpaceEffect[] | undefined | null, api
       const url = typeof e.url === 'string' && /^https?:\/\//.test(e.url) ? e.url : undefined;
       const label = typeof e.url_label === 'string' && e.url_label.trim() ? e.url_label.trim() : LINE_ANSWER_WORDS.draftLink;
       out.push({ kind: 'draft', draft: { text: e.text, url, label, to_name: typeof e.to_name === 'string' ? e.to_name : undefined } });
+    } else if (e.type === 'send_yourself') {
+      // "Send it yourself" (2026-11-13): the question's own words, with Copy; nothing is sent.
+      const text = (e as { text?: unknown }).text;
+      if (typeof text !== 'string' || !text.trim()) continue;
+      out.push({ kind: 'draft', draft: { text, label: LINE_ANSWER_WORDS.draftLink } });
+    } else if (e.type === 'open_invite') {
+      // Invite (2026-11-13): the vault has no invite step; the terminal's carries the question by its id.
+      const o = e as { email?: unknown; name?: unknown; question_id?: unknown };
+      const who = typeof o.email === 'string' && o.email.trim() ? o.email.trim() : typeof o.name === 'string' && o.name.trim() ? o.name.trim() : null;
+      if (!who) continue;
+      out.push({ kind: 'note', text: LINE_ANSWER_WORDS.inviteWithQuestion(who, typeof o.question_id === 'string' && o.question_id.trim() ? o.question_id.trim() : null) });
     } else if (e.type === 'open_conversation') {
       if (typeof e.subject_type !== 'string' || !e.subject_type || typeof e.subject_id !== 'string' || !e.subject_id) continue;
       const occurrence = typeof e.occurrence_key === 'string' && e.occurrence_key ? { occurrence_key: e.occurrence_key } : {};
@@ -246,6 +327,11 @@ export interface LineUi {
   links?: LineLink[];
   /** R19: the message the answer wrote, to copy. */
   draft?: LineDraft;
+  /**
+   * A question about who someone is, closed elsewhere while it was on screen (2026-11-15, 409 `line_closed`): its words stay, and
+   * this ("Already answered.") stands in place of its buttons.
+   */
+  closed?: string;
 }
 
 export interface PressResult {
@@ -258,6 +344,8 @@ export interface PressResult {
   open: string[];
   /** A conversation to open in the chat pane (the meeting arc's Now). */
   conversation?: LineConversation;
+  /** The answer moved things and can be put back (2026-11-15): its sentence and its move, for Undo beside it. */
+  undo?: { said: string; moveId: string };
 }
 
 /** A press on a line the server had already closed (409 `line_closed`). Mirror of shared `isLineClosed`. */
@@ -275,9 +363,14 @@ export async function pressLineButton(
   line: MyuLineLite,
   button: LineButton,
 ): Promise<PressResult> {
+  // "Move it" answers only with its day, "No, someone else" only with the person or the name: pressed bare, nothing goes (the pane
+  // opens "Which day?" or "Who is it?" in its place).
+  if (button.opens === 'day' && !button.answer.day) return { ui: {}, settled: false, open: [] };
+  if (button.opens === 'who' && !button.answer.relationship_id && !button.answer.text?.trim()) return { ui: {}, settled: false, open: [] };
   const res = await deps.answer(line.line_id, button.answer).catch(() => null);
-  // Closed under the press (2026-09-25): no note, no readback; the pane reads the list again.
-  if (lineClosed(res)) return { ui: {}, settled: false, closed: true, open: [] };
+  // Closed under the press (2026-09-25): no note, no readback; the pane reads the list again. A question about who someone is
+  // (2026-11-15) says "Already answered." in place of its buttons, so the person is not left with buttons that answer nothing.
+  if (lineClosed(res)) return { ui: identityLine(line) ? { closed: IDENTITY_WORDS.alreadyAnswered } : {}, settled: false, closed: true, open: [] };
   if (!res?.ok || !res.data) {
     return { ui: { note: res?.error === 'offline' ? LINE_ANSWER_WORDS.offline : LINE_ANSWER_WORDS.failed }, settled: false, open: [] };
   }
@@ -285,10 +378,23 @@ export async function pressLineButton(
   const open = actions.flatMap((a) => (a.kind === 'open' ? [a.url] : []));
   const notes = actions.flatMap((a) => (a.kind === 'note' ? [a.text] : []));
   const links = actions.flatMap((a) => (a.kind === 'link' ? [a.link] : []));
-  const draft = actions.find((a): a is Extract<LineEffectAction, { kind: 'draft' }> => a.kind === 'draft')?.draft;
+  // A message the answer wrote: one an effect carries (R19's draft_ready, "Send it yourself"), else the answer's own (2026-11-13: after
+  // Move it, the short message to the other person; after Add it, the addition), under the line that says who or where it is for.
+  const own = answerDraftOf(res.data, line);
+  const draft =
+    actions.find((a): a is Extract<LineEffectAction, { kind: 'draft' }> => a.kind === 'draft')?.draft ??
+    (own ? { text: own.text, label: LINE_ANSWER_WORDS.draftLink, lead: own.lead, ...(own.toName ? { to_name: own.toName } : {}) } : undefined);
   const conversation = actions.find((a): a is Extract<LineEffectAction, { kind: 'conversation' }> => a.kind === 'conversation')?.conversation;
   const also = conversation ? { conversation } : {};
-  const said = readbackText(res.data);
-  if (res.data.line_open) return { ui: { note: said, notes, links }, settled: false, open, ...also };
-  return { ui: { said: said ?? '', good: !button.answer.dismiss && !button.answer.later, notes, links, ...(draft ? { draft } : {}) }, settled: true, open, ...also };
+  // What the answer did, in the server's words (2026-11-15: "Done. 1 thing moved to Tess Colleague." beside the readback's "Okay.").
+  const effects = (res.data.effects ?? []).map((e) => ({ type: e.type, text: typeof e.text === 'string' ? e.text : undefined, move_id: typeof e.move_id === 'string' ? e.move_id : undefined }));
+  const told = saidBack({ effects });
+  const said = told ?? readbackText(res.data);
+  // The move it made, to put back (2026-11-15 follow-up): Undo beside its sentence.
+  const moveId = saidMoveId({ effects });
+  const undo = moveId && said ? { undo: { said, moveId } } : {};
+  if (res.data.line_open) return { ui: { note: said, notes, links }, settled: false, open, ...also, ...undo };
+  // Tell, on a promise someone else's decision affects, has no readback of its own: its message's own words say it ("Here it is, to send.").
+  const shown = said || own?.said || '';
+  return { ui: { said: shown, good: !button.answer.dismiss && !button.answer.later, notes, links, ...(draft ? { draft } : {}) }, settled: true, open, ...also, ...undo };
 }

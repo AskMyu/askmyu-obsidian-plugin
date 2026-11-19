@@ -59,20 +59,29 @@ function shortDate(ymd: string): string {
 }
 import { MeetingConsentModal } from './MeetingConsentModal';
 import type { DailyBrief, GoogleCalendarEvent } from '../wire';
-import type { CoupledLoop, MirrorEdition, MirrorObservation, MyuLineLite, SpaceLite, PatternFeedbackEvent, PersonalLoop, VaultCommitment, VaultInteractionEvent, WeeklyEdition } from '../transport/api';
-import { isWeeklyEditionFresh } from '../vault/WeeklyReviewWriter';
+import type { CoupledLoop, MirrorEdition, MirrorObservation, MyuLineLite, MyuLinesResult, SpaceLite, PatternFeedbackEvent, PersonalLoop, VaultCommitment, VaultInteractionEvent, WeeklyEdition } from '../transport/api';
+import { isWeeklyPeriodFresh } from '../vault/WeeklyReviewWriter';
+import type { YourWeek } from '../lastMoments';
+import { weekShown } from '../lastMomentsVault';
+import { renderYourWeek } from './lastMomentsParts';
 import { commitmentLine, sanitizeName } from '../vault/myuFiles';
 import { spaceDoorLabel, spaceIdsOf } from '../spaceConversation';
-import { foldRows, groupBySubject, lineNeedsYou, rowOpensConversation, stackOf } from '../todayLines';
+import { foldRows, groupBySubject, lineNeedsYou, linesAfterRead, readsAgainFor, rowOpensConversation, stackOf } from '../todayLines';
 import { SPACE_RETRO_WORDS, foldSpaceRows, isSpaceLine, spaceRows } from '../spaceRetro';
 import { DEBRIEF_PANE_WORDS, isDebriefSpace } from '../debriefPane';
 import { pressLineButton, type LineButton, type LineUi } from '../lineAnswers';
 import { renderLineAsk } from './lineAsk';
+import { peopleFinder } from '../identityLines';
 import { lineIdAttr } from '../linesSeenWatch';
 import { ENTRY_DOT_WORDS, entryDot } from '../menuMarks';
 import { decryptWithKey } from '../crypto/primitives';
 import { COMMITMENTS_FOLD_WORDS, commitmentsFold, type CommitmentRow } from '../commitmentsFold';
-import type { Commitment } from '../wire';
+import type { Commitment, LinesMeeting, LinesWaiting, LinesYesterday, PrepListItem } from '../wire';
+import { MEETING_POST_WORDS, yesterdayCount } from '../meetingPost';
+import type { PrepMeetingRef } from '../transport/api';
+import { PREP_LIST_WORDS, prepDayWord, prepTimeWords, toCoverWords, todayRowItems } from '../prepList';
+import { PrepListKeeper } from '../prepListKeeper';
+import { renderPrepAddBox, renderPrepItems } from './prepListRows';
 
 export const TODAY_VIEW_TYPE = 'askmyu-today';
 
@@ -135,6 +144,16 @@ export class TodayView extends ItemView {
   private openStacks = new Set<string>();
   private forYouOpen = false;
   private spacesOpen = false;
+  /**
+   * The person's list on Today (2026-10-29): the meetings with it (today's, and the ones later this week with an open
+   * list question or items) and the carried items waiting for a next meeting, from the lines read; each meeting's list
+   * kept by its own keeper (what is typed in its box, a change on its way), which a refresh does not reset.
+   */
+  private prepMeetings: LinesMeeting[] = [];
+  private waiting: LinesWaiting[] = [];
+  private listKeepers = new Map<string, PrepListKeeper>();
+  /** Yesterday's meetings with a record or a page the person acted on (2026-10-30), and the server's one line for each. */
+  private yesterday: LinesYesterday[] = [];
   /** "Open with you today" — the open commitments, as Tasks checkboxes. */
   private commitments: VaultCommitment[] = [];
   /** "what you owe ▸" (terminal parity, 2026-09-26): the commitments between people, `GET /commitments`. */
@@ -142,6 +161,12 @@ export class TodayView extends ItemView {
   private owedOpen = false;
   private mirror: MirrorEdition | null = null;
   private weekly: WeeklyEdition | null = null;
+  /**
+   * Your side of the work (2026-11-13): the weekly review's part beside its sections (`your_side` on `GET /review/weekly`), and which
+   * of its counts are open to what they counted. Null when the server sends none: the week reads as before.
+   */
+  private yourWeek: YourWeek | null = null;
+  private yourWeekOpen = new Set<string>();
   /**
    * Per-observation feedback state, held on the VIEW rather than in render
    * scope: the 5-minute ambient refresh re-renders everything, and a dismissed
@@ -157,6 +182,9 @@ export class TodayView extends ItemView {
   private staleSince: number | null = null;
   private retryTimer: number | null = null;
   private errorState: 'locked' | 'blocked' | 'offline' | 'disconnected' | null = null;
+
+  /** "Who is it?" under Myu's question about who someone is (2026-11-15): the person's people, found as they type. */
+  private findPeople = peopleFinder(() => this.plugin.backend);
 
   constructor(
     leaf: WorkspaceLeaf,
@@ -279,8 +307,11 @@ export class TodayView extends ItemView {
 
     // Freshness identical to the web: current or prior ISO week, else nothing —
     // a stale review rendering as if current would be worse than absence.
-    const weeklyEdition = weeklyRes?.data?.edition ?? null;
-    this.weekly = weeklyEdition && isWeeklyEditionFresh(weeklyEdition) ? weeklyEdition : null;
+    // Your side of the work (2026-11-13), read as the web reads it: at the top level of the read, or on the edition; drawn under the
+    // review's other sections, so a part of the edition that is it is not drawn twice. A review with only that part still shows.
+    const week = weekShown(weeklyRes?.data, (period) => isWeeklyPeriodFresh(period));
+    this.weekly = week?.edition ?? null;
+    this.yourWeek = week?.side ?? null;
 
     const edition = mirrorRes?.data?.edition ?? null;
     this.mirror =
@@ -318,11 +349,7 @@ export class TodayView extends ItemView {
     if (spacesRes?.ok) this.spaces = spacesRes.data?.spaces ?? [];
     // The read keeps a line answered today on today's list until tomorrow but
     // sends no readback for it; only open lines are drawn here.
-    if (linesRes?.ok) {
-      this.todayLines = (linesRes.data?.lines ?? []).filter(
-        (l) => !l.state || l.state === 'queued' || l.state === 'released' || this.lineState().answered.has(l.line_id),
-      );
-    }
+    if (linesRes?.ok) this.takeLines(linesRes.data);
     // Space mode (R14): a space's door says where the person is in getting ready ("Myu is asking
     // what you want to bring up ▸" / "Ready to share with the team ▸" / …), from the step, never a count.
     // An interview debrief has no getting-ready step to read: its door is its own words.
@@ -568,11 +595,11 @@ export class TodayView extends ItemView {
       if (item.meta?.cold) row.createDiv({ cls: 'myu-quiet', text: item.meta.first_time ? 'First meeting. Facts only; worth noting how it goes afterwards.' : 'No history yet. Myu starts learning about this person after the meeting.' });
       const actions = row.createDiv({ cls: 'myu-canvas-actions' });
       const eventId = item.actions?.find((a) => a.action_type === 'prep')?.target_id || item.meta?.event_id;
-      if (eventId) { const prep = actions.createEl('button', { cls: 'myu-affordance myu-cta', text: 'Prepare' }); prep.onclick = () => void this.plugin.openPrep(eventId); }
-      if (item.actions?.some((a) => a.action_type === 'capture_after')) {
-        const name = item.entity_references?.[0]?.display_name ?? 'them';
-        const cap = actions.createEl('button', { cls: 'myu-affordance', text: 'Add notes' });
-        cap.onclick = () => void this.plugin.openChat({ text: `After the meeting with ${name}: `, send: false });
+      // One door (2026-10-30): the meeting's page — before it, in it, and its record after; the conversation rides
+      // behind it in the chat pane, and notes are written on the page, not in a chat.
+      if (eventId) {
+        const open = actions.createEl('button', { cls: 'myu-affordance myu-cta', text: PREP_LIST_WORDS.open });
+        open.onclick = () => void this.plugin.openPrep(eventId, { label: item.text ?? '' });
       }
     }
   }
@@ -923,11 +950,11 @@ export class TodayView extends ItemView {
   // ── the rows: a meeting, a person, a company, a space — and Myu's line under it ──
 
   /** The lines under one meeting's row: the occurrence first, the event otherwise. */
-  private linesForMeeting(m: Meeting): MyuLineLite[] {
+  private linesForMeeting(eventId: string, occurrenceKey: string | null): MyuLineLite[] {
     const all = this.todayLines ?? [];
     const isMeeting = (l: MyuLineLite, withKey: boolean) =>
       (l.subjects ?? []).some(
-        (s) => s.type === 'meeting' && s.id === m.event_id && (!withKey || !s.occurrence_key || s.occurrence_key === String(m.startDate.getTime())),
+        (s) => s.type === 'meeting' && s.id === eventId && (!withKey || !s.occurrence_key || !occurrenceKey || s.occurrence_key === occurrenceKey),
       );
     const exact = all.filter((l) => isMeeting(l, true));
     return exact.length ? exact : all.filter((l) => isMeeting(l, false));
@@ -942,7 +969,10 @@ export class TodayView extends ItemView {
    * One row as the mock draws it: the mark (a dot: lit when something new
    * came in for the row, grey when a question there waits), the time, the
    * title with who, Myu's line under it in the theme's accent (a tell in its
-   * success colour, a waiting line quiet), and the doors on the right.
+   * success colour, a waiting line quiet), and the doors under them. A
+   * meeting's row (2026-10-29) carries "· 2 to cover" and Open ▸ on its title
+   * line, and its list under the line (`under`); the list's own question is
+   * drawn there, not in the line stack (`hide`).
    */
   private row(
     host: HTMLElement,
@@ -952,8 +982,16 @@ export class TodayView extends ItemView {
       time: string;
       title: string;
       small?: string;
+      /** "2 to cover", after the title. */
+      count?: string | null;
       lines: MyuLineLite[];
+      /** Lines the row's dot counts but `under` draws. */
+      hide?: ReadonlySet<string>;
       past?: boolean;
+      /** Open ▸, the row's one link (a meeting's page). */
+      open?: () => void;
+      /** What goes under the line: a meeting's list and its add box. */
+      under?: (body: HTMLElement) => void;
       acts: Array<{ label: string; onClick: () => void }>;
     },
   ): void {
@@ -965,16 +1003,23 @@ export class TodayView extends ItemView {
     const body = row.createDiv({ cls: 'myu-mrow-body' });
     const ttl = body.createDiv({ cls: 'myu-ttl', text: r.title });
     if (r.small) ttl.createSpan({ cls: 'myu-ttl-small', text: r.small });
+    if (r.count) ttl.createSpan({ cls: 'myu-ttl-small myu-ttl-count', text: `· ${r.count}` });
+    if (r.open) {
+      const open = ttl.createEl('button', { cls: 'myu-aff myu-mrow-open', text: PREP_LIST_WORDS.open });
+      open.onclick = r.open;
+    }
+    const hide = r.hide;
+    const drawn = hide ? r.lines.filter((l) => !hide.has(l.line_id)) : r.lines;
     // One line on the row, the rest behind a count: the backend writes many lines per subject.
     // A question answered here comes first, with what Myu said back; the next one follows.
     const { ui: lineUi, answered } = this.lineState();
-    const saidHere = r.lines.filter((l) => answered.has(l.line_id));
-    const stack = stackOf(r.lines.filter((l) => !answered.has(l.line_id)));
+    const saidHere = drawn.filter((l) => answered.has(l.line_id));
+    const stack = stackOf(drawn.filter((l) => !answered.has(l.line_id)));
     const say = (l: MyuLineLite) => {
       // Outside a space a question is answered here, with its buttons; a space's line is answered
       // in the space's own conversation, one ask at a time, so its row shows only the words.
       if (!isSpaceLine(l)) {
-        renderLineAsk(body, l, lineUi.get(l.line_id) ?? {}, { press: (b) => void this.pressLine(l, b) });
+        renderLineAsk(body, l, lineUi.get(l.line_id) ?? {}, { press: (b) => void this.pressLine(l, b), people: this.findPeople });
         return;
       }
       const cls = l.ask_kind === 'tell' ? 'myu-done' : l.ask_kind === 'wait' ? 'myu-quiet' : 'myu-line';
@@ -993,6 +1038,7 @@ export class TodayView extends ItemView {
       };
       if (open) stack.rest.forEach(say);
     }
+    r.under?.(body);
     // The doors sit under the title and its line, as the mock's `.ask` does.
     if (r.acts.length === 0) return;
     const acts = body.createDiv({ cls: 'myu-mrow-acts' });
@@ -1003,8 +1049,54 @@ export class TodayView extends ItemView {
   }
 
   /**
+   * Today's read of the lines: the open ones and those answered here (`linesAfterRead`), the meetings with the person's list on them,
+   * and the carried items waiting (a server from before has neither).
+   */
+  private takeLines(data: MyuLinesResult | null | undefined): void {
+    const { ui, answered } = this.lineState();
+    const closedHere = new Set([...ui].flatMap(([id, u]) => (u.closed ? [id] : [])));
+    this.todayLines = linesAfterRead(data?.lines ?? [], this.todayLines ?? [], answered, closedHere);
+    this.prepMeetings = Array.isArray(data?.meetings) ? data.meetings : [];
+    this.waiting = Array.isArray(data?.waiting) ? data.waiting : [];
+    this.yesterday = Array.isArray(data?.yesterday) ? data.yesterday : [];
+  }
+
+  /** A read of the lines alone is under way, and whether another change came in meanwhile. */
+  private linesAgain: Promise<void> | null = null;
+  private linesAgainOwed = false;
+
+  /**
+   * A line changed on the server (`line_updated`, 2026-11-15): when it is one Today shows, the lines are read again (the lines
+   * alone, not the whole pane), so a question answered elsewhere (under People, in the terminal, by Myu's own tie) leaves without a
+   * reload. Changes that come in during a read make one more read after it.
+   */
+  lineUpdated(lineId: unknown): Promise<void> | null {
+    if (!readsAgainFor(lineId, this.todayLines, this.lineState().answered)) return null;
+    if (this.linesAgain) {
+      this.linesAgainOwed = true;
+      return this.linesAgain;
+    }
+    const read = async () => {
+      const res = await safe(() => this.plugin.backend.getMyuLines('today'));
+      if (res?.ok) {
+        this.takeLines(res.data);
+        this.render();
+      }
+    };
+    this.linesAgain = read().finally(() => {
+      this.linesAgain = null;
+      if (this.linesAgainOwed) {
+        this.linesAgainOwed = false;
+        void this.lineUpdated(lineId);
+      }
+    });
+    return this.linesAgain;
+  }
+
+  /**
    * One of a question's buttons: the answer (`POST /myu/lines/answer`), the pages it opens (a
-   * calendar consent, the invite's compose), what Myu said back, then the pane again.
+   * calendar consent, the invite's compose), what Myu said back, then the pane again. An answer that moved things about who someone
+   * is (2026-11-15) says so in a notice with Undo.
    */
   private async pressLine(line: MyuLineLite, button: LineButton): Promise<void> {
     const id = line.line_id;
@@ -1013,12 +1105,16 @@ export class TodayView extends ItemView {
     ui.set(id, { busy: true });
     this.render();
     const out = await pressLineButton({ answer: (lineId, answer) => this.plugin.backend.answerMyuLine(lineId, answer), apiBase: this.plugin.settings.base_url }, line, button);
-    // Closed under the press: read the list again and show what is open now; nothing about this one.
+    // Closed under the press: read the list again and show what is open now; nothing about this one. A question about who someone
+    // is says "Already answered." where its buttons were, and stays so the person sees why (2026-11-15).
     if (out.closed) {
-      ui.delete(id);
+      if (out.ui.closed) ui.set(id, out.ui);
+      else ui.delete(id);
+      this.render();
       await this.refresh();
       return;
     }
+    if (out.undo) this.plugin.offerUndo(out.undo.said, out.undo.moveId);
     for (const url of out.open) window.open(url, '_blank');
     // The meeting arc's Now: the meeting's own conversation, where Myu wrote the first turn.
     if (out.conversation) void this.plugin.openConversationRef(out.conversation, line.subjects?.[0]?.label ?? '');
@@ -1032,19 +1128,6 @@ export class TodayView extends ItemView {
   private who(m: Meeting): string {
     const n = m.attendee_emails?.length ?? 0;
     return n > 1 ? `${n} people` : '';
-  }
-
-  /** talk ▸ — the chat pane opens about this meeting, Myu speaking first. */
-  private talkAboutMeeting(m: Meeting, phase: 'before' | 'after'): void {
-    const lines = this.linesForMeeting(m);
-    const line = stackOf(lines).top ?? lines.find((l) => (l.text ?? '').trim());
-    void this.plugin.openChatAbout('meeting', m.event_id, {
-      label: m.summary || 'Meeting',
-      occurrenceKey: String(m.startDate.getTime()),
-      phase,
-      line: line?.text,
-      lineObj: line,
-    });
   }
 
   /**
@@ -1068,6 +1151,8 @@ export class TodayView extends ItemView {
         title: r.name,
         small: r.small,
         lines: r.lines,
+        // The space waits for a member to be next here (2026-11-17): the server's sentence under the name.
+        ...(r.waiting ? { under: (body: HTMLElement) => void body.createDiv({ cls: 'myu-quiet', text: r.waiting }) } : {}),
         // An interview debrief: one door, into its conversation. A team's space: its conversation and its retro.
         acts: r.debrief
           ? [{ label: DEBRIEF_PANE_WORDS.door, onClick: () => void this.plugin.openChatAbout('space', r.space_id, { label: r.name, line: first?.text, debrief: true }) }]
@@ -1124,9 +1209,11 @@ export class TodayView extends ItemView {
   }
 
   /**
-   * Next, then Earlier — today's meetings as rows with Myu's line under each.
-   * `talk ▸` on every row; `prepare ▸` on the next meeting only. An earlier
-   * meeting's talk is the after-conversation ("how it went").
+   * Next, then later this week, then earlier — the meetings as rows with Myu's
+   * line under each (2026-10-29: the person's list under it, and Open ▸ as the
+   * row's one link: the meeting's page, with its conversation in the chat
+   * pane). An earlier meeting's page is the one after it. Last, the items
+   * carried from a meeting with no next one yet, under their person.
    */
   private renderNext(root: HTMLElement): void {
     const now = Date.now();
@@ -1136,40 +1223,226 @@ export class TodayView extends ItemView {
     const meetings = this.meetings ?? [];
     const upcoming = meetings.filter((m) => m.startDate.getTime() > grace);
     const earlier = meetings.filter((m) => m.startDate.getTime() <= grace).reverse();
+    const calendarRow = (m: Meeting, past: boolean) => ({
+      event_id: m.event_id,
+      occurrence_key: String(m.startDate.getTime()),
+      starts_at: m.startDate.toISOString(),
+      time: prepTimeWords(m.startDate),
+      title: m.summary || 'Meeting',
+      small: this.who(m),
+      past,
+    });
 
     const zone = root.createDiv({ cls: 'myu-zone' });
     zone.createDiv({ cls: 'myu-whisper', text: 'next' });
     if (upcoming.length === 0) {
       zone.createEl('p', { cls: 'myu-quiet', text: earlier.length > 0 ? 'Nothing more today.' : 'No meetings today.' });
     }
-    upcoming.slice(0, 6).forEach((m, index) => {
-      const lines = this.linesForMeeting(m);
-      this.row(zone, {
-        key: `meeting:${m.event_id}:${m.startDate.getTime()}`,
-        time: timeLabel(m.startDate),
-        title: m.summary || 'Meeting',
-        small: this.who(m),
-        lines,
-        acts: [
-          { label: 'talk about this ▸', onClick: () => this.talkAboutMeeting(m, 'before') },
-          ...(index === 0 ? [{ label: 'prepare ▸', onClick: () => void this.plugin.openPrep(m.event_id) }] : []),
-        ],
-      });
-    });
+    for (const m of upcoming.slice(0, 6)) this.meetingRow(zone, calendarRow(m, false));
 
-    if (earlier.length === 0) return;
-    const past = root.createDiv({ cls: 'myu-zone' });
-    past.createDiv({ cls: 'myu-whisper', text: 'earlier' });
-    for (const m of earlier.slice(0, 4)) {
-      const lines = this.linesForMeeting(m);
-      this.row(past, {
-        key: `meeting:${m.event_id}:${m.startDate.getTime()}`,
-        time: timeLabel(m.startDate),
-        title: m.summary || 'Meeting',
-        small: this.who(m),
+    this.renderLater(root);
+
+    if (earlier.length > 0) {
+      const past = root.createDiv({ cls: 'myu-zone' });
+      past.createDiv({ cls: 'myu-whisper', text: 'earlier' });
+      for (const m of earlier.slice(0, 4)) this.meetingRow(past, calendarRow(m, true));
+    }
+
+    this.renderYesterday(root);
+    this.renderWaiting(root);
+  }
+
+  /**
+   * "Yesterday" (2026-10-30, BRIEF_WEB_MEETING_POST §2): yesterday's meetings with a record or a page the person acted
+   * on — the time, the title, "· 2 of 3 covered", Open ▸ as the row's only link (the meeting's page, its record) — and
+   * Myu's lines about the meeting under it, as under any meeting's row: "The Gemini notes for Thursday's 1:1 with Reid
+   * came in: …" is one, sent once per record. A `line` on the row is drawn when the server sends one and no such line.
+   */
+  private renderYesterday(root: HTMLElement): void {
+    const rows = (this.yesterday ?? []).filter((y) => y.event_id);
+    if (rows.length === 0) return;
+    const zone = root.createDiv({ cls: 'myu-zone myu-yesterday' });
+    zone.createDiv({ cls: 'myu-whisper', text: MEETING_POST_WORDS.yesterday });
+    for (const y of rows) {
+      const start = new Date(y.starts_at ?? '');
+      const title = y.title?.trim() || 'Meeting';
+      const lines = this.linesForMeeting(y.event_id, y.occurrence_key ?? null);
+      const said = lines.length ? '' : (y.line?.trim() ?? '');
+      this.row(zone, {
+        key: `yesterday:${y.event_id}:${y.occurrence_key ?? ''}`,
+        time: Number.isNaN(start.getTime()) ? (y.day_label?.trim() ?? '') : prepTimeWords(start),
+        title,
+        count: yesterdayCount(y),
         lines,
         past: true,
-        acts: [{ label: 'talk about this ▸', onClick: () => this.talkAboutMeeting(m, 'after') }],
+        open: () => void this.plugin.openPrep(y.event_id, { label: title, occurrenceKey: y.occurrence_key ?? undefined }),
+        under: said ? (body) => void body.createDiv({ cls: 'myu-voice myu-yesterday-line', text: said }) : undefined,
+        acts: [],
+      });
+    }
+  }
+
+  /**
+   * "Later this week": the upcoming meetings the server sends with an open list question or items, by when they are
+   * ("Thu 2:00 pm"), each a meeting's row.
+   */
+  private renderLater(root: HTMLElement): void {
+    const later = (this.prepMeetings ?? [])
+      .filter((m) => m.later && m.event_id)
+      .sort((a, b) => (Date.parse(a.starts_at ?? '') || 0) - (Date.parse(b.starts_at ?? '') || 0));
+    if (later.length === 0) return;
+    const zone = root.createDiv({ cls: 'myu-zone myu-later' });
+    zone.createDiv({ cls: 'myu-whisper', text: PREP_LIST_WORDS.laterThisWeek });
+    for (const m of later) {
+      this.meetingRow(zone, {
+        event_id: m.event_id,
+        occurrence_key: m.occurrence_key ?? null,
+        starts_at: m.starts_at ?? null,
+        time: m.day_label?.trim() || dayLabel(m.starts_at),
+        title: m.title?.trim() || 'Meeting',
+      });
+    }
+  }
+
+  /**
+   * One meeting's row (2026-10-29, BRIEF_WEB_PREP_NOTES §1). Open ▸ is its only link (the meeting's page, and its
+   * conversation in the chat pane); the title carries "· 2 to cover"; under Myu's line the list's first three items
+   * and "+{n} more"; while the list's question is open, Myu's question in its voice and the list's add box.
+   */
+  private meetingRow(host: HTMLElement, m: { event_id: string; occurrence_key: string | null; starts_at: string | null; time: string; title: string; small?: string; past?: boolean }): void {
+    const listed = this.prepMeetingFor(m.event_id, m.occurrence_key);
+    const lines = this.linesForMeeting(m.event_id, listed?.occurrence_key ?? m.occurrence_key);
+    const wantId = listed?.want_line_id ?? null;
+    const want = wantId ? (lines.find((l) => l.line_id === wantId) ?? null) : null;
+    this.row(host, {
+      key: `meeting:${m.event_id}:${m.occurrence_key ?? ''}`,
+      time: m.time,
+      title: m.title,
+      small: m.small,
+      count: listed ? toCoverWords(listed.items, listed.items_count) : null,
+      lines,
+      hide: wantId ? new Set([wantId]) : undefined,
+      past: m.past,
+      open: () => void this.plugin.openPrep(m.event_id, { label: m.title, occurrenceKey: listed?.occurrence_key ?? m.occurrence_key ?? undefined }),
+      under: listed ? (body) => this.renderRowList(body, listed, want, m.starts_at ?? listed.starts_at ?? null) : undefined,
+      acts: [],
+    });
+  }
+
+  /** The meeting the lines read sends with a list for this occurrence (its event alone when the occurrence is unknown). */
+  private prepMeetingFor(eventId: string, occurrenceKey: string | null): LinesMeeting | null {
+    const same = (this.prepMeetings ?? []).filter((m) => m.event_id === eventId);
+    return same.find((m) => !occurrenceKey || !m.occurrence_key || m.occurrence_key === occurrenceKey) ?? null;
+  }
+
+  /**
+   * A meeting's list under its row: the first three items with live checkboxes (their words edited in place, ×, and a
+   * new order when the row holds the whole list), "+2 more" for the rest (the page holds them), and — while the list's
+   * question is open — Myu's question, then the add box, which stays open; after an add, "On the list for Thursday."
+   * in the question's place.
+   */
+  private renderRowList(body: HTMLElement, listed: LinesMeeting, want: MyuLineLite | null, startsAt: string | null): void {
+    const keeper = this.listFor(listed);
+    const { shown, more } = todayRowItems(listed.items, listed.items_count);
+    if (shown.length) renderPrepItems(body, shown, 'before', keeper.ui(), keeper.handlers({ move: more === 0 }));
+    if (more > 0) body.createDiv({ cls: 'myu-quiet myu-prep-row-more', text: PREP_LIST_WORDS.more(more) });
+    if (listed.want_line_id) {
+      const question = (want?.text ?? '').trim();
+      if (keeper.said) body.createDiv({ cls: 'myu-quiet myu-prep-said-line', text: keeper.said });
+      else if (question && want) body.createDiv({ cls: 'myu-voice myu-prep-want', text: question, attr: lineIdAttr(want.line_id) });
+      renderPrepAddBox(body, {
+        draft: keeper.draft,
+        busy: keeper.adding,
+        onDraft: (text) => {
+          keeper.draft = text;
+        },
+        onAdd: (text) => void this.addFromRow(keeper, text, startsAt),
+        focus: keeper.addFocused,
+        onFocus: (focused) => {
+          keeper.addFocused = focused;
+        },
+      });
+    }
+    if (keeper.note) body.createDiv({ cls: 'myu-quiet myu-line-note', text: keeper.note });
+  }
+
+  /** The list's add on a row: the items appear at once, the fixed line says where they went, the box stays open. */
+  private async addFromRow(keeper: PrepListKeeper, text: string, startsAt: string | null): Promise<void> {
+    if (!(await keeper.add(text))) return;
+    const day = prepDayWord(startsAt);
+    keeper.said = day ? PREP_LIST_WORDS.onTheListFor(day) : null;
+    keeper.addFocused = true;
+    this.render();
+  }
+
+  /** A meeting's list keeper, kept across refreshes: it reads and writes the meeting as the last lines read sent it. */
+  private listFor(listed: LinesMeeting): PrepListKeeper {
+    const ref = { event_id: listed.event_id, occurrence_key: listed.occurrence_key ?? null };
+    const current = () => (this.prepMeetings ?? []).find((m) => m.event_id === ref.event_id && (m.occurrence_key ?? null) === ref.occurrence_key) ?? null;
+    return this.keeper(`meeting:${ref.event_id}|${ref.occurrence_key ?? ''}`, {
+      meeting: () => ref,
+      items: () => [...(current()?.items ?? [])],
+      setItems: (items, added) => {
+        const m = current();
+        if (!m) return;
+        const count = m.items_count ?? (m.items ?? []).length;
+        m.items = items;
+        m.items_count = Math.max(items.length, count + added);
+      },
+      eventId: ref.event_id,
+    });
+  }
+
+  /** One list's keeper, by what it is the list of (a meeting, a person's waiting items): made once, kept across refreshes. */
+  private keeper(key: string, how: { meeting: () => PrepMeetingRef | null; items: () => PrepListItem[]; setItems: (items: PrepListItem[], added: number) => void; eventId: string | null }): PrepListKeeper {
+    this.listKeepers ??= new Map<string, PrepListKeeper>();
+    const known = this.listKeepers.get(key);
+    if (known) return known;
+    const made = new PrepListKeeper({
+      backend: () => this.plugin.backend,
+      meeting: how.meeting,
+      items: how.items,
+      setItems: how.setItems,
+      onChange: () => this.render(),
+      // The meeting's page, when it shows this meeting, reads again.
+      onSaved: () => this.plugin.prepListChanged?.(how.eventId),
+    });
+    this.listKeepers.set(key, made);
+    return made;
+  }
+
+  /**
+   * Items carried from a meeting with no next one yet, under their person (2026-10-29, BRIEF_BACKEND_PREP_NOTES §8):
+   * the server's line ("Carried from your 1:1 on 12 Nov"), then the items, ticked, edited or dropped here. They join
+   * the next meeting with that person when the calendar has one.
+   */
+  private renderWaiting(root: HTMLElement): void {
+    const waiting = (this.waiting ?? []).filter((w) => w.relationship_id && (w.items ?? []).length > 0);
+    if (waiting.length === 0) return;
+    const zone = root.createDiv({ cls: 'myu-zone myu-waiting' });
+    zone.createDiv({ cls: 'myu-whisper', text: PREP_LIST_WORDS.fromLastTime });
+    for (const w of waiting) {
+      const current = () => (this.waiting ?? []).find((x) => x.relationship_id === w.relationship_id) ?? null;
+      const keeper = this.keeper(`waiting:${w.relationship_id}`, {
+        meeting: () => null,
+        items: () => [...(current()?.items ?? [])],
+        setItems: (items) => {
+          const x = current();
+          if (x) x.items = items;
+        },
+        eventId: null,
+      });
+      this.row(zone, {
+        key: `waiting:${w.relationship_id}`,
+        time: '',
+        title: w.name?.trim() || '',
+        lines: [],
+        under: (body) => {
+          if (w.label?.trim()) body.createDiv({ cls: 'myu-quiet', text: w.label.trim() });
+          renderPrepItems(body, w.items, 'before', keeper.ui(), keeper.handlers({ move: false }));
+          if (keeper.note) body.createDiv({ cls: 'myu-quiet myu-line-note', text: keeper.note });
+        },
+        acts: [],
       });
     }
   }
@@ -1384,7 +1657,7 @@ export class TodayView extends ItemView {
   }
 
   private renderWeek(root: HTMLElement): void {
-    if (!this.weekly || this.weekly.sections.length === 0) return;
+    if (!this.weekly || (this.weekly.sections.length === 0 && !this.yourWeek)) return;
 
     const zone = root.createDiv({ cls: 'myu-zone' });
     zone.createDiv({ cls: 'myu-whisper', text: 'the week' });
@@ -1395,6 +1668,8 @@ export class TodayView extends ItemView {
         zone.createDiv({ cls: 'myu-quiet myu-week-item', text: item });
       }
     }
+    // Your side of the work (2026-11-13): each count's sentence opening to what it counted, your goals beside it. No chart, no score.
+    if (this.yourWeek) renderYourWeek(zone, this.yourWeek, this.yourWeekOpen);
   }
 
   /**
@@ -1537,6 +1812,8 @@ function addDays(date: Date, days: number): Date {
   return next;
 }
 
-function timeLabel(date: Date): string {
-  return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }).toLowerCase().replace(' ', '');
+/** "Thu 2:00 pm" from an ISO start, when the server sent no day label: the one time format everywhere. */
+function dayLabel(iso: string | null | undefined): string {
+  const d = new Date(iso ?? '');
+  return Number.isNaN(d.getTime()) ? '' : `${d.toLocaleDateString('en-GB', { weekday: 'short' })} ${prepTimeWords(d)}`;
 }

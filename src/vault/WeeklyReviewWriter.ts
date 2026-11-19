@@ -34,9 +34,18 @@ import type { WeeklyEdition } from '../transport/api';
  * consumers) and for the writer's server/local fork below.
  */
 export function isWeeklyEditionFresh(edition: WeeklyEdition, now: Date = new Date()): boolean {
-  if (!edition.period || !Array.isArray(edition.sections) || edition.sections.length === 0) return false;
+  if (!Array.isArray(edition.sections) || edition.sections.length === 0) return false;
+  return isWeeklyPeriodFresh(edition.period, now);
+}
+
+/**
+ * The same rule on the period alone: this ISO week or the one before. Today's "the week" uses it for a review whose only part is
+ * "your side of the work" (2026-11-13), which the web shows too.
+ */
+export function isWeeklyPeriodFresh(period: string | null | undefined, now: Date = new Date()): boolean {
+  if (!period) return false;
   const lastWeek = new Date(now.getTime() - 7 * 86400000);
-  return edition.period === isoWeek(now) || edition.period === isoWeek(lastWeek);
+  return period === isoWeek(now) || period === isoWeek(lastWeek);
 }
 
 /** ISO week label, matching the backend's %d-W%02d. */

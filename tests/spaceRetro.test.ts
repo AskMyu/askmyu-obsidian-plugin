@@ -193,7 +193,7 @@ test('the panel is closed at first and reads nothing until it is opened', async 
   const backend = { getRetro: (id: string) => (reads++, api.getRetro(id)) };
   let changes = 0;
   const panel = new SpaceRetroPanel('s1', { backend, onChange: () => changes++ });
-  assert.deepEqual(panel.screen(), { open: false, loading: false, failed: false, view: null, howOpen: false });
+  assert.deepEqual(panel.screen(), { open: false, loading: false, failed: false, waiting: null, view: null, howOpen: false });
   await panel.refresh();
   assert.equal(reads, 0, 'a closed panel does not read');
   await panel.toggle();

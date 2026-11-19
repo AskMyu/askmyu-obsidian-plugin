@@ -36,6 +36,7 @@ import { renderChatBlock, renderReferences, renderRelatedEntries } from './chatB
 import { canvasOnResume, canvasesOnResume, type ChatCanvasOptions, type DeliveredOffer, type MyuLineLite } from '../transport/api';
 import { pressLineButton, type LineButton, type LineUi } from '../lineAnswers';
 import { renderLineAsk } from './lineAsk';
+import { peopleFinder } from '../identityLines';
 import { lineIdAttr } from '../linesSeenWatch';
 import type { CompositionSpecLite, CompositionComponentLite } from '../wire';
 import { renderComponentActions } from './canvasActions';
@@ -141,6 +142,9 @@ export class ChatView extends ItemView {
   private space: SpaceConversation | null = null;
   /** The team's retro for that space, behind one quiet line under the title. */
   private spaceRetro: SpaceRetroPanel | null = null;
+
+  /** "Who is it?" under Myu's question about who someone is (2026-11-15): the person's people, found as they type. */
+  private findPeople = peopleFinder(() => this.plugin.backend);
 
   constructor(
     leaf: WorkspaceLeaf,
@@ -272,6 +276,11 @@ export class ChatView extends ItemView {
       openConversation: (ref) => void this.plugin.openConversationRef(ref, self().screen().title),
       // An ask settled here leaves its row on Today: read the list again.
       onAnswered: () => this.plugin.requestTodayRefresh(),
+      // One of Myu's offers went onto a meeting's list: its page and its Today row read again.
+      onListChanged: (eventId) => {
+        this.plugin.prepListChanged(eventId);
+        this.plugin.requestTodayRefresh();
+      },
     };
   }
 
@@ -355,14 +364,19 @@ export class ChatView extends ItemView {
     }
     if (this.openingLine?.line_id !== line.line_id) return; // the conversation moved on meanwhile
     // Closed under the press: its buttons go (the question is no longer open) and Today is read again;
-    // nothing is said about it.
+    // nothing is said about it. A question about who someone is says "Already answered." where its buttons were (2026-11-15).
     if (out.closed) {
-      this.openingLine = null;
-      this.openingUi = {};
+      if (out.ui.closed) this.openingUi = out.ui;
+      else {
+        this.openingLine = null;
+        this.openingUi = {};
+      }
       this.render();
       this.plugin.requestTodayRefresh();
       return;
     }
+    // An answer that moved things about who someone is (2026-11-15): its sentence in a notice, with Undo.
+    if (out.undo) this.plugin.offerUndo(out.undo.said, out.undo.moveId);
     this.openingUi = out.ui;
     this.render();
     if (out.settled) this.plugin.requestTodayRefresh();
@@ -874,7 +888,7 @@ export class ChatView extends ItemView {
       // The question this conversation opened with: its buttons under it, answered here.
       if (index === 0 && this.openingLine) {
         const line = this.openingLine;
-        renderLineAsk(myu, line, this.openingUi, { press: (b) => void this.pressOpening(line, b) }, { showText: false });
+        renderLineAsk(myu, line, this.openingUi, { press: (b) => void this.pressOpening(line, b), people: this.findPeople }, { showText: false });
       }
       for (const block of turn.blocks ?? []) this.renderBlock(myu, block);
       renderReferences(myu, turn.references);
@@ -1065,6 +1079,7 @@ export class ChatView extends ItemView {
       dropTyped: () => space.dropTyped(),
       earlier: () => void space.loadEarlier(),
       unlock: () => void unlockBoth(),
+      addOffer: (text) => void space.addOffer(text),
       draft: (text) => {
         space.draft = text;
       },

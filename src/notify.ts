@@ -23,6 +23,27 @@ export function notifyStatus(message: string, durationMs = 4000): void {
   new Notice(message, durationMs);
 }
 
+/**
+ * Something the user just did succeeded, with one way back beside it (2026-11-15, "Same person": "Now one person. 5 things moved
+ * to Tess Colleague." and Undo). The way back is a button in the notice; pressing it closes the notice and runs it. Outside a DOM
+ * (the unit tier) the words alone.
+ */
+export function notifyDone(message: string, action: { label: string; run: () => void } | null, durationMs = 10000): void {
+  if (!action || typeof document === 'undefined') {
+    new Notice(message, durationMs);
+    return;
+  }
+  const frag = createFragment();
+  frag.appendText(`${message} `);
+  const button = frag.createEl('button', { cls: 'myu-notice-undo', text: action.label });
+  const n = new Notice(frag, durationMs);
+  button.onclick = (ev) => {
+    ev.stopPropagation();
+    n.hide();
+    action.run();
+  };
+}
+
 /** Something the user just did failed, and they need to know why. */
 export function notifyError(message: string, durationMs = 8000): void {
   new Notice(message, durationMs);

@@ -9,7 +9,7 @@ import test from 'node:test';
 
 import { MockApi } from '../src/transport/mock';
 import type { MyuLineLite } from '../src/transport/api';
-import { LINE_ANSWER_WORDS, lineButtons, lineEffectActions, pressLineButton, showEstimate, tapAnswers } from '../src/lineAnswers';
+import { LINE_ANSWER_WORDS, lineButtons, lineEffectActions, lineSentences, pressLineButton, showEstimate, tapAnswers } from '../src/lineAnswers';
 
 const line = (over: Partial<MyuLineLite>): MyuLineLite => ({
   line_id: 'L1',
@@ -82,6 +82,9 @@ test('effects: a calendar consent opens its page; the invite opens its compose a
   ]);
   // A locked space's consent is not this pane's.
   assert.deepEqual(lineEffectActions([{ type: 'consent_needed', provider: 'space', reason: 'locked' }], API), []);
+  // "Myu has no connection with Ana" (2026-11-13): Send it yourself gives the words to copy; Invite, the command that carries the question.
+  assert.deepEqual(lineEffectActions([{ type: 'send_yourself', text: 'is the retry key stable?' } as never], API), [{ kind: 'draft', draft: { text: 'is the retry key stable?', label: LINE_ANSWER_WORDS.draftLink } }]);
+  assert.deepEqual(lineEffectActions([{ type: 'open_invite', email: 'ana@corvid.test', name: 'Ana Silva', question_id: 'q1' } as never], API), [{ kind: 'note', text: 'To send the invitation with your question, in the terminal: myu invite ana@corvid.test --question q1' }]);
   assert.deepEqual(lineEffectActions([{ type: 'consent_needed', provider: 'google', init_path: 'https://evil.example' }], API), []);
   const ready = lineEffectActions([{ type: 'invite_ready', handoff_url: 'https://calendar.google.com/calendar/render?action=TEMPLATE', ics_url: '/myu/holds/h1/invite.ics' }], API);
   assert.deepEqual(ready, [
@@ -168,8 +171,15 @@ test('answering: the invite effects give the pages and links; a failed send says
   assert.equal(failed.ui.note, "You're offline. Try again when you're back online.");
 });
 
+test('the Friday line: its sentences beside its words, each once', () => {
+  const friday = { line_id: 'W1', text: 'Myu: your week.', sentences: ['3 asks reached you: all answered.', 'Myu: your week.', ''] } as never;
+  assert.deepEqual(lineSentences(friday), ['3 asks reached you: all answered.']);
+  assert.deepEqual(lineSentences({ line_id: 'X', text: 'Hi' } as never), []);
+});
+
 test('the words the vault owns here pass the plain-words rule', () => {
-  for (const w of Object.values(LINE_ANSWER_WORDS)) {
+  for (const v of Object.values(LINE_ANSWER_WORDS)) {
+    const w = typeof v === 'function' ? v('Ana Silva', 'q1') : v;
     assert.doesNotMatch(w, /\b(row|line|prep|agenda|push|room|ics|url|oauth|consent|handoff|effect)\b/i, w);
     assert.doesNotMatch(w, /[{}]/, w);
   }
@@ -245,3 +255,17 @@ test('a press on a line that closed under it (409 line_closed): nothing is said,
   assert.deepEqual(again.ui, {}, 'no note, no readback');
   assert.deepEqual(again.open, []);
 });
+
+test('someone signing in (new_device): no button here, the sentence that says where to answer', () => {
+  const line: MyuLineLite = { line_id: 'L-nd', kind: 'new_device', ask_kind: 'choice', text: 'Someone is signing in to your Myu on Chrome on Linux, just now. Number 47. Is this you?', choices: [{ id: 'approve', label: 'Approve' }, { id: 'reject', label: 'Reject' }] };
+  assert.deepEqual(lineButtons(line), [], 'the line’s Approve would only close it');
+  assert.equal(LINE_ANSWER_WORDS.newDevice, 'Answer this in Myu in your browser: it shows the number to compare.');
+});
+
+test('an invitation to connect: the server’s Accept and Not now, nothing more', async () => {
+  const { isConnectLine } = await import('../src/lineAnswers');
+  const line: MyuLineLite = { line_id: 'C1', kind: 'connect_invite', ask_kind: 'choice', text: 'Sofia Reyes invites you to connect on askMyu.', choices: [{ id: 'accept', label: 'Accept' }, { id: 'not_now', label: 'Not now' }] };
+  assert.equal(isConnectLine(line), true);
+  assert.deepEqual(lineButtons(line).map((b) => [b.id, b.label, b.quiet]), [['accept', 'Accept', false], ['not_now', 'Not now', true]]);
+});
+// The connect kinds against shared's: tests/internal/doorAnswersParity.test.ts (the public mirror has no shared).

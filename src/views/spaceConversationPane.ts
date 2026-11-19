@@ -23,6 +23,23 @@ import { LINE_CONVERSATION_WORDS, MEETING_CONVERSATION_WORDS, type ScreenAsk, ty
 import { SPACE_RETRO_WORDS, type RetroPanelScreen } from '../spaceRetro';
 import { attachPasteListeners, isUndoKey, renderPastedCards, renderPastedRow } from './pastedChips';
 import { lineIdAttr } from '../linesSeenWatch';
+import { PREP_LIST_WORDS } from '../prepList';
+import type { ScreenOffer } from '../spaceConversation';
+
+/**
+ * Myu's offers under its reply in a meeting's conversation (2026-10-29, `list_offers`): "+ {text}" each, one press onto
+ * the meeting's list, then it reads as on your list; the small caption says what a press does.
+ */
+function renderListOffers(host: HTMLElement, offers: ScreenOffer[], note: string | null, add: ((text: string) => void) | undefined): void {
+  const row = host.createDiv({ cls: 'myu-prep-offers myu-chat-offers' });
+  for (const o of offers) {
+    const chip = row.createEl('button', { cls: 'myu-aff myu-prep-offer', text: o.added ? `${o.text} · ${PREP_LIST_WORDS.onYourList}` : PREP_LIST_WORDS.plus(o.text), attr: { 'data-added': String(o.added) } });
+    chip.disabled = o.added || o.busy || !add;
+    chip.onclick = () => add?.(o.text);
+  }
+  row.createSpan({ cls: 'myu-quiet myu-prep-offers-caption', text: PREP_LIST_WORDS.addsToList });
+  if (note) host.createDiv({ cls: 'myu-quiet myu-line-note', text: note });
+}
 
 export interface SpacePaneHandlers {
   send: (text: string) => void;
@@ -37,6 +54,8 @@ export interface SpacePaneHandlers {
   draft: (text: string) => void;
   /** Pasted text in the box (2026-10-06). Without it the box takes every paste inline, as before. */
   pasted?: SpacePastedBox;
+  /** One of Myu's offers under its reply in a meeting's conversation, onto the meeting's list (2026-10-29). */
+  addOffer?: (text: string) => void;
 }
 
 /**
@@ -173,6 +192,7 @@ export function renderSpaceConversation(
     const myu = thread.createDiv({ cls: 'myu-chat-myu' });
     myu.createDiv({ cls: 'myu-whisper', text: 'myu' });
     renderWords(myu, turn.text, turn.parts, 'myu-voice');
+    if (turn.offers?.length) renderListOffers(myu, turn.offers, turn.offersNote ?? null, on.addOffer);
   };
 
   for (const turn of screen.turns) drawTurn(turn);
@@ -332,6 +352,10 @@ export function renderSpaceRetro(
   const page = host.createDiv({ cls: 'myu-space-retro' });
   if (panel.loading) {
     page.createEl('p', { cls: 'myu-quiet myu-thinking', text: SPACE_RETRO_WORDS.loading });
+    return;
+  }
+  if (panel.waiting) {
+    page.createEl('p', { cls: 'myu-quiet', text: panel.waiting });
     return;
   }
   if (panel.failed && !panel.view) {

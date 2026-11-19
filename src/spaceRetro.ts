@@ -21,6 +21,7 @@
  * mirrors to shared.
  */
 
+import { spaceKeyStateOf, waitingUnder } from './spaceWaiting';
 import type { AskMyuApi, MyuLineLite, RetroReadResult, RetroThreadLite, RetroTodoLite, SpaceLite } from './transport/api';
 import { SPACE_MODE_WORDS, isLockedText } from './spaceModeLogic';
 import { debriefSmall, isDebriefSpace } from './debriefPane';
@@ -62,6 +63,8 @@ export interface SpaceRow {
   lines: MyuLineLite[];
   /** An interview debrief's space (`work = "debrief"`): one door, into its conversation, and no retro. */
   debrief?: boolean;
+  /** The space waits for a member to be next here (2026-11-17, `space_waiting` on the row): the server's sentence. */
+  waiting?: string;
 }
 
 /** The kind of team, in words. Mirrors shared `spaceKindWords`; the list's own `kind_label` (R20) goes first where it is sent. */
@@ -72,7 +75,8 @@ export function spaceKindWords(kind: string | undefined): string {
     case 'cofounder':
       return 'Cofounders';
     case 'dyad':
-      return 'Two people';
+    case 'pair':
+      return 'Two or more people';
     case 'remote_team':
       return 'Remote team';
     case 'family':
@@ -142,6 +146,7 @@ export function spaceRows(spaces: SpaceLite[] | null | undefined, lines: MyuLine
       small: debrief ? debriefSmall(s.member_count) : [s.kind_label?.trim() || spaceKindWords(s.kind), members].filter(Boolean).join(' · '),
       lines: bySpace.get(s.space_id) ?? [],
       ...(debrief ? { debrief: true } : {}),
+      ...(waitingUnder(s) ? { waiting: waitingUnder(s) as string } : {}),
     });
   }
   if (spaces) return rows;
@@ -317,6 +322,8 @@ export interface RetroPanelScreen {
   open: boolean;
   loading: boolean;
   failed: boolean;
+  /** The space does not open here (2026-11-17: waits for a member, or this device can't open it): the server's sentence, in place of the retro. */
+  waiting: string | null;
   view: RetroView | null;
   /** R20: "How this works" is open: the first time this account sees a retro page, closed after. */
   howOpen: boolean;
@@ -336,6 +343,7 @@ export class SpaceRetroPanel {
   private open = false;
   private loading = false;
   private failed = false;
+  private waiting: string | null = null;
   private view: RetroView | null = null;
   private howOpen: boolean | null = null;
   private seq = 0;
@@ -346,7 +354,7 @@ export class SpaceRetroPanel {
   ) {}
 
   screen(): RetroPanelScreen {
-    return { open: this.open, loading: this.loading, failed: this.failed, view: this.view, howOpen: this.howOpen === true };
+    return { open: this.open, loading: this.loading, failed: this.failed, waiting: this.waiting, view: this.view, howOpen: this.howOpen === true };
   }
 
   /** Open it (and read), or close it. */
@@ -390,7 +398,12 @@ export class SpaceRetroPanel {
     const res = await this.deps.backend.getRetro(this.spaceId).catch(() => null);
     if (mine !== this.seq) return;
     this.loading = false;
-    if (res?.ok && res.data) {
+    // The space does not open here (2026-11-17): the server's sentence; never the unlock, and no button.
+    const keyState = spaceKeyStateOf(res?.data) ?? spaceKeyStateOf({ error: res?.error });
+    this.waiting = keyState?.message ?? null;
+    if (this.waiting) {
+      this.view = null;
+    } else if (res?.ok && res.data) {
       this.view = retroView(res.data);
       // The fold opens the first time this account sees the rules, and is closed from then on.
       if (this.howOpen === null && this.view.how) {

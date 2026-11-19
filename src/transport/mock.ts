@@ -22,9 +22,11 @@ import type { Commitment, GetCommitmentsResponse } from '../wire';
 const MOCK_TERMS_VERSION = '2026-09-01';
 import type { ApiResponse, EncryptedJournalPayload } from './index';
 import type { ChatContext, CompositionSpecLite, EntityHeadline as WireEntityHeadline, MapFold, MapPeoplePage, MapPersonRow, PrepCardV2 } from '../wire';
-import type { MyuLineLite, RetroReadResult, SpaceLite } from './api';
+import type { MyuLineLite, PrepHistoryOf, PrepItemTarget, PrepMeetingRef, RetroReadResult, SpaceLite } from './api';
+import type { LinesMeeting, LinesWaiting, LinesYesterday, PrepHistoryResponse, PrepHistoryRow, PrepListItem, PrepNotes, PrepState } from '../wire';
 import type { OAuthInitOptions, ChatCanvasOptions, FeedbackBody, InteractionEvent, HelpMyuItem, RelatedPerson, RelatedMemory, SourceDetail, DriveSuggestion, FeedSearchResults, PersonalLoop, CoupledLoop } from './api';
 import type { CompositionActionResult, CompositionHistory, CompositionForJournal,
+  AccountInfo,
   AskMyuApi,
   BoardLiteResult,
   PendingTransfer,
@@ -50,6 +52,7 @@ import type { CompositionActionResult, CompositionHistory, CompositionForJournal
 import { generateDeviceId } from '../crypto/primitives';
 import { readMenuMarks, withOpened, type MenuItemKey, type MenuMarks } from '../menuMarks';
 import type { LinesSeenResponse } from '../linesSeen';
+import type { IdentityChangeResult, UndoResult } from '../personIdentities';
 import type { SpaceAnswer, SpaceAnswerReply, SpaceAsk, SpaceChoice, SpaceConversationRead, SpacePrepMine, SpacePrepStep, SpaceTurn, SpaceTurnReply } from '../wire';
 import type { PastedBlockWire } from '../wire';
 
@@ -431,7 +434,12 @@ export class MockApi implements AskMyuApi {
         },
         {
           section_type: 'commitments_between', title: 'Commitments between you', is_new: true,
-          data: { items: [{ commitment_id: 'c1', what: 'Review the migration plan', owner: 'them', status: 'open', how_myu_knows: 'You said so in the sync.' }] },
+          data: {
+            items: [{ commitment_id: 'c1', what: 'Review the migration plan', owner: 'them', status: 'open', how_myu_knows: 'You said so in the sync.' }],
+            // 2026-10-30: the one ledger's rows, newest first, the older ones folded.
+            rows: [{ kind: 'they_owe', text: 'Review the migration plan', when: '2026-11-02T00:00:00Z', source: 'from the Gemini notes', meeting: { event_id: 'mock-event-1', title: '1:1', at: '2026-10-29T14:00:00Z' }, commitment_id: 'c1' }],
+            older: { count: 1, note: 'past, from January to March', rows: [{ kind: 'you_owe', text: 'The Q1 numbers', when: '2026-02-01', source: 'your entry' }] },
+          },
         },
         {
           section_type: 'partner_readings', title: 'Their reading next to yours', is_new: true, is_experiment: true,
@@ -461,10 +469,179 @@ export class MockApi implements AskMyuApi {
   feedbackServerBeforeFiles = false;
   feedbackRefusal: { status: number; error: string } | null = null;
 
-  async getMyuLines(_scope: 'today' | 'people' | 'spaces' | 'calendar') {
+  async getMyuLines(scope: 'today' | 'people' | 'spaces' | 'calendar') {
     const offline = this.guard();
     if (offline) return offline;
-    return ok({ success: true, day: new Date().toISOString().slice(0, 10), budget: { released: 0, limit: 3 }, lines: this.dayLines.map((l) => ({ ...l })) });
+    const lines = this.dayLines.map((l) => ({ ...l }));
+    if (scope !== 'today') return ok({ success: true, day: new Date().toISOString().slice(0, 10), budget: { released: 0, limit: 3 }, lines });
+    // Today also carries the meetings with the person's list on them (three items each, by position, and the count),
+    // and the carried items waiting for a next meeting (2026-10-29), each as the list stands now.
+    const meetings: LinesMeeting[] = this.dayMeetings.map((m) => {
+      const list = this.prepList(m.event_id).slice().sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+      return { ...m, items: list.slice(0, 3).map((i) => ({ ...i })), items_count: list.length };
+    });
+    const waiting: LinesWaiting[] = this.dayWaiting.map((w) => ({ ...w, items: w.items.map((i) => ({ ...i })) })).filter((w) => w.items.length > 0);
+    const yesterday: LinesYesterday[] = this.dayYesterday.map((y) => ({ ...y }));
+    return ok({ success: true, day: new Date().toISOString().slice(0, 10), budget: { released: 0, limit: 3 }, lines, meetings, waiting, yesterday });
+  }
+
+  /** Yesterday's meetings with a record or a page the person acted on (2026-10-30); a test sets them. */
+  dayYesterday: LinesYesterday[] = [];
+  /** The across-line on a history, by relationship or series id (2026-10-30); a test sets it. */
+  prepAcross: Record<string, string> = {};
+
+  /** `POST /commitments/update`: recorded with the list's doors; a dropped one leaves the test card's Yours. */
+  async updateCommitment(commitmentId: string, change: { status?: string }) {
+    const refused = this.prepDoor<{ success?: boolean }>('commitment', { commitment_id: commitmentId, ...change });
+    if (refused) return refused;
+    for (const raw of Object.values(this.meetingPreps)) {
+      const yours = (raw as PrepCardV2 | undefined)?.after?.yours;
+      if (yours?.todo && change.status === 'dropped') yours.todo = yours.todo.filter((t) => t.commitment_id !== commitmentId);
+    }
+    return ok({ success: true });
+  }
+
+  // ── the person's list for a meeting, its notes, and after (2026-10-29) ──────────────────────────
+  // A small stand-in for `/prep/items/*`, `/prep/notes/save`, `/prep/done`, `/prep/action/remove`,
+  // `/prep/reminder/answer` and `/prep/history`, as the backend built them (IMPL_PREP_NOTES_20261029).
+
+  /** Today's meetings with a list (a test sets them); their items come from the list as it stands. */
+  dayMeetings: LinesMeeting[] = [];
+  /** Carried items waiting for a next meeting, under their person (a test sets them). */
+  dayWaiting: LinesWaiting[] = [];
+  /** Each meeting's list, by event id: seeded from a card or a Today meeting the first time it is touched. */
+  prepLists: Record<string, PrepListItem[]> = {};
+  /** Every call to the list's doors, in order: which door and what it was sent. */
+  prepCalls: Array<{ door: string; body: Record<string, unknown> }> = [];
+  /** The notes as last saved, by event id. */
+  prepNotes: Record<string, PrepNotes> = {};
+  /** The past meetings, by relationship id (a 1:1) or by series id (a recurring meeting). */
+  prepHistory: Record<string, PrepHistoryRow[]> = {};
+  /** Items added for a person's or a series' next meeting, waiting for it (`rel:<id>`, `series:<id>`). */
+  prepWaiting: Record<string, PrepListItem[]> = {};
+  /** A test sets it: every list door answers 500. */
+  prepDoorsFail = false;
+  private itemSeq = 0;
+
+  /** A meeting's list, seeded from the card a test put in place, else from Today's meeting, else empty. */
+  private prepList(eventId: string): PrepListItem[] {
+    if (!this.prepLists[eventId]) {
+      const card = this.meetingPreps[eventId] as { items?: PrepListItem[] } | undefined;
+      const today = this.dayMeetings.find((m) => m.event_id === eventId);
+      this.prepLists[eventId] = (card?.items ?? today?.items ?? []).map((i) => ({ ...i }));
+    }
+    return this.prepLists[eventId];
+  }
+
+  /** Where an item is: its meeting's list, or a person's waiting list. */
+  private findItem(itemId: string): { list: PrepListItem[]; item: PrepListItem } | null {
+    for (const list of [...Object.values(this.prepLists), ...this.dayWaiting.map((w) => w.items)]) {
+      const item = list.find((i) => i.item_id === itemId);
+      if (item) return { list, item };
+    }
+    return null;
+  }
+
+  private prepDoor<T>(door: string, body: Record<string, unknown>): ApiResponse<T> | null {
+    const offline = this.guard<T>();
+    if (offline) return offline;
+    this.prepCalls.push({ door, body });
+    return this.prepDoorsFail ? fail<T>(500, 'internal_error') : null;
+  }
+
+  async addPrepItems(target: PrepItemTarget, text: string, source: 'user' | 'myu_offer' = 'user') {
+    const refused = this.prepDoor<{ success?: boolean; items?: PrepListItem[] }>('add', { ...target, text, source });
+    if (refused) return refused;
+    if (!target.event_id) {
+      // No meeting yet: the item waits for the person's (or the series') next one, as one item.
+      const words = text.trim();
+      const key = target.relationship_id ? `rel:${target.relationship_id}` : `series:${target.series_id ?? ''}`;
+      if (!words || key.endsWith(':')) return fail<{ success?: boolean; items?: PrepListItem[] }>(400, 'missing_target');
+      const waiting: PrepListItem = { item_id: `mock-item-${++this.itemSeq}`, text: words, done: false, source, carried_from: null, position: 0, event_id: null, occurrence_key: null };
+      (this.prepWaiting[key] ??= []).push(waiting);
+      return ok({ success: true, items: [{ ...waiting }] });
+    }
+    const meeting: PrepMeetingRef = { event_id: target.event_id, occurrence_key: target.occurrence_key ?? null };
+    const list = this.prepList(meeting.event_id);
+    let position = list.reduce((max, i) => Math.max(max, i.position ?? 0), -1);
+    // As the server does: a text with several lines becomes one item per line; empty lines are dropped.
+    const items = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean).map((t): PrepListItem => ({
+      item_id: `mock-item-${++this.itemSeq}`,
+      text: t,
+      done: false,
+      source,
+      carried_from: null,
+      position: ++position,
+      event_id: meeting.event_id,
+      occurrence_key: meeting.occurrence_key ?? null,
+    }));
+    if (!items.length) return fail<{ success?: boolean; items?: PrepListItem[] }>(400, 'empty_text');
+    list.push(...items);
+    return ok({ success: true, items: items.map((i) => ({ ...i })) });
+  }
+
+  async updatePrepItem(itemId: string, change: { text?: string; done?: boolean; position?: number }) {
+    const refused = this.prepDoor<{ success?: boolean; item?: PrepListItem }>('update', { item_id: itemId, ...change });
+    if (refused) return refused;
+    const found = this.findItem(itemId);
+    if (!found) return fail<{ success?: boolean; item?: PrepListItem }>(404, 'not_found');
+    if (typeof change.text === 'string') found.item.text = change.text.trim();
+    if (typeof change.done === 'boolean') found.item.done = change.done;
+    if (typeof change.position === 'number') found.item.position = change.position;
+    return ok({ success: true, item: { ...found.item } });
+  }
+
+  async removePrepItem(itemId: string) {
+    const refused = this.prepDoor<{ success?: boolean }>('remove', { item_id: itemId });
+    if (refused) return refused;
+    const found = this.findItem(itemId);
+    if (!found) return fail<{ success?: boolean }>(404, 'not_found');
+    found.list.splice(found.list.indexOf(found.item), 1);
+    return ok({ success: true });
+  }
+
+  async savePrepNotes(meeting: PrepMeetingRef, text: string) {
+    const refused = this.prepDoor<{ success?: boolean; notes?: PrepNotes; state?: PrepState }>('notes', { ...meeting, text });
+    if (refused) return refused;
+    const notes = { text, updated_at: Date.now() };
+    this.prepNotes[meeting.event_id] = notes;
+    const card = this.meetingPreps[meeting.event_id] as { state?: PrepState } | undefined;
+    return ok({ success: true, notes, state: card?.state ?? 'now' });
+  }
+
+  async prepDone(meeting: PrepMeetingRef) {
+    const refused = this.prepDoor<{ success?: boolean; state?: PrepState }>('done', { ...meeting });
+    if (refused) return refused;
+    const card = this.meetingPreps[meeting.event_id] as { state?: PrepState } | undefined;
+    if (card) card.state = 'after';
+    return ok({ success: true, state: 'after' as const });
+  }
+
+  async removePrepAction(meeting: PrepMeetingRef, actionId: string) {
+    const refused = this.prepDoor<{ success?: boolean }>('action_remove', { ...meeting, action_id: actionId });
+    if (refused) return refused;
+    const card = this.meetingPreps[meeting.event_id] as PrepCardV2 | undefined;
+    if (card?.after?.action_items) card.after.action_items = card.after.action_items.filter((a) => a.id !== actionId);
+    return ok({ success: true });
+  }
+
+  async answerPrepReminder(meeting: PrepMeetingRef, reminderId: string, yes: boolean) {
+    const refused = this.prepDoor<{ success?: boolean }>('reminder', { ...meeting, reminder_id: reminderId, yes });
+    if (refused) return refused;
+    const card = this.meetingPreps[meeting.event_id] as PrepCardV2 | undefined;
+    const reminder = card?.after?.reminders?.find((r) => r.id === reminderId && r.status === 'offered');
+    if (!reminder) return fail<{ success?: boolean }>(404, 'not_found');
+    reminder.status = yes ? 'accepted' : 'declined';
+    return ok({ success: true });
+  }
+
+  async getPrepHistory(of: PrepHistoryOf, limit = 10) {
+    const offline = this.guard<PrepHistoryResponse>();
+    if (offline) return offline;
+    this.prepCalls.push({ door: 'history', body: { ...of, limit } });
+    const key = of.relationship_id ?? of.event_series ?? '';
+    const across = this.prepAcross[key];
+    return ok<PrepHistoryResponse>({ success: true, history: (this.prepHistory[key] ?? []).slice(0, limit).map((r) => ({ ...r })), ...(across ? { across: { text: across, material: null } } : {}) });
   }
 
   /**
@@ -1135,6 +1312,8 @@ export class MockApi implements AskMyuApi {
   subjectTurns: Array<{ conversation_id: string; content: string; pasted_blocks?: PastedBlockWire[] }> = [];
   /** Every button pressed on the meeting's conversation or the mock card's arc: which line, which choice. */
   meetingAnswered: Array<{ line_id: string; choice_id: string }> = [];
+  /** What Myu offers for the list under its next replies in the meeting's conversation (2026-10-29); a test sets them. */
+  meetingOffers: string[] = [];
 
   /** One meeting's conversation: its turns, the ask that is up, and whether the arc was answered. */
   meetingMode: { event_id: string | null; turns: SpaceTurn[]; open: SpaceAsk | null; n: number; arcAnswered: boolean } = {
@@ -1206,9 +1385,11 @@ export class MockApi implements AskMyuApi {
     this.meetingSay('you', content);
     const answered = this.meetingSettle('typed');
     const eventId = this.meetingMode.event_id ?? '';
+    // What in this turn belongs on the list (2026-10-29): a test sets them; at most three ride on the reply.
+    const offers = this.meetingOffers.slice(0, 3).map((text) => ({ text }));
     const reply = (text: string) => {
       this.meetingSay('myu', text);
-      return ok<SpaceTurnReply>({ role: 'assistant', content: text });
+      return ok<SpaceTurnReply>({ role: 'assistant', content: text, ...(offers.length ? { list_offers: offers } : {}) });
     };
     if (answered?.provenance?.detail === 'unsaid') {
       const r = reply('Kept with this meeting. Only you can see it.');
@@ -1288,10 +1469,28 @@ export class MockApi implements AskMyuApi {
           stance: 'In 4 of 6 emails Marcus wrote as the one deciding.',
           last_time: 'You last met Sep 25.',
           evidence_ids: ['email:e1'],
+          line: 'You owe him the headcount numbers, due Friday.',
+          line_kind: 'open',
+          changed: [],
+          open: [{ kind: 'you_owe', text: 'The headcount numbers', when: 'due Friday' }],
+          open_default: true,
+          open_count: 1,
         },
-        { relationship_id: null, name: 'Reid Park', thin: true, to_you: 'Nothing in your notes about Reid yet.', stands: null, works_best: null, you_owe: [], they_owe: [], stance: null, last_time: null, evidence_ids: [] },
+        { relationship_id: null, name: 'Reid Park', thin: true, to_you: 'Nothing in your notes about Reid yet.', stands: null, works_best: null, you_owe: [], they_owe: [], stance: null, last_time: null, evidence_ids: [], line: 'First meeting with you.', line_kind: 'who', changed: [], open: [], open_default: false, open_count: 0 },
       ],
-      room: { team: null, lines: [] },
+      room: { team: null, lines: [], summary: null },
+      // The prep as Myu's brief (2026-10-29): Myu's words first, the person's list under its question.
+      brief: {
+        paragraphs: ['Thursday with Marcus is about the headcount proposal. He asked for the numbers by Friday.', 'You owe him the numbers. I’d raise the reorg only if he does.'],
+        question: 'What do you want to cover?',
+        suggestions: [{ text: 'the headcount numbers', evidence_ids: ['email:e1'] }],
+      },
+      items: this.prepList(eventId).map((i) => ({ ...i })),
+      reading: false,
+      reading_failed: false,
+      state: 'before',
+      join_url: null,
+      notes: this.prepNotes[eventId] ?? null,
       before_you_go: {
         agenda: null,
         documents: [{ title: 'Headcount plan', url: 'https://docs.google.com/document/d/mock' }],
@@ -1316,7 +1515,13 @@ export class MockApi implements AskMyuApi {
     const offline = this.guard<{ prep?: PrepCardV2 }>();
     if (offline) return offline;
     this.prepReads.push(eventId);
-    if (eventId in this.meetingPreps) return ok({ prep: this.meetingPreps[eventId] as PrepCardV2 });
+    if (eventId in this.meetingPreps) {
+      const card = this.meetingPreps[eventId] as PrepCardV2;
+      // A card that is version 2 reads with its list and notes as they stand (a test's card seeds both).
+      if (!card || card.version !== 2) return ok({ prep: card });
+      const notes = this.prepNotes[eventId] ?? card.notes ?? null;
+      return ok({ prep: { ...card, items: this.prepList(eventId).map((i) => ({ ...i })), notes } });
+    }
     if (eventId === 'mock-event-unknown') return fail(404, 'not_found');
     this.meetingSeed(eventId);
     return ok({ prep: this.mockPrepCard(eventId) });
@@ -1772,11 +1977,108 @@ export class MockApi implements AskMyuApi {
     });
   }
 
+  /**
+   * The address a password sign-up leaves to confirm (2026-11-17), as `/account/create` answers it: 'sent' (the link
+   * went, with the server's sentence), 'not_sent' (no sentence), or null for an older server that says nothing.
+   */
+  signupConfirmation: 'sent' | 'not_sent' | null = 'sent';
+
   /** P9 — signup succeeds and mints a mock session, like the real flat shape. */
-  async createAccount(_email: string, _name: string, _password: string): Promise<ApiResponse<SignupResult>> {
+  /** While set, a password sign-up is refused for its address (409 `address_in_use`), as the server does when an account holds it. */
+  addressInUse = false;
+
+  async createAccount(email: string, _name: string, _password: string): Promise<ApiResponse<SignupResult>> {
     const offline = this.guard<SignupResult>();
     if (offline) return offline;
-    return ok({ autoken: `mock-session-${randomBase64(6)}`, account_id: 'mock-account' });
+    if (this.addressInUse) {
+      return { status: 409, ok: false, data: { success: false, error: 'address_in_use', message: "This address can't be used to make an account with a password. Sign in by mail instead." } as SignupResult, error: 'address_in_use' };
+    }
+    const session = { autoken: `mock-session-${randomBase64(6)}`, account_id: 'mock-account' };
+    if (!this.signupConfirmation) return ok(session);
+    const sent = this.signupConfirmation === 'sent';
+    return ok({
+      ...session,
+      email,
+      email_confirmed: false,
+      email_confirmation: this.signupConfirmation,
+      ...(sent ? { email_message: `We sent a link to ${email}. Open it to confirm your address.` } : {}),
+    });
+  }
+
+  // ── an address held by a password account nobody confirmed (2026-11-17) ──
+  // As the server does it (HeldAddress): the link's redeem asks first (409, the link not used); five wrong passwords end
+  // the question (429, the held token gone); an ended token is 410; either answer lets the same link through.
+
+  /** While set, the link's redeem is asked about first. `stays`: still held after an answer (the question comes back). */
+  heldAddress: { email: string; password: string; stays?: boolean } | null = null;
+  /** The live held token and its wrong tries; null when there is no question (or it ended). */
+  heldToken: string | null = null;
+  private heldTries = 0;
+  /** Every link redeemed, in order: the redo after the question is one more. */
+  magicRedeems: string[] = [];
+  /** Every answer to the question, as sent. */
+  heldAnswers: Array<Record<string, string>> = [];
+
+  private heldAsk(email: string): Record<string, unknown> {
+    this.heldToken = `mock-held-${randomBase64(6)}`;
+    this.heldTries = 0;
+    return {
+      success: false,
+      error: 'address_held',
+      held_token: this.heldToken,
+      email,
+      message: "An account was made at this address with a password and never confirmed. If it's yours, enter that password to open it (that confirms it). If it isn't, start your own.",
+      choices: [
+        { id: 'password', label: 'Enter its password' },
+        { id: 'start_own', label: 'Start my own account' },
+      ],
+    };
+  }
+
+  async answerAddressHeld(body: Record<string, string>): Promise<ApiResponse<Record<string, unknown>>> {
+    const offline = this.guard<Record<string, unknown>>();
+    if (offline) return offline;
+    this.heldAnswers.push(body);
+    const refuse = (status: number, error: string, message: string, extra: Record<string, unknown> = {}): ApiResponse<Record<string, unknown>> => ({
+      status,
+      ok: false,
+      data: { success: false, error, message, ...extra },
+      error,
+    });
+    const held = this.heldAddress;
+    if (!held || !this.heldToken || body.held_token !== this.heldToken) return refuse(410, 'expired', 'This took too long. Sign in again from the start.');
+    const answered = (choice: string) => {
+      this.heldToken = null;
+      if (!held.stays) this.heldAddress = null;
+      return ok<Record<string, unknown>>({ success: true, choice, again_url: `http://localhost/api/auth/magic-link/validate?token=${encodeURIComponent(this.pendingMagicToken ?? '')}` });
+    };
+    if (body.choice === 'start_own') return answered('start_own');
+    if (body.choice !== 'password') return refuse(400, 'choice_unknown', '');
+    if (!body.password) return refuse(400, 'password_required', '');
+    if (body.password === held.password) return answered('password');
+    this.heldTries += 1;
+    if (this.heldTries >= 5) {
+      this.heldToken = null;
+      return refuse(429, 'too_many_attempts', 'Too many tries. Sign in again from the start.');
+    }
+    return refuse(401, 'wrong_password', "That password doesn't open it. Try again, or start your own account.", { tries_left: 5 - this.heldTries });
+  }
+
+  /** The account's own address is confirmed (`/account/get`); null leaves the field out, as an older server does. */
+  accountEmailConfirmed: boolean | null = false;
+  /** Every `/account/emails/resend`, as sent; `resendFails` answers 503 "not_sent", as the server does when the mail cannot go. */
+  resends: string[] = [];
+  resendFails = false;
+
+  async getAccount(): Promise<ApiResponse<AccountInfo>> {
+    const offline = this.guard<AccountInfo>();
+    if (offline) return offline;
+    const own = this.mockEmails.find((e) => e.is_primary === true);
+    return ok({
+      account_id: 'mock-account',
+      email: typeof own?.email === 'string' ? own.email : null,
+      ...(this.accountEmailConfirmed === null ? {} : { email_confirmed: this.accountEmailConfirmed }),
+    });
   }
 
   async createPluginToken(_label: string): Promise<ApiResponse<{ token?: string; token_id?: string }>> {
@@ -1795,11 +2097,22 @@ export class MockApi implements AskMyuApi {
     return ok({ expires_in_minutes: 15 });
   }
 
+  /** A link token the mock has "mailed", as `requestMagicLink` does (tests start a sign-in from it). */
+  mailMagicLink(): string {
+    this.pendingMagicToken = `mock-magic-${randomBase64(6)}`;
+    return this.pendingMagicToken;
+  }
+
   async validateMagicLink(token: string): Promise<ApiResponse<MagicLinkSession>> {
     const offline = this.guard<MagicLinkSession>();
     if (offline) return offline;
+    this.magicRedeems.push(token);
     if (!this.pendingMagicToken || token !== this.pendingMagicToken) {
       return fail(404, 'token_not_found');
+    }
+    // A held address is asked about BEFORE the link is used (2026-11-17): the same link goes through after the answer.
+    if (this.heldAddress) {
+      return { status: 409, ok: false, data: this.heldAsk(this.heldAddress.email), error: 'address_held' };
     }
     this.pendingMagicToken = null; // single use, like the real thing
     return ok({
@@ -1997,8 +2310,13 @@ export class MockApi implements AskMyuApi {
     return ok({});
   }
 
-  async resendAccountEmail(_email: string): Promise<ApiResponse> {
-    return ok({});
+  async resendAccountEmail(email: string): Promise<ApiResponse> {
+    this.resends.push(email);
+    const own = this.mockEmails.find((e) => e.is_primary === true)?.email === email && this.accountEmailConfirmed === false;
+    if (!own) return ok({});
+    // The account's own address, not yet confirmed (2026-11-17): a new link, or 503 "not_sent" when it cannot go.
+    if (this.resendFails) return { status: 503, ok: false, data: { success: false, email_confirmation: 'not_sent' }, error: 'http_503' };
+    return ok({ success: true, email_confirmation: 'sent', email_message: `We sent a link to ${email}. Open it to confirm your address.` });
   }
 
   async removeAccountEmail(email: string): Promise<ApiResponse> {
@@ -2033,7 +2351,27 @@ export class MockApi implements AskMyuApi {
     return ok({});
   }
 
-  async mergeRelationships(): Promise<ApiResponse<{ success?: boolean }>> { return this.guard<{ success?: boolean }>() ?? ok({ success: true }); }
+  /** "Same person" (2026-11-15): what was asked, in order, and what the server answers (the default says how many moved, with an undo). */
+  samePersonCalls: Array<{ source_id: string; target_id: string }> = [];
+  samePersonReply: IdentityChangeResult | null = null;
+  async samePerson(sourceId: string, targetId: string): Promise<ApiResponse<IdentityChangeResult>> {
+    const offline = this.guard<IdentityChangeResult>();
+    if (offline) return offline;
+    this.samePersonCalls.push({ source_id: sourceId, target_id: targetId });
+    return ok(this.samePersonReply ?? { success: true, op: 'merge', moved: 5, move_id: 'mv-1', said: 'Now one person. 5 things moved to Marcus Webb.' });
+  }
+  /** Undo (2026-11-15): the move ids asked to be put back, in order. */
+  undoCalls: string[] = [];
+  undoReply: UndoResult | null = null;
+  /** The server's 409 for an undo, when a test sets it: `already_undone`, or `changed_since` (then nothing changes). */
+  undoRefusal: string | null = null;
+  async undoPersonChange(moveId: string): Promise<ApiResponse<UndoResult>> {
+    const offline = this.guard<UndoResult>();
+    if (offline) return offline;
+    this.undoCalls.push(moveId);
+    if (this.undoRefusal) return fail<UndoResult>(409, this.undoRefusal);
+    return ok(this.undoReply ?? { success: true, moved_back: 5, kind: 'merge' });
+  }
   async markRelationshipAsSelf(): Promise<ApiResponse<{ success?: boolean }>> { return this.guard<{ success?: boolean }>() ?? ok({ success: true }); }
 
   async archiveRelationship(_id: string, _action: 'archive' | 'unarchive'): Promise<ApiResponse> {

@@ -1195,7 +1195,7 @@ const COMPONENT_FIXTURES: Record<string, Fx> = {
   as: { type: 'circle_pack', data: { title: 'Clusters', nodes: [{ id: 'r-4', label: 'Dana Ortiz', value: 9, group: 'platform' }], groups: [{ id: 'platform', label: 'Platform' }] }, expect: /\*\*Platform\*\*\n- \[\[Dana Ortiz\]\] \(9\)/ },
   at: { type: 'hierarchy', data: { title: 'Reporting', root: { id: 'you', label: 'You', children: [{ id: 'r-1', label: 'Marcus Webb', health_tier: 'at_risk', children: [{ id: 'r-4', label: 'Dana Ortiz' }] }] } }, expect: /- You\n  - Marcus Webb \*\(needs some care\)\*\n    - Dana Ortiz/ },
   au: { type: 'matrix_view', data: { title: 'Who talks', entities: [{ id: 'r-1', label: 'Marcus' }, { id: 'r-4', label: 'Dana' }], cells: [{ row_id: 'r-1', col_id: 'r-4', value: 14, label: 'weekly' }], value_label: 'messages' }, expect: /\| messages \| Marcus \| Dana \|[\s\S]*\| \*\*Marcus\*\* \|  \| 14 \(weekly\) \|/ },
-  av: { type: 'venn_diagram', data: { title: 'Overlap', sets: [{ id: 'a', label: 'Platform', size: 6 }, { id: 'b', label: 'Hiring', size: 4 }], intersections: [{ sets: ['a', 'b'], size: 2, members: [{ id: 'r-4', label: 'Dana Ortiz' }] }] }, expect: /- \*\*Platform ∩ Hiring\*\* — 2: Dana Ortiz/ },
+  av: { type: 'venn_diagram', data: { title: 'Overlap', sets: [{ id: 'a', label: 'Platform', size: 6 }, { id: 'b', label: 'Hiring', size: 4 }], intersections: [{ sets: ['a', 'b'], size: 2, members: [{ id: 'r-4', label: 'Dana Ortiz' }] }] }, expect: /- \*\*In both\*\* — 2: Dana Ortiz/ },
   aw: { type: 'card_section', data: { entity_type: 'person', entity_id: 'r-1', section_type: 'narrative', section_title: 'How things are', section_data: { text: 'The quiet has a shape.' } }, expect: /How things are\n\nThe quiet has a shape\./ },
   ax: { type: 'container', variant: 'cluster', data: { label: 'Platform', child_ids: [], defining_characteristic: 'all report to Marcus', risk_label: 'single point of failure' }, expect: /Platform/ },
 };
@@ -1745,7 +1745,7 @@ test('notes — company is a QUOTED wikilink in person frontmatter; people with 
 
 // ── person actions: merge, this is me ───────────────────────────────────────
 
-test('person actions — merge candidates follow the web\'s rule; the wire is the web\'s; the confirms say what happens', async () => {
+test('person actions — "Same person" candidates follow the web\'s rule; the wire is the web\'s; the confirms say what happens', async () => {
   const { mergeCandidates, PERSON_ACTION_COPY } = await import('../src/views/personActions');
   const { PersonActionConfirmModal } = await import('../src/views/PersonActionConfirmModal');
   const { Api } = await import('../src/transport/api');
@@ -1759,10 +1759,13 @@ test('person actions — merge candidates follow the web\'s rule; the wire is th
 
   const posts: Array<[string, unknown]> = [];
   const api = new Api({ get: async () => ({ ok: true, status: 200, data: {} }), post: async (path: string, body: unknown) => { posts.push([path, body]); return { ok: true, status: 200, data: {} }; } } as never);
-  await api.mergeRelationships('p2', 'p1');
+  await api.samePerson('p2', 'p1');
+  await api.undoPersonChange('mv-1');
   await api.markRelationshipAsSelf('p9');
   assert.deepEqual(posts, [
-    ['/v2/relationships/merge', { source_id: 'p2', target_id: 'p1', reason: 'user_initiated_merge' }],
+    // "Same person" (2026-11-15): the full move with its count and an undo, as the web's picker calls it.
+    ['/relationships/merge', { source_id: 'p2', target_id: 'p1', action: 'confirm' }],
+    ['/myu/person/undo', { move_id: 'mv-1' }],
     ['/experiments/relationships/mark-as-self', { relationship_id: 'p9' }],
   ]);
 
@@ -1773,9 +1776,9 @@ test('person actions — merge candidates follow the web\'s rule; the wire is th
   assert.match(text, /added to your own profile/, 'says what happens: the person folds into the self');
   assert.ok(!/not folded|not yet recognised/.test(text), 'the pre-fix disclaimer is gone (backend fix deployed, operator 2026-08-29)');
   assert.ok(await (m.contentEl as unknown as FakeEl).click('Yes, that\u2019s me'));
-  const m2 = new PersonActionConfirmModal({} as never, PERSON_ACTION_COPY.merge('Marcus W.', 'Marcus Webb'), (y) => answers.push(y)); m2.open(); m2.close();
+  const m2 = new PersonActionConfirmModal({} as never, PERSON_ACTION_COPY.samePerson('Marcus W.', 'Marcus Webb'), (y) => answers.push(y)); m2.open(); m2.close();
   assert.deepEqual(answers, [true, false], 'dismissing a confirm is a no, once');
-  assert.match(PERSON_ACTION_COPY.merge('A', 'B').body, /goes to the trash/, 'the vault consequence is named');
+  assert.match(PERSON_ACTION_COPY.samePerson('A', 'B', { vaultNotes: true }).note ?? '', /goes to the trash/, 'the vault consequence is named when Myu keeps notes');
 });
 
 
@@ -3377,4 +3380,42 @@ test('sync — two overlapping full sweeps are one: the ambient ratchet cannot s
   });
   await Promise.all([svc.materializeAll(), svc.materializeAll(), svc.refreshAmbient()]);
   assert.equal(sweeps, 1, 'one feed read for three overlapping asks');
+});
+
+test('a chart says where its numbers came from, as the server words it (2026-10-28)', async () => {
+  const { buildCompositionMarkdown } = await import('../src/vault/myuFiles');
+  const chart = (id: string, source: string) => ({
+    id,
+    type: 'chart',
+    label: 'Hours in meetings',
+    data: { recharts_config: { type: 'bar', x_key: 'week', y_key: 'hours', data: [{ week: 'Week of 6 Oct', hours: 9 }] }, data_source: source },
+  });
+  const md = buildCompositionMarkdown({ id: 'c', components: [chart('a', "My rough split from what's public, not a measured number."), chart('b', 'Your calendar: accepted meetings, all-day events left out')] });
+  assert.ok(md.includes("*My rough split from what's public, not a measured number.*"), md);
+  assert.ok(md.includes('*Your calendar: accepted meetings, all-day events left out.*'), 'with its full stop');
+  assert.ok(!/source:/i.test(md), 'the sentence alone, with no label before it');
+});
+
+test('a heatmap and a box plot become tables in the note (2026-10-28)', async () => {
+  const { buildCompositionMarkdown } = await import('../src/vault/myuFiles');
+  const md = buildCompositionMarkdown({
+    id: 'c',
+    components: [
+      { id: 'h', type: 'chart', label: 'Meetings by hour', data: { recharts_config: { type: 'heatmap', cells: [{ row: 'Mon', column: '9am', value: 2 }, { row: 'Tue', column: '10am', value: 1 }] }, fallback_text: 'Most on Monday at 9am.' } },
+      { id: 'b', type: 'chart', label: '1:1 length', data: { recharts_config: { type: 'box_plot', unit: 'min', groups: [{ label: '1:1s', min: 15, q1: 25, median: 30, q3: 35, max: 50, n: 42 }] } } },
+    ],
+  });
+  assert.ok(md.includes('|  | 9am | 10am |') && md.includes('| Mon | 2 |  |') && md.includes('| Tue |  | 1 |'), md);
+  assert.ok(md.includes('| | Lowest | Lower quarter | Middle | Upper quarter | Highest | Values |'.replace('| |', '|  |')), md);
+  assert.ok(md.includes('| 1:1s | 15 min | 25 min | 30 min | 35 min | 50 min | 42 |'), md);
+  assert.ok(md.includes('Most on Monday at 9am.'), 'its words under it');
+});
+
+
+test('a Venn overlap in words, as the web says it; where it came from under a diagram and a Venn (2026-10-30)', async () => {
+  const { vennOverlapLabel } = await import('../src/vault/myuFiles');
+  assert.equal(vennOverlapLabel('', ['Platform', 'Hiring'], 2), 'In both');
+  assert.equal(vennOverlapLabel('', ['Migration', 'Hiring', 'Launch'], 3), 'In all three');
+  assert.equal(vennOverlapLabel('', ['Migration', 'Hiring'], 3), 'In Migration and Hiring');
+  assert.equal(vennOverlapLabel('On both teams', ['Platform', 'Hiring'], 2), 'On both teams');
 });

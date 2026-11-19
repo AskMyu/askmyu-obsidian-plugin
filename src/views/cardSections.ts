@@ -21,15 +21,31 @@
 
 import { timelineSourceWords, timelineWhen } from '../cardTimeline';
 import { energyMentionsWords, energyRows, patternInstanceText, patternInstanceWhen, predictionScoreShown, weatherName } from '../selfCard';
+import { DEVELOPMENT_WORDS, asksForHeading, roleAskRows, skillRow, targetHeading, workShapingRows, type DevelopmentTarget, type RoleAskItem, type RoleAsks, type SkillShown, type WorkShapingLine } from '../developmentReadings';
 import { cardDayWords } from '../cardDays';
+import { betweenRow, olderLine } from '../meetingPost';
+import type { BetweenRow } from '../wire';
 
 export interface SectionBlock {
-  kind: 'narrative' | 'row';
+  /** `older` (2026-10-30): a folded line ("+ 4 older ▸ past, from January to March") over its `children`. */
+  kind: 'narrative' | 'row' | 'older';
   text: string;
   /** Mono-prefix (date, intensity, count) rendered in the row's time slot. */
   meta?: string;
   /** Provenance, when the item carries it — the web's source icon → SourceDetailModal. */
   source?: { type: string; id: string };
+  /** Between you (2026-10-30): the row's label ("Reid owes"), its source and meeting under it, its date on the right. */
+  label?: string;
+  sub?: string;
+  right?: string;
+  children?: SectionBlock[];
+}
+
+/** A Between you row as a block: the label, the words, the source and meeting under them, the date or age on the right. */
+function betweenBlock(r: BetweenRow, first: string): SectionBlock | null {
+  const b = betweenRow(r, first);
+  if (!b.text) return null;
+  return { kind: 'row', text: b.text, label: b.label, ...(b.sub ? { sub: b.sub } : {}), ...(b.right ? { right: b.right } : {}) };
 }
 
 /**
@@ -111,16 +127,39 @@ export function normalizeSection(raw: LooseSection): LooseSection {
   if (rows.length > 0) out.items = rows;
 
   // The structural shapes pass straight through for the degrade renderers.
-  for (const key of ['dimensions', 'entries', 'events', 'voiced_narrative', 'patterns', 'predictions', 'top_prediction', 'placeholder_text']) {
+  // 2026-10-29: the self card's development sections (`lines`; `skills`, `asks_for`, `next_roles`, `target`,
+  // `waiting_for`; `window_days`).
+  // 2026-10-30: Between you's ledger rows and its older fold (`rows`, `older`).
+  for (const key of ['dimensions', 'entries', 'events', 'voiced_narrative', 'patterns', 'predictions', 'top_prediction', 'placeholder_text', 'lines', 'skills', 'asks_for', 'next_roles', 'target', 'waiting_for', 'window_days', 'rows', 'older']) {
     if (data[key] !== undefined) (out as Record<string, unknown>)[key] = data[key];
   }
   return out;
 }
 
-/** Everything the pane can honestly show for this section. Empty = disclose. */
-export function sectionBlocks(rawSection: LooseSection): SectionBlock[] {
+/**
+ * Everything the pane can honestly show for this section. Empty = disclose. `firstName`: the card's person, for the
+ * rows that name them ("Reid owes").
+ */
+export function sectionBlocks(rawSection: LooseSection, ctx: { firstName?: string } = {}): SectionBlock[] {
   const section = normalizeSection(rawSection);
   const blocks: SectionBlock[] = [];
+
+  // Between you (2026-10-30, BRIEF_WEB_MEETING_POST §3): the one ledger's rows, newest first, each with its source and
+  // the meeting it came from; then the older ones, folded under one line that says what they are.
+  if (section.section_type === 'commitments_between' && Array.isArray(section.rows)) {
+    const first = ctx.firstName ?? '';
+    for (const r of section.rows as BetweenRow[]) {
+      const b = betweenBlock(r, first);
+      if (b) blocks.push(b);
+    }
+    const older = section.older && typeof section.older === 'object' ? (section.older as { count?: number; note?: string | null; rows?: BetweenRow[] }) : null;
+    const words = olderLine(older);
+    if (words) {
+      const children = (Array.isArray(older?.rows) ? older.rows : []).map((r) => betweenBlock(r, first)).filter((b): b is SectionBlock => !!b);
+      blocks.push({ kind: 'older', text: words, children });
+    }
+    return blocks;
+  }
 
   if (typeof section.narrative === 'string' && section.narrative.trim()) {
     blocks.push({ kind: 'narrative', text: section.narrative });
@@ -156,6 +195,52 @@ export function sectionBlocks(rawSection: LooseSection): SectionBlock[] {
         .join(' · ');
       blocks.push({ kind: 'row', text: r.name, meta: meta || undefined });
     }
+  }
+
+  // How you shape your work (2026-10-29): each line, its material beside it, "new" on a change; the window last.
+  if (section.section_type === 'work_shaping') {
+    for (const r of workShapingRows(Array.isArray(section.lines) ? (section.lines as WorkShapingLine[]) : [])) {
+      blocks.push({ kind: 'row', text: r.isNew ? `${r.text} (${DEVELOPMENT_WORDS.newMark})` : r.text, meta: r.material || undefined });
+    }
+    if (typeof section.window_days === 'number' && section.window_days > 0 && blocks.length) blocks.push({ kind: 'row', text: DEVELOPMENT_WORDS.window(section.window_days) });
+  }
+
+  // Skills your work shows (2026-10-29): each skill with its level, days, material and last day; what the role asks for
+  // ("hasn't come up in what you've written" for one not seen; never "gap", "missing", "weak", "lacking"); the roles
+  // people move to; the server's waiting line last.
+  if (section.section_type === 'skills_shown') {
+    for (const sk of Array.isArray(section.skills) ? (section.skills as SkillShown[]) : []) {
+      const row = skillRow(sk);
+      if (row) blocks.push({ kind: 'row', text: row.name, meta: row.meta || undefined });
+    }
+    const asks = section.asks_for && typeof section.asks_for === 'object' ? (section.asks_for as RoleAsks) : null;
+    const head = asks ? asksForHeading(asks) : null;
+    const askRows = asks ? roleAskRows(asks.items) : [];
+    if (head && askRows.length) {
+      blocks.push({ kind: 'narrative', text: head });
+      for (const r of askRows) blocks.push({ kind: 'row', text: r.name, meta: r.level });
+    }
+    // The role the person is aiming for, with its own items, in place of the next roles.
+    const target = section.target && typeof section.target === 'object' ? (section.target as DevelopmentTarget) : null;
+    const tHead = target ? targetHeading(target) : null;
+    const tRows = target ? roleAskRows(target.items) : [];
+    if (tHead && tRows.length) {
+      blocks.push({ kind: 'narrative', text: tHead });
+      for (const r of tRows) blocks.push({ kind: 'row', text: r.name, meta: r.level });
+    }
+    const next = (Array.isArray(section.next_roles) ? (section.next_roles as Array<{ role_title?: string; items?: RoleAskItem[] }>) : [])
+      .map((r) => ({ title: (r.role_title ?? '').trim(), items: roleAskRows(r.items) }))
+      .filter((r) => r.title);
+    if (next.length) {
+      blocks.push({ kind: 'narrative', text: DEVELOPMENT_WORDS.nextRoles });
+      for (const r of next) {
+        blocks.push({ kind: 'row', text: r.title });
+        for (const i of r.items) blocks.push({ kind: 'row', text: `↳ ${i.name}`, meta: i.level });
+      }
+    }
+    if (typeof section.window_days === 'number' && section.window_days > 0 && blocks.length) blocks.push({ kind: 'row', text: DEVELOPMENT_WORDS.window(section.window_days) });
+    const waiting = typeof section.waiting_for === 'string' ? section.waiting_for.trim() : '';
+    if (waiting) blocks.push({ kind: 'narrative', text: waiting });
   }
 
   // Patterns (2026-10-05): the name and the sentence, then each instance by the day and its words; never a confidence, a

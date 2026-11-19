@@ -18,11 +18,12 @@
  * normal approval/recovery flow instead of minting a second mDEK.
  */
 
+import { ADDRESS_IN_USE_WORDS } from '../addressInUse';
 import { App, Modal, Setting } from 'obsidian';
 import type AskMyuPlugin from '../main';
 import { ApprovalModal } from './ApprovalModal';
 import { signupDoors } from '../devHooks';
-import { notifyError } from '../notify';
+import { notifyError, notifyStatus } from '../notify';
 import { appendBrand } from '../brand';
 import { parseTermsInfo, termsLinks, TERMS_FALLBACK_URLS, type TermsInfo } from '../terms';
 
@@ -39,7 +40,7 @@ export class SignupModal extends Modal {
   private name = '';
   private password = '';
   private pasted = '';
-  private stage: 'form' | 'sent' = 'form';
+  private stage: 'form' | 'sent' | 'in_use' = 'form';
   private showPassword = false;
   /** Which door the 'sent' stage is waiting on — tunes its copy. */
   private sentVia: 'email' | 'google' = 'email';
@@ -169,6 +170,10 @@ export class SignupModal extends Modal {
 
     if (this.stage === 'sent') {
       this.renderSent();
+      return;
+    }
+    if (this.stage === 'in_use') {
+      this.renderInUse();
       return;
     }
 
@@ -340,6 +345,21 @@ export class SignupModal extends Modal {
       );
   }
 
+  /** The sign-up refused for its address (2026-11-17): the server's sentence; the mailed sign-in; back to the start. */
+  private renderInUse(): void {
+    const { contentEl } = this;
+    appendBrand(contentEl);
+    contentEl.createEl('p', { cls: 'myu-prose', text: this.plugin.unlock.signupRefusal() ?? ADDRESS_IN_USE_WORDS.said });
+    new Setting(contentEl)
+      .addButton((b) =>
+        b.setButtonText(ADDRESS_IN_USE_WORDS.back).onClick(() => {
+          this.stage = 'form';
+          this.render();
+        }),
+      )
+      .addButton((b) => b.setButtonText(ADDRESS_IN_USE_WORDS.mailLink).setCta().onClick(() => void this.submitMagic(b.buttonEl)));
+  }
+
   // ── doors ─────────────────────────────────────────────────────────────────
 
   private async submitMagic(button: HTMLButtonElement): Promise<void> {
@@ -395,12 +415,19 @@ export class SignupModal extends Modal {
       this.close();
       this.onFinished();
       this.plugin.openGenesisCeremony();
+      this.sayAboutTheAddress();
     } else if (outcome === 'existing_account') {
       // Same hand-off the sent-watcher gives the link doors: welcome-back goes
       // STRAIGHT to approve/recovery — a toast pointing at settings is a dead
       // end (parity fix, 2026-08-25).
       this.close();
       new ApprovalModal(this.app, this.plugin.unlock, () => this.onFinished()).open();
+      this.sayAboutTheAddress();
+    } else if (outcome === 'address_in_use') {
+      // Nothing was made (2026-11-17): the server's sentence, its mailed sign-in instead, and the way back.
+      this.password = '';
+      this.stage = 'in_use';
+      this.render();
     } else if (outcome === 'email_not_allowed') {
       notifyError('askMyu is in closed beta. This email is not on the list yet. Ask for an invite.');
       button.disabled = false;
@@ -410,6 +437,16 @@ export class SignupModal extends Modal {
       button.disabled = false;
       button.textContent = 'Create my account';
     }
+  }
+
+  /**
+   * A password does not confirm the address (2026-11-17): the server mails a link to it, and until it is confirmed
+   * invitations and connections there wait. Said once, as the account is made, over the window that opens next; nothing
+   * when the server does not say (an older one).
+   */
+  private sayAboutTheAddress(): void {
+    const said = this.plugin.unlock.takeSignupWords();
+    if (said) notifyStatus(said, 12000);
   }
 
 }

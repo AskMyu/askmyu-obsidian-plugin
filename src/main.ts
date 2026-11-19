@@ -68,12 +68,16 @@ import { parseTermsState, termsStateFrom428, termsStanding, termsLinks, TERMS_FA
 import { revealSetting } from './views/revealSetting';
 import { ConversationSaveModal } from './views/ConversationSaveModal';
 import { DEFAULT_SETTINGS, normalizeSettings, type AskMyuSettings } from './settings';
-import { notifyLive, notifyError, notifyStatus } from './notify';
+import { notifyDone, notifyLive, notifyError, notifyStatus } from './notify';
+import { samePerson, undoAction, type PersonMoveDeps, type SamePersonDeps } from './samePerson';
 import { MaterializationService } from './vault/MaterializationService';
 import { MyuFolderWatcher } from './capture/MyuFolderWatcher';
 import { MaterializeConsentModal } from './views/MaterializeConsentModal';
 import { OnboardingModal } from './views/OnboardingModal';
 import { SetupRecoveryModal } from './views/SetupRecoveryModal';
+import { SignupModal } from './views/SignupModal';
+import { AddressHeldModal } from './views/AddressHeldModal';
+import { magicSignin } from './addressHeldSignin';
 import { RefreshGate } from './refreshGate';
 import { noteBlock, selectionBlock } from './pastedText';
 import { answersInConversation, meetingQuestionAt } from './lineAnswers';
@@ -462,7 +466,7 @@ export default class AskMyuPlugin extends Plugin {
         const person = this.personOfNote(file);
         if (person) {
           menu.addSeparator();
-          menu.addItem((i) => i.setTitle(`Merge ${person.name} into\u2026`).setIcon('git-merge').onClick(() => this.mergePerson(person)));
+          menu.addItem((i) => i.setTitle(PERSON_ACTION_COPY.samePersonAs).setIcon('users').onClick(() => this.mergePerson(person)));
           menu.addItem((i) => i.setTitle(`${person.name} is me`).setIcon('user-check').onClick(() => this.markPersonAsSelf(person)));
           menu.addItem((i) => i.setTitle(`Archive ${person.name}`).setIcon('archive').onClick(() => void this.archivePerson(person)));
         }
@@ -518,9 +522,11 @@ export default class AskMyuPlugin extends Plugin {
       stamp('myu');
       void this.openToday();
     });
+    // A meeting's page from a note (a day's schedule, a record's note): the page, and its conversation behind it in the
+    // chat pane, as Today's Open ▸ does (2026-10-30).
     this.registerObsidianProtocolHandler('myu-prep', (params) => {
       stamp('myu-prep');
-      if (typeof params.event === 'string' && params.event) void this.openPrep(params.event);
+      if (typeof params.event === 'string' && params.event) void this.openPrep(params.event, { label: typeof params.title === 'string' ? params.title : '' });
     });
     this.registerObsidianProtocolHandler('myu-connected', () => {
       stamp('myu-connected');
@@ -591,6 +597,12 @@ export default class AskMyuPlugin extends Plugin {
     // read again soon, in case a push was missed (only while the server has the door).
     this.sse.subscribe('menu_marks', (payload) => this.menuMarks.take(payload));
     for (const type of ['line_new', 'line_updated']) this.sse.subscribe(type, () => this.menuMarks.lineChanged());
+    // The meeting's page reads again while Myu is still reading the meeting (2026-10-29): its words land as a line update.
+    this.sse.subscribe('line_updated', () => this.prepView()?.lineUpdated());
+    // A question answered elsewhere (2026-11-15: under People, in the terminal, by Myu's own tie) leaves Today without a reload.
+    this.sse.subscribe('line_updated', (payload) => {
+      for (const leaf of this.app.workspace.getLeavesOfType(TODAY_VIEW_TYPE)) if (leaf.view instanceof TodayView) void leaf.view.lineUpdated(payload.line_id);
+    });
     // Space mode (R14): a new ask or a readback on the server → the open space conversation reads
     // again (one ask at a time means the next ask arrives this way after a button elsewhere).
     for (const type of ['line_new', 'line_updated', 'space.retro.updated']) {
@@ -935,7 +947,8 @@ export default class AskMyuPlugin extends Plugin {
 
     // The same person actions from the keyboard, on the active note.
     for (const [id, name, run] of [
-      ['merge-person', 'Merge this person into\u2026', (p: PersonRef) => this.mergePerson(p)],
+      // The id stays as it was, so a hotkey set on it keeps working; the words are "Same person as…" (2026-11-15).
+      ['merge-person', PERSON_ACTION_COPY.samePersonAs, (p: PersonRef) => this.mergePerson(p)],
       ['this-is-me', 'This person is me', (p: PersonRef) => this.markPersonAsSelf(p)],
       ['archive-person', 'Archive this person', (p: PersonRef) => void this.archivePerson(p)],
     ] as const) {
@@ -1392,21 +1405,59 @@ export default class AskMyuPlugin extends Plugin {
     this.helpQueue = res?.ok ? (res.data?.queue ?? []) : [];
   }
 
-  /** A merge the Help Myu queue proposed — same confirm, same wire as the picker path. */
-  mergePersonInto(source: PersonRef, target: PersonRef): void {
-    new PersonActionConfirmModal(this.app, PERSON_ACTION_COPY.merge(source.name, target.name), (yes) => {
-      if (!yes) return;
-      void (async () => {
-        const res = await this.backend.mergeRelationships(source.id, target.id);
-        if (!res.ok) { notifyError(`Couldn\u2019t merge: ${res.error ?? res.data?.message ?? res.status}`); return; }
-        await this.materializer.retirePersonNote(source.id);
-        notifyStatus(`Merged ${source.name} into ${target.name}.`);
+  /**
+   * "Same person" from the Help Myu row (2026-11-15): the row itself asks "Are A and B the same person?", so its "Same person" goes
+   * straight to the same door as the picker's, as the web's help row does; the server's sentence and Undo follow.
+   */
+  async samePersonFromHelp(source: PersonRef, target: PersonRef): Promise<boolean> {
+    return samePerson(
+      this.samePersonDeps(source, () => {
         this.helpQueue = this.helpQueue.filter((i) => !(i.item_type === 'merge_candidate' && i.source.relationship_id === source.id));
-        void this.refreshToday({ now: true });
         for (const leaf of this.app.workspace.getLeavesOfType(HELP_VIEW_TYPE)) if (leaf.view instanceof HelpMyuView) leaf.view.render();
+      }),
+      source.id,
+      target.id,
+    );
+  }
+
+  /**
+   * Undo beside an answer's sentence (2026-11-15 follow-up): "Done. 3 things moved to Mira Okonjo." after "Yes" or "Choose who" on
+   * Myu's question, "Taken off. 1 thing went back to waiting." after "Not her?". Pressed, it puts the move back and says what it
+   * came to ("Put back as it was.", or why nothing was); Today reads again.
+   */
+  offerUndo(said: string, moveId: string): void {
+    notifyDone(said, undoAction(this.undoDeps(), moveId));
+  }
+
+  /** What an undo shows, and what is read again after it. */
+  private undoDeps(): PersonMoveDeps {
+    return {
+      backend: this.backend,
+      done: (said, undo) => notifyDone(said, undo),
+      failed: (said) => notifyError(said),
+      undone: () => {
+        void this.refreshToday({ now: true });
         void this.materializer.materializeAll();
-      })();
-    }).open();
+      },
+    };
+  }
+
+  /**
+   * What "Same person" shows and does in the vault (2026-11-15): the server's sentence with Undo in a notice, "That did not go
+   * through. Try again." when it did not; after it, the note of the one who moved goes to the trash and Today and Myu's folder read
+   * again; after an undo, Today and Myu's folder read again.
+   */
+  private samePersonDeps(source: PersonRef, after?: () => void): SamePersonDeps {
+    return {
+      ...this.undoDeps(),
+      backend: this.backend,
+      after: async () => {
+        await this.materializer.retirePersonNote(source.id).catch(() => false);
+        after?.();
+        void this.refreshToday({ now: true });
+        void this.materializer.materializeAll();
+      },
+    };
   }
 
   /** The chat pane, if one is open anywhere. */
@@ -1506,8 +1557,13 @@ export default class AskMyuPlugin extends Plugin {
     if (view instanceof CanvasView) await view.showComposition(compositionId);
   }
 
-  /** The meeting's card opens in the right sidebar; one leaf, reused, like cards. */
-  async openPrep(eventId: string): Promise<void> {
+  /**
+   * The meeting's page opens in the right sidebar; one leaf, reused, like cards. From a Today row's Open ▸
+   * (2026-10-29, BRIEF_WEB_PREP_NOTES §3) the meeting's own conversation opens in the chat pane too, Myu first, and
+   * the page stays in front: the page has no chat of its own, and "Ask it in the chat" means that pane.
+   */
+  async openPrep(eventId: string, talk?: { label: string; occurrenceKey?: string }): Promise<void> {
+    if (talk) await this.loadMeetingConversation(eventId, talk.label, talk.occurrenceKey);
     const existing = this.app.workspace.getLeavesOfType(PREP_VIEW_TYPE);
     const leaf = existing[0] ?? this.app.workspace.getRightLeaf(false);
     if (!leaf) return;
@@ -1518,6 +1574,30 @@ export default class AskMyuPlugin extends Plugin {
 
     const view = leaf.view;
     if (view instanceof PrepView) await view.showMeeting(eventId);
+  }
+
+  /** The meeting's page, if one is open. */
+  prepView(): PrepView | null {
+    const view = this.app.workspace.getLeavesOfType(PREP_VIEW_TYPE)[0]?.view;
+    return view instanceof PrepView ? view : null;
+  }
+
+  /** A meeting's list changed outside its page (a Today row, an offer in the chat pane): the page reads again. */
+  prepListChanged(eventId: string | null): void {
+    this.prepView()?.listChanged(eventId);
+  }
+
+  /**
+   * The meeting's conversation loaded into the chat pane (one made when there is none) without bringing the pane
+   * forward: it is one tab away, on this meeting, when the person wants to ask Myu something.
+   */
+  private async loadMeetingConversation(eventId: string, label: string, occurrenceKey?: string): Promise<void> {
+    const existing = this.app.workspace.getLeavesOfType(CHAT_VIEW_TYPE);
+    const leaf = existing[0] ?? this.app.workspace.getRightLeaf(false);
+    if (!leaf) return;
+    if (!existing.length) await leaf.setViewState({ type: CHAT_VIEW_TYPE, active: false });
+    const view = leaf.view;
+    if (view instanceof ChatView) void view.openMeeting(eventId, label, occurrenceKey);
   }
 
   /**
@@ -1572,11 +1652,32 @@ export default class AskMyuPlugin extends Plugin {
     return this.settings.device_id;
   }
 
-  /** P9 — redeem an emailed sign-in token (protocol handler or pasted link). */
+  /**
+   * P9 — redeem an emailed sign-in token (protocol handler or pasted link). An address held by a password account nobody
+   * confirmed is asked about first (2026-11-17): one question, then the same link once more (`addressHeldSignin.ts`).
+   */
   async completeMagicSignup(token: string): Promise<void> {
     if (this.unlock.current === 'unlocked') return; // stale link, already in
     const deviceId = await this.ensureDeviceId();
-    const outcome = await this.unlock.completeMagicLink(token, deviceId);
+    await magicSignin(
+      {
+        redeem: (t) => this.unlock.completeMagicLink(t, deviceId),
+        ask: (held, answered) =>
+          new AddressHeldModal(this.app, {
+            held,
+            answer: (body) => this.backend.answerAddressHeld(body),
+            answered,
+            // Back to the start: the sign-in window, as Today's "Sign in" opens it.
+            back: () => new SignupModal(this.app, this, () => void this.refreshTodayNow(), 'signin').open(),
+          }).open(),
+        landed: (outcome) => this.magicLanded(outcome),
+      },
+      token,
+    );
+  }
+
+  /** Where a redeemed link landed, said or shown. */
+  private magicLanded(outcome: 'ceremony' | 'existing_account' | 'invalid' | 'error'): void {
     if (outcome === 'ceremony') {
       this.openGenesisCeremony();
     } else if (outcome === 'existing_account') {
@@ -2051,17 +2152,12 @@ export default class AskMyuPlugin extends Plugin {
     return { id: fm['myu-id'], name: file.basename };
   }
 
+  /** "Same person as…": pick who they really are, one yes, then the server's sentence with Undo (2026-11-15). */
   mergePerson(source: PersonRef): void {
     new MergeIntoModal(this.app, this, source.id, source.name, (target) => {
-      new PersonActionConfirmModal(this.app, PERSON_ACTION_COPY.merge(source.name, target.display_name), (yes) => {
-        if (!yes) return;
-        void (async () => {
-          const res = await this.backend.mergeRelationships(source.id, target.entity_id);
-          if (!res.ok) { notifyError(`Couldn\u2019t merge: ${res.error ?? res.data?.message ?? res.status}`); return; }
-          await this.materializer.retirePersonNote(source.id);
-          notifyStatus(`Merged ${source.name} into ${target.display_name}.`);
-          void this.materializer.materializeAll();
-        })();
+      const copy = PERSON_ACTION_COPY.samePerson(source.name, target.display_name, { vaultNotes: this.settings.materialize_consented });
+      new PersonActionConfirmModal(this.app, copy, (yes) => {
+        if (yes) void samePerson(this.samePersonDeps(source), source.id, target.entity_id);
       }).open();
     }).open();
   }

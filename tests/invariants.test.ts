@@ -353,6 +353,19 @@ test('chart snapshot — renders bar data deterministically, refuses what it can
   assert.equal(chartToSvg('X', undefined, '2026-08-20'), null, 'missing config declines');
 });
 
+test('chart snapshot — where the numbers came from goes under the picture (2026-10-28)', () => {
+  const cfg = { type: 'bar', data: [{ w: 'W31', n: 3 }, { w: 'W32', n: 5 }], x_key: 'w', y_key: 'n' };
+  const plain = chartToSvg('Hours', cfg, '2026-10-28')!;
+  const mark = chartToSvg('Hours', cfg, '2026-10-28', "My rough split from what's public, not a measured number.")!;
+  assert.ok(plain.includes('viewBox="0 0 360 220"') && !plain.includes('font-style="italic"'), 'no source, the picture as before');
+  assert.ok(mark.includes('viewBox="0 0 360 233"'), 'one line more');
+  assert.ok(mark.includes('My rough split from what&apos;s public, not a measured number.'), 'the sentence, as the server writes it');
+  const cal = chartToSvg('Hours', cfg, '2026-10-28', 'Your calendar: accepted meetings, all-day events left out')!;
+  assert.ok(cal.includes('Your calendar: accepted meetings, all-day events left out.'), 'with its full stop');
+  const long = chartToSvg('Hours', cfg, '2026-10-28', 'word '.repeat(60))!;
+  assert.ok(long.includes('viewBox="0 0 360 246"') && long.includes('…'), 'two lines at most');
+});
+
 test('recovery — generated phrase validates with the same machinery that consumes it', () => {
   const phrase = generatePhrase();
   assert.equal(phrase.split(' ').length, 12);
@@ -691,3 +704,15 @@ test('capture: a payload never carries pasted text; the Web Clipper mark goes be
   assert.throws(() => assertEncrypted(payload({ pasted_blocks: [{ id: 'p1', text: 'dear diary' }] } as Partial<EncryptedJournalPayload>)), PlaintextRefusedError);
   assert.doesNotThrow(() => assertEncrypted(payload({ web_clipping: true })));
 });
+
+test('chart snapshot — a heatmap and a box plot draw too (2026-10-28)', () => {
+  const hm = chartToSvg('Meetings by hour', { type: 'heatmap', cells: [{ row: 'Mon', column: '9am', value: 2 }, { row: 'Mon', column: '10am', value: 0 }, { row: 'Tue', column: '9am', value: 4 }] } as never, '2026-10-28', 'Your calendar: accepted meetings')!;
+  assert.ok(hm, 'a heatmap renders');
+  assert.equal((hm.match(/<rect/g) ?? []).length, 4, 'three squares with values and one empty');
+  assert.ok(hm.includes('fill="none"'), 'the square with no value is drawn empty');
+  assert.ok(hm.includes('snapshot · 2026-10-28') && hm.includes('Your calendar: accepted meetings.'), 'the snapshot date and the source');
+  const box = chartToSvg('1:1 length', { type: 'box_plot', groups: [{ label: '1:1s', min: 15, q1: 25, median: 30, q3: 35, max: 50, outliers: [70] }, { label: 'Team', min: 20, q1: 30, median: 40, q3: 50, max: 60 }] } as never, '2026-10-28')!;
+  assert.ok(box && (box.match(/<rect/g) ?? []).length === 2 && (box.match(/<circle/g) ?? []).length === 1, 'a box per group, the far-out value as a dot');
+  assert.equal(chartToSvg('Bad', { type: 'box_plot', groups: [{ label: 'x', min: 5, q1: 1, median: 2, q3: 3, max: 4 }] } as never, '2026-10-28'), null, 'a box plot that does not read');
+});
+

@@ -158,6 +158,21 @@ export interface PrepTopPart {
   text: string;
   items?: PrepItem[];
   evidence_ids: string[];
+  /** 2026-10-30: since last time as rows, from the last meeting's record and the ledger. */
+  meeting?: { event_id?: string | null; title?: string | null; at?: string | null; source?: string | null } | null;
+  rows?: SinceLastRow[];
+}
+
+/** A row of since last time: decided, or owed each way, with where it stands now (open, done with its proof, past). */
+export interface SinceLastRow {
+  kind: 'decided' | 'they_owe' | 'you_owe' | 'you_owed' | AnyOther;
+  text: string;
+  when?: string | null;
+  state?: 'open' | 'done' | 'past' | AnyOther | null;
+  proof?: { source?: string | null; at?: string | null } | null;
+  source?: string | null;
+  commitment_id?: string;
+  evidence_id?: string;
 }
 
 /** One block per person at the meeting (never the user). A thin person carries only `to_you` (the server's thin line). */
@@ -170,14 +185,46 @@ export interface PrepPerson {
   works_best: string | null;
   you_owe: string[];
   they_owe: string[];
+  /** 2026-11-10 (the check): what was decided between the two, and what the person was told, in force. */
+  decided?: import('../checkWords').CheckRecordRow[] | null;
+  told?: import('../checkWords').CheckRecordRow[] | null;
   stance: string | null;
   last_time: string | null;
   evidence_ids: string[];
+  /**
+   * 2026-10-29 (the prep as Myu's brief): the one useful line for this meeting (what changed, else what is open; who
+   * they are only for someone the person does not know yet), null for the name alone; the rows behind more ▾.
+   */
+  line?: string | null;
+  line_kind?: 'changed' | 'open' | 'who' | null;
+  changed?: PrepPersonChanged[];
+  open?: PrepPersonOpen[];
+  open_default?: boolean;
+  open_count?: number;
+}
+
+/** What moved since the last meeting with this person, with its source in words ("from your mail"). */
+export interface PrepPersonChanged {
+  text: string;
+  source?: string | null;
+  evidence_ids?: string[];
+}
+
+/** What is open between you: owed each way, or an open thread; `when` in words ("due Friday"). */
+export interface PrepPersonOpen {
+  kind: 'you_owe' | 'they_owe' | 'thread' | AnyOther;
+  text: string;
+  when?: string | null;
+  commitment_id?: string;
+  thread_id?: string;
+  evidence_ids?: string[];
 }
 
 export interface PrepRoom {
   team: { space_id: string; name: string } | null;
   lines: PrepItem[];
+  /** 2026-10-29: one line for a group meeting, who decides and who brings what; null when the structure is unknown. */
+  summary?: string | null;
 }
 
 /** A document as the calendar invite carries it: a name, sometimes a link. */
@@ -222,6 +269,8 @@ export interface PrepLineRef {
   typed?: string;
   /** 2026-10-04: the box's words for the typed answer, when the line sends them ("Type who they are to Hannah."). */
   typed_hint?: string;
+  /** 2026-10-29: the question's kind — want (the list's own question), reports_to, open; else the line's type. */
+  kind?: string;
 }
 
 export interface PrepArc extends PrepLineRef {
@@ -250,10 +299,252 @@ export interface PrepCardV2 {
   evidence: Record<string, PrepEvidence>;
   ask: PrepLineRef | null;
   arc: PrepArc | null;
+  /** 2026-10-29: Myu's brief, first on the page; the person's list under its question. */
+  brief?: PrepBrief | null;
+  /** The person's list for this meeting, in its order. */
+  items?: PrepListItem[];
+  /** The open is instant: the stored parts now, Myu's words when ready (read again while this is true). */
+  reading?: boolean;
+  reading_failed?: boolean;
+  /** before / now (ten minutes before the start until Done or the end plus thirty minutes) / after. */
+  state?: PrepState;
+  join_url?: string | null;
+  notes?: PrepNotes | null;
+  covered?: { done: number; total: number };
+  /** After the meeting: Myu's report, the action items it read in the notes, the reminder. */
+  after?: PrepAfter | null;
+  /** The series a recurring meeting belongs to: its past meetings (`GET /prep/history?event_series=`). */
+  event_series?: string | null;
+}
+
+export type PrepState = 'before' | 'now' | 'after';
+
+/** An item on the person's list (`/prep/items/*`); `carried_from` when it came over from the last meeting. */
+export interface PrepListItem {
+  item_id: string;
+  text: string;
+  done: boolean;
+  /** user / myu_offer / carried. */
+  source?: string;
+  carried_from?: { event_id?: string | null; date?: string | null } | null;
+  /** 2026-10-30: ticked by the person (`user`), or found in the record's words (`notes`). */
+  covered_by?: 'user' | 'notes' | AnyOther | null;
+  /** On the after page, an item with no tick: where its copy went ("Carried to 12 Nov · Drop" removes the copy). */
+  carried_to?: { item_id?: string | null; event_id?: string | null; date?: string | null } | null;
+  position?: number;
+  event_id?: string | null;
+  occurrence_key?: string | null;
+}
+
+export interface PrepSuggestion {
+  text: string;
+  evidence_ids?: string[];
+  /**
+   * After the meeting, where taking it puts it: the next meeting, else the person or series it waits for
+   * (`/prep/items/add` takes either); null when there is neither.
+   */
+  target?: { event_id?: string | null; occurrence_key?: string | null; relationship_id?: string | null; series_id?: string | null } | null;
+}
+
+export interface PrepBrief {
+  paragraphs: string[];
+  question?: string | null;
+  suggestions?: PrepSuggestion[];
+  evidence_ids?: string[];
+}
+
+export interface PrepNotes {
+  text: string;
+  updated_at?: number;
+}
+
+export interface PrepActionItem {
+  id: string;
+  /** "you", or the person's relationship id. */
+  owner: string;
+  owner_name?: string | null;
+  text: string;
+  when?: string | null;
+  source?: string | null;
+  status?: string;
+}
+
+export interface PrepReminder {
+  id: string;
+  text: string;
+  relationship_id?: string | null;
+  person?: string | null;
+  /** offered / accepted / declined. */
+  status?: string;
+}
+
+export interface PrepAfter {
+  done_at?: number | null;
+  report_failed?: boolean;
+  report?: { paragraphs: string[]; question?: string | null; suggestions?: PrepSuggestion[]; evidence_ids?: string[] } | null;
+  action_items?: PrepActionItem[];
+  reminders?: PrepReminder[];
+  items_written?: boolean;
+  /**
+   * 2026-10-30 (the post): the page is the meeting's record, whatever wrote it. What wrote it (one line each); what is
+   * yours (always open); the rest as counts until opened.
+   */
+  sources?: PostSource[];
+  /** The server's fixed line when nothing at all was written (no ticks, no notes, no record). */
+  nothing?: string | null;
+  /** The report is being written (a record or a tick came in, no report yet): the page says so and reads again. */
+  reading?: boolean;
+  yours?: { todo?: AfterItem[]; covered?: { done: number; total: number } } | null;
+  decided?: AfterDecided[];
+  owed?: AfterOwed[];
+  came_up?: Array<{ topic: string; share?: number | null }>;
+  room?: { count?: number; people?: Array<{ relationship_id?: string | null; name: string; turns?: number | null; talk_time?: number | null }> } | null;
+  notes?: PrepNotes | null;
+  counts?: { decided?: number; owed?: number; owed_by_others?: number; topics?: number; notes_lines?: number } | null;
+}
+
+/** What wrote the meeting's record: typed (the person's notes), google_drive (Gemini), fireflies, paste. */
+export interface PostSource {
+  kind: 'typed' | 'google_drive' | 'fireflies' | 'paste' | AnyOther;
+  title?: string | null;
+  at?: string | null;
+  meeting_id?: string | null;
+}
+
+/** An item owed, from the one ledger: its words, its date, where it came from ("from the Gemini notes"). */
+export interface AfterItem {
+  commitment_id?: string;
+  text: string;
+  when?: string | null;
+  source?: string | null;
+}
+
+export interface AfterDecided {
+  decision_id?: string;
+  text: string;
+  source?: string | null;
+  at?: string | null;
+}
+
+/** What others owe, one group per owner (a person, both of you, the group), with a count and a gist. */
+export interface AfterOwed {
+  owner: string;
+  owner_name?: string | null;
+  count: number;
+  gist?: string | null;
+  items: AfterItem[];
+}
+
+/** One past meeting (`GET /prep/history`), newest first. */
+export interface PrepHistoryRow {
+  event_id: string;
+  occurrence_key?: string | null;
+  starts_at?: string | null;
+  title?: string | null;
+  items_total?: number;
+  items_done?: number;
+  /** 2026-10-30: the list covered, the record's decisions and actions, what wrote it. */
+  covered?: { done: number; total: number } | null;
+  decisions?: number;
+  actions?: number;
+  source?: 'typed' | 'google_drive' | 'fireflies' | 'paste' | 'none' | AnyOther | null;
+  has_page?: boolean;
+}
+
+/** `GET /prep/history`: the past meetings, newest first, and the line across them when the server writes one. */
+export interface PrepHistoryResponse {
+  success?: boolean;
+  history: PrepHistoryRow[];
+  /** "Open items are usually done by the next 1:1; the second reviewer has slipped twice." (counts only). */
+  across?: { text: string; material?: unknown } | null;
 }
 
 export interface PrepResponse {
   prep: PrepCardV2;
+}
+
+// ── the person's list on Today (2026-10-29) ─────────────────────────────────
+// `GET /myu/lines?scope=today` also carries the meetings with the person's list on them and the carried items
+// waiting for a next meeting. Copies of shared `types/lines.ts`, the whole shapes, held both ways in parity.ts.
+
+/** A meeting with the person's list: up to three items by position and the count; `want_line_id` is its open question. */
+export interface LinesMeeting {
+  event_id: string;
+  occurrence_key?: string | null;
+  title?: string | null;
+  starts_at?: string | null;
+  /** "Thu 2:00 pm". */
+  day_label?: string | null;
+  later?: boolean;
+  items?: PrepListItem[];
+  items_count?: number;
+  want_line_id?: string | null;
+}
+
+/** Carried items with no next meeting yet, under their person ("Carried from your 1:1 on 12 Nov"). */
+export interface LinesWaiting {
+  relationship_id: string;
+  name?: string | null;
+  label?: string | null;
+  items: PrepListItem[];
+}
+
+/** 2026-10-30: yesterday's meetings with a record or a page the person acted on, and the one line when notes came in. */
+export interface LinesYesterday {
+  event_id: string;
+  occurrence_key?: string | null;
+  title?: string | null;
+  starts_at?: string | null;
+  day_label?: string | null;
+  covered?: { done: number; total: number } | null;
+  /** What wrote its record (typed | google_drive | fireflies | otter | paste | none). */
+  source?: string | null;
+  /**
+   * "The Gemini notes for Thursday's 1:1 with Reid came in: …". As built, the server sends it as a Myu line whose subject
+   * is the meeting (once per record), drawn under the row; `line` is read too, if a server sends it.
+   */
+  line?: string | null;
+}
+
+// ── between you, on the person's card (2026-10-30) ──────────────────────────
+// The one ledger's rows on the `commitments_between` section, newest first, the older ones folded. Copies of shared
+// `types/cards.ts`, held by name in parity.ts.
+
+export interface BetweenRow {
+  /** 2026-11-10: also `decided` and `told` (what was decided between the two, what the person was told). */
+  kind: 'they_owe' | 'you_owe' | 'decided' | 'told' | AnyOther;
+  text: string;
+  /** On a decided or told row: the exact words, and who said it ("Jonah decided", "You told Jonah"). */
+  quote?: string | null;
+  said?: string | null;
+  when?: string | null;
+  source?: string | null;
+  meeting?: { event_id?: string | null; title?: string | null; at?: string | null } | null;
+  commitment_id?: string;
+}
+
+// ── a meeting record in a list (2026-10-30, the calendar opens the meeting's page) ──
+
+/**
+ * The part of shared `Meeting` (`GET /meetings/list`) the vault reads to open a record: its calendar event (the
+ * meeting's page opens on it), and its counts — the ledger's once each (`decisions` on a list row is that count), the
+ * extractor's only when the ledger's are absent (`meetingRecordCounts`).
+ */
+export interface MeetingRecordLite {
+  meeting_id?: string;
+  title?: string;
+  calendar_event_id?: string;
+  decision_count?: number;
+  action_item_count?: number;
+  actions?: number;
+  actions_yours?: number;
+  has_page?: boolean;
+}
+
+/** The section's data as the post reads it (the commitments themselves stay `items`, read loosely). */
+export interface BetweenSectionData {
+  rows?: BetweenRow[];
+  older?: { count: number; note?: string | null; rows?: BetweenRow[] } | null;
 }
 
 // ── composition (P5.5) ──────────────────────────────────────────────────────
@@ -459,6 +750,16 @@ export interface SpaceTurnReply {
   content?: string;
   space_mode?: { intent?: string; confidence?: number; handled: string; line_id?: string };
   effects?: SpaceEffect[];
+  /**
+   * 2026-10-29: in a meeting's conversation, what in this turn belongs on the person's list (at most three phrases);
+   * drawn as "+ {text}" under Myu's reply, each one tap to `/prep/items/add`. Myu never adds by itself.
+   */
+  list_offers?: Array<{ text: string }>;
+  /**
+   * 2026-10-30: the words put something on the meeting's list and the server did ("On the list for Friday: “X”."); the
+   * page and Today read the list again.
+   */
+  list_added?: { event_id: string; occurrence_key?: string | null; items?: PrepListItem[] };
   /** 403 from a session that may only read: `scope_required`. */
   error?: string;
   scope_required?: string;
@@ -476,6 +777,10 @@ export interface SpaceAnswer {
   /** "Not now" (R19c): it rests until tomorrow and comes back. */
   later?: boolean;
   change?: boolean | string;
+  /** 2026-11-13: "Move it" on a full-day line, with the day picked (`YYYY-MM-DD`), as `{choice_id: "move", day}`. */
+  day?: string;
+  /** 2026-11-15, "No, someone else" on the question about who someone is: the person chosen from the person's people (or `text`, a name typed). */
+  relationship_id?: string;
 }
 
 export interface SpaceAnswerReply {
@@ -485,6 +790,11 @@ export interface SpaceAnswerReply {
   effects?: SpaceEffect[];
   /** The ask stays up (a locked space, a refusal). */
   line_open?: boolean;
+  /**
+   * 2026-11-13: the message an answer comes back with — after "Move it", the short message to the other person; after "Add it", the
+   * addition in the answer's own words. `to` holds names or `{name, address}`; `thread_ref` is never shown. Read by `answerDraftOf`.
+   */
+  draft?: { to?: unknown; in?: string; text?: string; thread_ref?: string | null };
 }
 
 /** `GET /retro/prep/mine` — the door's words come from `step`. */

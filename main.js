@@ -9,7 +9,7 @@ var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __getProtoOf = Object.getPrototypeOf;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
-var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
+var __defNormalProp = (obj3, key, value) => key in obj3 ? __defProp(obj3, key, { enumerable: true, configurable: true, writable: true, value }) : obj3[key] = value;
 var __commonJS = (cb, mod) => function __require() {
   return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
 };
@@ -34,7 +34,7 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   mod
 ));
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
-var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
+var __publicField = (obj3, key, value) => __defNormalProp(obj3, typeof key !== "symbol" ? key + "" : key, value);
 
 // node_modules/event-source-polyfill/src/eventsource.js
 var require_eventsource = __commonJS({
@@ -421,8 +421,8 @@ var require_eventsource = __commonJS({
         var map = /* @__PURE__ */ Object.create(null);
         var array = all.split("\r\n");
         for (var i = 0; i < array.length; i += 1) {
-          var line = array[i];
-          var parts = line.split(": ");
+          var line2 = array[i];
+          var parts = line2.split(": ");
           var name = parts.shift();
           var value = parts.join(": ");
           map[toLowerCase(name)] = value;
@@ -992,7 +992,7 @@ async function syncTimeZone(api, device = deviceTimeZone()) {
 }
 
 // src/main.ts
-var import_obsidian57 = require("obsidian");
+var import_obsidian58 = require("obsidian");
 
 // src/views/SettingsTab.ts
 var import_obsidian14 = require("obsidian");
@@ -1015,6 +1015,21 @@ var import_obsidian2 = require("obsidian");
 var import_obsidian = require("obsidian");
 function notifyStatus(message, durationMs = 4e3) {
   new import_obsidian.Notice(message, durationMs);
+}
+function notifyDone(message, action, durationMs = 1e4) {
+  if (!action || typeof document === "undefined") {
+    new import_obsidian.Notice(message, durationMs);
+    return;
+  }
+  const frag = createFragment();
+  frag.appendText(`${message} `);
+  const button = frag.createEl("button", { cls: "myu-notice-undo", text: action.label });
+  const n = new import_obsidian.Notice(frag, durationMs);
+  button.onclick = (ev) => {
+    ev.stopPropagation();
+    n.hide();
+    action.run();
+  };
 }
 function notifyError(message, durationMs = 8e3) {
   new import_obsidian.Notice(message, durationMs);
@@ -1878,6 +1893,19 @@ var MaterializeConsentModal = class extends import_obsidian6.Modal {
   }
 };
 
+// src/addressInUse.ts
+var ADDRESS_IN_USE = "address_in_use";
+var ADDRESS_IN_USE_WORDS = {
+  said: "This address can't be used to make an account with a password. Sign in by mail instead.",
+  mailLink: "Email me a sign-in link",
+  back: "Back to the start"
+};
+function addressInUseOf(status, error, data) {
+  const o = data && typeof data === "object" ? data : {};
+  if (status !== 409 || error !== ADDRESS_IN_USE && o.error !== ADDRESS_IN_USE) return null;
+  return typeof o.message === "string" && o.message.trim() ? o.message.trim() : ADDRESS_IN_USE_WORDS.said;
+}
+
 // src/views/SignupModal.ts
 var import_obsidian7 = require("obsidian");
 
@@ -2046,19 +2074,19 @@ var SignupModal = class extends import_obsidian7.Modal {
    */
   renderTermsRow(host) {
     const row = host.createDiv({ cls: "myu-terms-row" });
-    const label = row.createEl("label", { cls: "myu-terms-label" });
-    const box = label.createEl("input", { cls: "myu-terms-box", attr: { type: "checkbox", "aria-label": "I agree to the beta participation terms and the privacy policy" } });
+    const label2 = row.createEl("label", { cls: "myu-terms-label" });
+    const box = label2.createEl("input", { cls: "myu-terms-box", attr: { type: "checkbox", "aria-label": "I agree to the beta participation terms and the privacy policy" } });
     box.checked = this.agreed;
     box.onchange = () => {
       this.agreed = box.checked;
       this.render();
     };
-    const sentence = label.createSpan({ cls: "myu-terms-sentence" });
-    sentence.appendText("I agree to the ");
+    const sentence2 = label2.createSpan({ cls: "myu-terms-sentence" });
+    sentence2.appendText("I agree to the ");
     const links = termsLinks(this.terms?.urls ?? TERMS_FALLBACK_URLS);
-    links.forEach((link, i) => {
-      sentence.createEl("a", { text: link.label, href: link.url, attr: { target: "_blank", rel: "noopener" } });
-      sentence.appendText(i === 0 ? " and the " : ".");
+    links.forEach((link2, i) => {
+      sentence2.createEl("a", { text: link2.label, href: link2.url, attr: { target: "_blank", rel: "noopener" } });
+      sentence2.appendText(i === 0 ? " and the " : ".");
     });
   }
   watchWhileSent() {
@@ -2094,6 +2122,10 @@ var SignupModal = class extends import_obsidian7.Modal {
     contentEl.addClass("myu-power-down");
     if (this.stage === "sent") {
       this.renderSent();
+      return;
+    }
+    if (this.stage === "in_use") {
+      this.renderInUse();
       return;
     }
     if (this.flavor === "signin") {
@@ -2216,6 +2248,18 @@ var SignupModal = class extends import_obsidian7.Modal {
       (b) => b.setButtonText("Sign in with the pasted link").setCta().onClick(() => void this.submitPasted(b.buttonEl))
     );
   }
+  /** The sign-up refused for its address (2026-11-17): the server's sentence; the mailed sign-in; back to the start. */
+  renderInUse() {
+    const { contentEl } = this;
+    appendBrand(contentEl);
+    contentEl.createEl("p", { cls: "myu-prose", text: this.plugin.unlock.signupRefusal() ?? ADDRESS_IN_USE_WORDS.said });
+    new import_obsidian7.Setting(contentEl).addButton(
+      (b) => b.setButtonText(ADDRESS_IN_USE_WORDS.back).onClick(() => {
+        this.stage = "form";
+        this.render();
+      })
+    ).addButton((b) => b.setButtonText(ADDRESS_IN_USE_WORDS.mailLink).setCta().onClick(() => void this.submitMagic(b.buttonEl)));
+  }
   // ── doors ─────────────────────────────────────────────────────────────────
   async submitMagic(button) {
     if (this.working || !this.doorOpen()) return;
@@ -2263,9 +2307,15 @@ var SignupModal = class extends import_obsidian7.Modal {
       this.close();
       this.onFinished();
       this.plugin.openGenesisCeremony();
+      this.sayAboutTheAddress();
     } else if (outcome === "existing_account") {
       this.close();
       new ApprovalModal(this.app, this.plugin.unlock, () => this.onFinished()).open();
+      this.sayAboutTheAddress();
+    } else if (outcome === "address_in_use") {
+      this.password = "";
+      this.stage = "in_use";
+      this.render();
     } else if (outcome === "email_not_allowed") {
       notifyError("askMyu is in closed beta. This email is not on the list yet. Ask for an invite.");
       button.disabled = false;
@@ -2275,6 +2325,15 @@ var SignupModal = class extends import_obsidian7.Modal {
       button.disabled = false;
       button.textContent = "Create my account";
     }
+  }
+  /**
+   * A password does not confirm the address (2026-11-17): the server mails a link to it, and until it is confirmed
+   * invitations and connections there wait. Said once, as the account is made, over the window that opens next; nothing
+   * when the server does not say (an older one).
+   */
+  sayAboutTheAddress() {
+    const said = this.plugin.unlock.takeSignupWords();
+    if (said) notifyStatus(said, 12e3);
   }
 };
 
@@ -2314,9 +2373,9 @@ function ahash(h) {
   if (h.outputLen < 1 || h.blockLen < 1)
     throw new Error("hash blockLen / outputLen must be >= 1");
 }
-var aobject = (value, label) => {
+var aobject = (value, label2) => {
   if (value === null || typeof value !== "object" || Array.isArray(value))
-    throw new TypeError((label === "object" ? "" : `"${label}" `) + "expected object, got type=" + typeof value);
+    throw new TypeError((label2 === "object" ? "" : `"${label2}" `) + "expected object, got type=" + typeof value);
 };
 function aexists(instance, checkFinished = true) {
   if (instance.destroyed)
@@ -2359,10 +2418,10 @@ async function asyncLoop(iters, tick, cb) {
     ts += diff;
   }
 }
-function utf8ToBytes(str5) {
-  if (typeof str5 !== "string")
+function utf8ToBytes(str12) {
+  if (typeof str12 !== "string")
     throw new TypeError("string expected");
-  return new Uint8Array(new TextEncoder().encode(str5));
+  return new Uint8Array(new TextEncoder().encode(str12));
 }
 function kdfInputToBytes(data, errorTitle = "") {
   if (typeof data === "string")
@@ -2838,9 +2897,9 @@ var SHA2_32B = class extends HashMD {
       SHA256_W[i] = view.getUint32(offset, false);
     for (let i = 16; i < 64; i++) {
       const W15 = SHA256_W[i - 15];
-      const W2 = SHA256_W[i - 2];
+      const W22 = SHA256_W[i - 2];
       const s0 = rotr(W15, 7) ^ rotr(W15, 18) ^ W15 >>> 3;
-      const s1 = rotr(W2, 17) ^ rotr(W2, 19) ^ W2 >>> 10;
+      const s1 = rotr(W22, 17) ^ rotr(W22, 19) ^ W22 >>> 10;
       SHA256_W[i] = s1 + SHA256_W[i - 7] + s0 + SHA256_W[i - 16] | 0;
     }
     let { A, B, C, D, E, F, G, H } = this;
@@ -3121,17 +3180,17 @@ var sha512 = /* @__PURE__ */ createHasher(
 
 // node_modules/@scure/bip39/index.js
 var isJapanese = (wordlist2) => wordlist2[0] === "\u3042\u3044\u3053\u304F\u3057\u3093";
-function nfkd(str5) {
-  if (typeof str5 !== "string")
-    throw new TypeError("invalid mnemonic type: " + typeof str5);
-  return str5.normalize("NFKD");
+function nfkd(str12) {
+  if (typeof str12 !== "string")
+    throw new TypeError("invalid mnemonic type: " + typeof str12);
+  return str12.normalize("NFKD");
 }
-function normalize(str5) {
-  const norm = nfkd(str5);
-  const words = norm.split(" ");
+function normalize(str12) {
+  const norm2 = nfkd(str12);
+  const words = norm2.split(" ");
   if (![12, 15, 18, 21, 24].includes(words.length))
     throw new Error("Invalid mnemonic");
-  return { nfkd: norm, words };
+  return { nfkd: norm2, words };
 }
 function aentropy(ent) {
   abytes(ent);
@@ -5602,6 +5661,9 @@ var SetupRecoveryModal = class extends import_obsidian8.Modal {
     } else if (outcome === "locked") {
       notifyError("Unlock first, then set up recovery.");
       this.close();
+    } else if (typeof outcome === "object" && outcome && "said" in outcome) {
+      notifyError(outcome.said);
+      button.disabled = false;
     } else {
       notifyError("Couldn't save the recovery key. Check the connection and try again.");
       button.disabled = false;
@@ -5612,6 +5674,34 @@ var SetupRecoveryModal = class extends import_obsidian8.Modal {
 
 // src/views/ApproveDeviceModal.ts
 var import_obsidian9 = require("obsidian");
+
+// src/doorAnswers.ts
+var DOOR_WORDS = {
+  second: "That can't be changed from this device. Change it from another device of yours where Myu is open.",
+  beingSetUp: "Another device of yours is finishing setting up. Try again in a minute.",
+  notNow: "Myu can't check this device just now. Try again in a minute."
+};
+function doorAnswerOf(status, body) {
+  const b = body && typeof body === "object" ? body : {};
+  const codes = [b.error, b.err, b.code].filter((x) => typeof x === "string");
+  if (codes.includes("key_second")) return "key_second";
+  if (codes.includes("key_being_set_up")) return "key_being_set_up";
+  if (status === 503 || codes.includes("not_now")) return "not_now";
+  return null;
+}
+function doorAnswerWords(status, body) {
+  const a = doorAnswerOf(status, body);
+  if (!a) return null;
+  const b = body && typeof body === "object" ? body : {};
+  const said = [b.message, b.said].find((x) => typeof x === "string" && x.trim().length > 0)?.trim();
+  if (said) return said;
+  return a === "key_second" ? DOOR_WORDS.second : a === "key_being_set_up" ? DOOR_WORDS.beingSetUp : DOOR_WORDS.notNow;
+}
+function notNowPauseMs(tries) {
+  return Math.min(15 * 6e4, 3e4 * 2 ** Math.max(0, tries - 1));
+}
+
+// src/views/ApproveDeviceModal.ts
 var ApproveDeviceModal = class extends import_obsidian9.Modal {
   constructor(app, plugin, requestId, requesterPublicKey, onFinished) {
     super(app);
@@ -5653,6 +5743,9 @@ var ApproveDeviceModal = class extends import_obsidian9.Modal {
       notifyStatus("Approved \u2014 the new device is unlocking now.");
       this.close();
       this.onFinished();
+    } else if (outcome === "not_now") {
+      notifyError(DOOR_WORDS.notNow);
+      button.disabled = false;
     } else if (outcome === "bad_code") {
       notifyError("That code doesn\u2019t match. Check the code on the new device and try again.");
       button.disabled = false;
@@ -5854,12 +5947,12 @@ var PASTED_SOURCES = ["paste", "drop", "burst", "vault_note", "vault_selection"]
 function formatCount(n) {
   return String(Math.max(0, Math.round(n))).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
-function dropControls(text) {
+function dropControls(text2) {
   let out = "";
-  for (let i = 0; i < text.length; i++) {
-    const code = text.charCodeAt(i);
+  for (let i = 0; i < text2.length; i++) {
+    const code = text2.charCodeAt(i);
     if (code === 127 || code < 32 && code !== 9 && code !== 10 && code !== 13) continue;
-    out += text[i];
+    out += text2[i];
   }
   return out;
 }
@@ -5868,19 +5961,19 @@ function pastedText(raw) {
   if (typeof raw !== "string") return "";
   return dropControls(raw.replace(/\r\n?/g, "\n")).replace(LEADING_BLANK_LINES, "").trimEnd();
 }
-function countLines(text) {
-  if (!text) return 0;
+function countLines(text2) {
+  if (!text2) return 0;
   let lines = 1;
-  for (let i = text.indexOf("\n"); i >= 0; i = text.indexOf("\n", i + 1)) lines++;
+  for (let i = text2.indexOf("\n"); i >= 0; i = text2.indexOf("\n", i + 1)) lines++;
   return lines;
 }
 function shouldChip(raw) {
-  const text = pastedText(raw);
-  return text.length >= PASTE_CHIP_MIN_CHARS || countLines(text) >= PASTE_CHIP_MIN_LINES;
+  const text2 = pastedText(raw);
+  return text2.length >= PASTE_CHIP_MIN_CHARS || countLines(text2) >= PASTE_CHIP_MIN_LINES;
 }
 function makePastedBlock(raw, source, id, ref) {
-  const text = pastedText(raw);
-  return { id, text, chars: text.length, lines: countLines(text), source, ...ref ? { ref } : {} };
+  const text2 = pastedText(raw);
+  return { id, text: text2, chars: text2.length, lines: countLines(text2), source, ...ref ? { ref } : {} };
 }
 function nextPastedBlockId(blocks) {
   let max = 0;
@@ -5892,9 +5985,9 @@ function nextPastedBlockId(blocks) {
   return `p${max + 1}`;
 }
 var PREVIEW_MAX = 40;
-function pastedPreview(text, max = PREVIEW_MAX) {
-  const line = (typeof text === "string" ? text.split("\n") : []).find((l) => l.trim()) ?? "";
-  const flat = line.replace(/\s+/g, " ").trim();
+function pastedPreview(text2, max = PREVIEW_MAX) {
+  const line2 = (typeof text2 === "string" ? text2.split("\n") : []).find((l) => l.trim()) ?? "";
+  const flat = line2.replace(/\s+/g, " ").trim();
   if (flat.length <= max) return flat;
   let cut = flat.slice(0, max);
   if (/[\uD800-\uDBFF]$/.test(cut)) cut = cut.slice(0, -1);
@@ -5940,15 +6033,15 @@ function readPastedBlocks(raw) {
   raw.forEach((row, i) => {
     if (!row || typeof row !== "object" || Array.isArray(row)) return;
     const r = row;
-    const text = r.text;
-    if (typeof text !== "string" || !text.trim()) return;
+    const text2 = r.text;
+    if (typeof text2 !== "string" || !text2.trim()) return;
     const source = PASTED_SOURCES.includes(r.source) ? r.source : "paste";
     const ref = VAULT_SOURCES.includes(source) ? pastedRefOf(r.ref) : null;
     blocks.push({
       id: typeof r.id === "string" && r.id ? r.id : `p${i + 1}`,
-      text,
-      chars: text.length,
-      lines: countLines(text),
+      text: text2,
+      chars: text2.length,
+      lines: countLines(text2),
       source,
       ...ref ? { ref } : {}
     });
@@ -6000,8 +6093,8 @@ function chipLabel(block, n) {
 function cardLabel(block, n) {
   return vaultLabel(block) ?? PASTE_WORDS.card(block.chars, n);
 }
-function chipAdded(chips, text, source, at) {
-  const chip = makePastedBlock(text, source, nextPastedBlockId(chips));
+function chipAdded(chips, text2, source, at) {
+  const chip = makePastedBlock(text2, source, nextPastedBlockId(chips));
   return { chips: [...chips, chip], chip, undo: { id: chip.id, at } };
 }
 function undoChip(value, chips, undo) {
@@ -6054,6 +6147,10 @@ function cardMonthWords(raw) {
 function timelineWhen(event, now = /* @__PURE__ */ new Date()) {
   const raw = typeof event.date === "string" ? event.date.trim() : "";
   const at = /^\d{4}-\d{2}-\d{2}$/.test(raw) || typeof event.date_ms !== "number" ? raw : event.date_ms;
+  if (event.date_precision === "year") {
+    const year = typeof at === "number" ? new Date(at).getUTCFullYear() : Number(/^(\d{4})/.exec(at)?.[1]);
+    return Number.isFinite(year) && year > 0 ? String(year) : "";
+  }
   if (event.event_type === "role_started") return cardMonthWords(at) ?? "";
   return cardDayWords(at, { now }) ?? "";
 }
@@ -6174,7 +6271,341 @@ function patternInstanceText(i) {
   return [i.context?.trim(), i.detail?.trim()].filter(Boolean).join(" \xB7 ");
 }
 
+// src/developmentReadings.ts
+var DEVELOPMENT_WORDS = {
+  workShapingTitle: "How you shape your work",
+  skillsTitle: "Skills your work shows",
+  /** A skill the role asks for that has not shown in the person's writing. */
+  notYet: "hasn\u2019t come up in what you\u2019ve written",
+  newMark: "new",
+  nextRoles: "Roles people in your work often move to",
+  asksFor: (role) => `What ${role} usually asks for`,
+  targetAsks: (title) => `What ${title} asks for`,
+  window: (days) => `Last ${days} days`,
+  days: (n) => `${n} ${n === 1 ? "day" : "days"}`,
+  lastOn: (day) => `last on ${day}`
+};
+var SOURCE_WORDS = {
+  journal: ["entry", "entries"],
+  github_review: ["review you gave", "reviews you gave"],
+  github_pull_request: ["pull request", "pull requests"],
+  tracker_event: ["ticket", "tickets"],
+  retro: ["retro", "retros"],
+  email: ["mail you sent", "mail you sent"],
+  messaging: ["message you sent", "messages you sent"]
+};
+var LEVELS = /* @__PURE__ */ new Set(["often", "sometimes", "once"]);
+var str = (v) => typeof v === "string" ? v.trim() : "";
+var whole = (v) => typeof v === "number" && Number.isFinite(v) && v > 0 ? Math.floor(v) : null;
+var list = (v) => Array.isArray(v) ? v : [];
+function materialWords(material, now = /* @__PURE__ */ new Date()) {
+  const parts = [];
+  let since = null;
+  for (const m of list(material)) {
+    const words = SOURCE_WORDS[str(m?.source_type)];
+    const n = whole(m?.count);
+    if (!words || n === null) continue;
+    parts.push(`${n} ${n === 1 ? words[0] : words[1]}`);
+    const s2 = str(m?.since);
+    if (s2 && (!since || s2 < since)) since = s2;
+  }
+  if (!parts.length) return "";
+  const day = since ? cardDayWords(since, { now }) : null;
+  return `${parts.join(" \xB7 ")}${day ? `, since ${day}` : ""}`;
+}
+function levelWords(level) {
+  const l = str(level);
+  if (l === "not_yet") return DEVELOPMENT_WORDS.notYet;
+  return LEVELS.has(l) ? l : null;
+}
+function shownLevel(item) {
+  return str(item?.level_text) || levelWords(item?.level);
+}
+function workShapingRows(lines, now = /* @__PURE__ */ new Date()) {
+  return list(lines).map((l) => ({ text: str(l?.text), material: materialWords(l?.material, now), isNew: l?.change === true })).filter((r) => !!r.text);
+}
+function skillRow(skill, now = /* @__PURE__ */ new Date()) {
+  const name = str(skill?.name);
+  if (!name) return null;
+  const days = whole(skill?.days);
+  const last = str(skill?.last_at) ? cardDayWords(str(skill?.last_at), { now }) : null;
+  const meta = [shownLevel(skill), days !== null ? DEVELOPMENT_WORDS.days(days) : null, materialWords(skill?.material, now) || null, last ? DEVELOPMENT_WORDS.lastOn(last) : null].filter(Boolean).join(" \xB7 ");
+  return { name, meta };
+}
+function roleAskRows(items) {
+  return list(items).map((i) => ({ name: str(i?.name), level: shownLevel(i) ?? "", notYet: str(i?.level) === "not_yet" })).filter((r) => !!r.name && !!r.level);
+}
+function asksForHeading(asks) {
+  const r = str(asks?.role_title);
+  return r ? DEVELOPMENT_WORDS.asksFor(r) : null;
+}
+function targetHeading(target) {
+  const t = str(target?.title);
+  return t ? DEVELOPMENT_WORDS.targetAsks(t) : null;
+}
+
+// src/checkWords.ts
+var CHECK_WORDS = {
+  intro: "Myu checked this against what you have decided, promised and been told.",
+  nothing: "Nothing in this goes against what you decided, promised or were told.",
+  related: "Related, and not mentioned in it:",
+  cannotTell: "Myu cannot tell, and who to ask:",
+  notInCode: "Myu has not confirmed this in the code.",
+  queued: "Myu is reading it against what you decided, promised and were told, and will tell you what it finds.",
+  lead: {
+    decided: "This says one thing; you decided another:",
+    decidedOther: "This says one thing; it was decided otherwise:",
+    youSaid: "This says one thing; you said another:",
+    told: "This says one thing; you were told another:",
+    promised: "This says one thing; you promised another:",
+    agreed: "This says one thing; you agreed another:",
+    asked: "This says one thing; you were asked another:",
+    youAsked: "This says one thing; you asked another:",
+    did: "This says one thing; your agent did another:"
+  },
+  /** "a decision / a told entry, in a list" */
+  listDecided: "Decided",
+  listTold: "You were told",
+  listYouTold: (name) => `You told ${name}`
+};
+var MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+var DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+var dayStart = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+function checkWhen(ms, now) {
+  if (!ms || ms <= 0) return "some time ago";
+  const day = new Date(ms);
+  const today = new Date(now);
+  const ago2 = Math.round((dayStart(today) - dayStart(day)) / 864e5);
+  if (ago2 === 0) return "today";
+  if (ago2 === 1) return "yesterday";
+  if (ago2 > 1 && ago2 < 7) return DAYS[day.getDay()];
+  const dm = `${day.getDate()} ${MONTHS[day.getMonth()]}`;
+  return day.getFullYear() === today.getFullYear() ? dm : `${dm} ${day.getFullYear()}`;
+}
+function checkRecordRow(r, now) {
+  const said = (r.said ?? "").trim();
+  const label2 = r.kind === "decided" ? CHECK_WORDS.listDecided : /^You told /.test(said) ? said : CHECK_WORDS.listTold;
+  const words = (r.quote ?? "").trim() || (r.text ?? "").trim();
+  const sub = said && said !== label2 && !/^(You|Your team)\b/.test(said) ? said : null;
+  const ms = r.when ? Date.parse(/^\d{4}-\d{2}-\d{2}$/.test(r.when) ? `${r.when}T12:00:00` : r.when) : NaN;
+  return { label: label2, text: words ? `\u201C${words}\u201D` : "", sub, right: Number.isFinite(ms) ? checkWhen(ms, now) : null };
+}
+
+// src/meetingPost.ts
+var MEETING_POST_WORDS = {
+  openNotes: "Open the notes \u25B8",
+  yours: "Yours",
+  toDo: "To do",
+  todoCount: (n) => `${n} to do`,
+  covered: (done, total) => `${done} of ${total} covered`,
+  cameUpFromNotes: "came up \xB7 from the notes",
+  didntComeUp: "didn\u2019t come up",
+  carriedTo: (date) => `Carried to ${date}`,
+  drop: "Drop",
+  decided: "Decided",
+  owes: (first) => `${first} owes`,
+  theyOwe: "They owe",
+  owedByOthers: "Owed by others",
+  countPeople: (n, m) => `${n} \xB7 ${m} ${m === 1 ? "person" : "people"}`,
+  items: (n) => `${n} ${n === 1 ? "item" : "items"}`,
+  cameUp: "Came up",
+  topics: (n) => `${n} ${n === 1 ? "topic" : "topics"}`,
+  room: "The room",
+  roomCount: (n) => `${n} people \xB7 who said what`,
+  turns: (n) => `${n} ${n === 1 ? "turn" : "turns"}`,
+  talkTime: (pct) => `${pct}% of the talk`,
+  yourNotes: "Your notes",
+  lines: (n) => `${n} ${n === 1 ? "line" : "lines"}`,
+  more: "more \u25BE",
+  less: "less \u25B4",
+  yesterday: "Yesterday",
+  older: (n) => `+ ${n} older \u25B8`,
+  pastFrom: (from, to) => `past, from ${from} to ${to}`,
+  between: "Between you",
+  pastOneOnOnes: "Past 1:1s",
+  youOwe: "You owe",
+  youOwed: "You owed",
+  due: (day) => `due ${day}`,
+  open: "open",
+  done: "done",
+  past: "past",
+  noNotes: "no notes",
+  decisions: (n) => `${n} ${n === 1 ? "decision" : "decisions"}`,
+  actions: (n) => `${n} ${n === 1 ? "action" : "actions"}`,
+  yoursCount: (n) => `${n} yours`,
+  /** The server's line when nothing at all was written (it sends its own; this is the same words). */
+  nothing: "Nothing was written for this one yet. Notes from Drive come in when it syncs. Tick what came up, or write a line."
+};
+var SOURCE_WORDS2 = {
+  google_drive: "Notes by Gemini",
+  gemini: "Notes by Gemini",
+  fireflies: "Notes by Fireflies",
+  otter: "Notes by Otter",
+  typed: "Your notes",
+  capture: "Your notes",
+  paste: "Pasted notes"
+};
+var str2 = (v) => typeof v === "string" ? v.trim() : "";
+var list2 = (v) => Array.isArray(v) ? v : [];
+var MONTHS2 = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+var DAYS2 = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+function dayMoment(s2) {
+  const day = /^(\d{4}-\d{2}-\d{2})(?:T00:00(?::00(?:\.0+)?)?Z)?$/.exec(s2);
+  return Date.parse(day ? `${day[1]}T12:00:00` : s2);
+}
+function postDate(v) {
+  const s2 = str2(v);
+  if (!s2) return "";
+  const t = dayMoment(s2);
+  if (!Number.isFinite(t)) return s2;
+  const d = new Date(t);
+  return `${d.getDate()} ${MONTHS2[d.getMonth()]}`;
+}
+function postDay(v) {
+  const s2 = str2(v);
+  const t = dayMoment(s2);
+  if (!Number.isFinite(t)) return s2;
+  const d = new Date(t);
+  return `${DAYS2[d.getDay()]} ${d.getDate()} ${MONTHS2[d.getMonth()]}`;
+}
+function sourceWords(source) {
+  if (!source) return null;
+  if (typeof source === "string") return SOURCE_WORDS2[source] ?? null;
+  return str2(source.title) || SOURCE_WORDS2[str2(source.kind)] || null;
+}
+function sourceLines(after) {
+  return list2(after?.sources).map((s2) => {
+    const name = sourceWords(s2);
+    if (!name) return null;
+    const day = postDate(s2.at);
+    return { text: day ? `${name} \xB7 ${day}` : name, meeting_id: str2(s2.meeting_id) || null };
+  }).filter((x) => !!x);
+}
+function postHasRecord(after) {
+  if (!after) return false;
+  if (list2(after.yours?.todo).length > 0 || list2(after.decided).length > 0 || list2(after.owed).length > 0) return true;
+  return list2(after.sources).some((s2) => !!str2(s2?.kind) && str2(s2.kind) !== "typed");
+}
+function yoursLabel(after, items) {
+  const W3 = MEETING_POST_WORDS;
+  const todo = list2(after?.yours?.todo).length;
+  const cov = after?.yours?.covered ?? (items && items.length ? { done: items.filter((i) => i.done || !!str2(i.covered_by)).length, total: items.length } : null);
+  return [W3.yours, todo ? W3.todoCount(todo) : null, cov && cov.total ? W3.covered(cov.done, cov.total) : null].filter(Boolean).join(" \xB7 ");
+}
+function postItemState(item) {
+  const W3 = MEETING_POST_WORDS;
+  if (item.done || str2(item.covered_by) === "user") return { kind: "ticked", text: null, drop: false };
+  if (str2(item.covered_by) === "notes") return { kind: "notes", text: W3.cameUpFromNotes, drop: false };
+  const date = str2(item.carried_to?.date);
+  if (date) return { kind: "carried", text: `${W3.didntComeUp} \xB7 ${W3.carriedTo(date)}`, drop: !!str2(item.carried_to?.item_id) };
+  return { kind: "not", text: W3.didntComeUp, drop: false };
+}
+function todoRow(item) {
+  return { text: str2(item.text), sub: str2(item.source) || null, right: str2(item.when) ? postDay(item.when) : null };
+}
+function postFolds(after, meeting) {
+  const W3 = MEETING_POST_WORDS;
+  if (!after) return [];
+  const out = [];
+  const decided = after.counts?.decided ?? list2(after.decided).length;
+  if (decided > 0) out.push({ key: "decided", label: W3.decided, count: String(decided) });
+  const owed = list2(after.owed);
+  const owedCount = after.counts?.owed_by_others ?? owed.reduce((n, o) => n + (o.count || list2(o.items).length), 0);
+  const oneOnOne = meeting.kind === "one_on_one";
+  if (owedCount > 0) {
+    if (oneOnOne && owed.length <= 1) {
+      const due = owed.flatMap((o) => list2(o.items)).map((i) => str2(i.when)).filter(Boolean).sort()[0];
+      const first = str2(meeting.firstName) || str2(owed[0]?.owner_name).split(/\s+/)[0] || "";
+      out.push({ key: "owed", label: first ? W3.owes(first) : W3.owedByOthers, count: [String(owedCount), due ? W3.due(postDate(due)) : null].filter(Boolean).join(" \xB7 ") });
+    } else {
+      const people = owed.filter((o) => o.owner !== "both" && o.owner !== "group").length || owed.length;
+      out.push({ key: "owed", label: W3.owedByOthers, count: W3.countPeople(owedCount, people) });
+    }
+  }
+  const topics = after.counts?.topics ?? list2(after.came_up).length;
+  if (topics > 0) out.push({ key: "came_up", label: W3.cameUp, count: W3.topics(topics) });
+  const room = after.room?.count ?? list2(after.room?.people).length;
+  if (!oneOnOne && room > 0) out.push({ key: "room", label: W3.room, count: W3.roomCount(room) });
+  const notes = after.counts?.notes_lines ?? str2(after.notes?.text).split("\n").filter((l) => l.trim()).length;
+  if (notes > 0) out.push({ key: "notes", label: W3.yourNotes, count: W3.lines(notes) });
+  return out;
+}
+function owedRow(o) {
+  const n = o.count || list2(o.items).length;
+  return { name: str2(o.owner_name), count: MEETING_POST_WORDS.items(n), gist: str2(o.gist) || null };
+}
+function sinceLastRow(row, first) {
+  const W3 = MEETING_POST_WORDS;
+  const label2 = row.kind === "decided" ? W3.decided : row.kind === "they_owe" ? first ? W3.owes(first) : W3.theyOwe : row.kind === "you_owed" ? W3.youOwed : W3.youOwe;
+  const state = str2(row.state);
+  let right = null;
+  if (row.kind === "decided") right = str2(row.when) ? postDate(row.when) : null;
+  else if (state === "done") {
+    const proof = [str2(row.proof?.source), row.proof?.at ? postDate(row.proof.at) : ""].filter(Boolean).join(", ");
+    right = proof ? `${W3.done} \xB7 ${proof}` : W3.done;
+  } else if (state === "past") right = W3.past;
+  else right = [str2(row.when) ? W3.due(postDate(row.when)) : null, W3.open].filter(Boolean).join(" \xB7 ");
+  return { label: label2, text: str2(row.text), sub: str2(row.source) || null, right, done: state === "done" };
+}
+function sinceLastMeeting(meeting) {
+  if (!meeting) return null;
+  const src = str2(meeting.source);
+  const srcWords = (SOURCE_WORDS2[src] ?? src).replace(/^Notes by/, "notes by").replace(/^Your notes/, "your notes").replace(/^Pasted notes/, "pasted notes");
+  const head = [str2(meeting.title), meeting.at ? postDate(meeting.at) : ""].filter(Boolean).join(", ");
+  return [head, srcWords].filter(Boolean).join(" \xB7 ") || null;
+}
+function betweenRow(row, first) {
+  const W3 = MEETING_POST_WORDS;
+  const meeting = row.meeting ? [str2(row.meeting.title), row.meeting.at ? postDate(row.meeting.at) : ""].filter(Boolean).join(", ") : "";
+  const sub = [str2(row.source), meeting].filter(Boolean).join(" \xB7 ") || null;
+  if (row.kind === "decided" || row.kind === "told") {
+    const r = checkRecordRow(row, Date.now());
+    return { label: r.label, text: r.text, sub: [r.sub, sub].filter(Boolean).join(" \xB7 ") || null, right: r.right };
+  }
+  const when = str2(row.when);
+  const right = when ? /^\d{4}-\d{2}-\d{2}/.test(when) ? W3.due(postDay(when)) : when : null;
+  return { label: row.kind === "they_owe" ? first ? W3.owes(first) : W3.theyOwe : W3.youOwe, text: str2(row.text), sub, right };
+}
+function olderLine(older) {
+  const n = older?.count ?? 0;
+  if (!n) return null;
+  return [MEETING_POST_WORDS.older(n), str2(older?.note)].filter(Boolean).join(" ");
+}
+function pastMeetingWords(row) {
+  const W3 = MEETING_POST_WORDS;
+  const cov = row.covered ?? (row.items_total ? { done: row.items_done ?? 0, total: row.items_total } : null);
+  const src = str2(row.source);
+  const srcWords = !src || src === "none" ? W3.noNotes : (SOURCE_WORDS2[src] ?? src).replace(/^Notes by/, "notes by").replace(/^Your notes/, "your notes").replace(/^Pasted notes/, "pasted notes");
+  return [
+    row.starts_at ? postDay(row.starts_at) : null,
+    cov && cov.total ? W3.covered(cov.done, cov.total) : null,
+    row.decisions ? W3.decisions(row.decisions) : null,
+    row.actions ? W3.actions(row.actions) : null,
+    srcWords
+  ].filter(Boolean).join(" \xB7 ");
+}
+function meetingRecordCounts(m) {
+  const W3 = MEETING_POST_WORDS;
+  const ledgerDecisions = typeof m.decisions === "number" ? m.decisions : null;
+  const ledger = typeof m.actions === "number" || ledgerDecisions !== null;
+  const decisions = ledger ? ledgerDecisions ?? 0 : m.decision_count ?? 0;
+  const actions = ledger ? m.actions ?? 0 : m.action_item_count ?? 0;
+  const yours = ledger ? m.actions_yours ?? 0 : 0;
+  return [decisions ? W3.decisions(decisions) : null, actions ? W3.actions(actions) : null, yours ? W3.yoursCount(yours) : null].filter(Boolean).join(" \xB7 ");
+}
+function yesterdayCount(row) {
+  return row.covered && row.covered.total ? MEETING_POST_WORDS.covered(row.covered.done, row.covered.total) : null;
+}
+function foldMemoryKey(eventId, key) {
+  return `askmyu.postFold.${eventId}.${key}`;
+}
+
 // src/views/cardSections.ts
+function betweenBlock(r, first) {
+  const b = betweenRow(r, first);
+  if (!b.text) return null;
+  return { kind: "row", text: b.text, label: b.label, ...b.sub ? { sub: b.sub } : {}, ...b.right ? { right: b.right } : {} };
+}
 function rowDay(it) {
   const overdue = it?.overdue === true || it?.status === "overdue" ? "overdue" : null;
   const due = it?.due_date != null && it.due_date !== "" ? cardDayWords(it.due_date, { utc: true }) : null;
@@ -6199,8 +6630,8 @@ function sectionDiscussSeed(card, entityType, section, blocks) {
 function normalizeSection(raw) {
   const data = raw.data && typeof raw.data === "object" ? raw.data : raw;
   const out = { section_type: raw.section_type, title: raw.title };
-  const text = data.text ?? data.narrative ?? raw.narrative;
-  if (typeof text === "string" && text.trim()) out.narrative = text;
+  const text2 = data.text ?? data.narrative ?? raw.narrative;
+  if (typeof text2 === "string" && text2.trim()) out.narrative = text2;
   const rows = [];
   if (Array.isArray(data.items)) {
     for (const it of data.items) {
@@ -6220,14 +6651,28 @@ function normalizeSection(raw) {
     }
   }
   if (rows.length > 0) out.items = rows;
-  for (const key of ["dimensions", "entries", "events", "voiced_narrative", "patterns", "predictions", "top_prediction", "placeholder_text"]) {
+  for (const key of ["dimensions", "entries", "events", "voiced_narrative", "patterns", "predictions", "top_prediction", "placeholder_text", "lines", "skills", "asks_for", "next_roles", "target", "waiting_for", "window_days", "rows", "older"]) {
     if (data[key] !== void 0) out[key] = data[key];
   }
   return out;
 }
-function sectionBlocks(rawSection) {
+function sectionBlocks(rawSection, ctx = {}) {
   const section = normalizeSection(rawSection);
   const blocks = [];
+  if (section.section_type === "commitments_between" && Array.isArray(section.rows)) {
+    const first = ctx.firstName ?? "";
+    for (const r of section.rows) {
+      const b = betweenBlock(r, first);
+      if (b) blocks.push(b);
+    }
+    const older = section.older && typeof section.older === "object" ? section.older : null;
+    const words = olderLine(older);
+    if (words) {
+      const children = (Array.isArray(older?.rows) ? older.rows : []).map((r) => betweenBlock(r, first)).filter((b) => !!b);
+      blocks.push({ kind: "older", text: words, children });
+    }
+    return blocks;
+  }
   if (typeof section.narrative === "string" && section.narrative.trim()) {
     blocks.push({ kind: "narrative", text: section.narrative });
   }
@@ -6252,6 +6697,43 @@ function sectionBlocks(rawSection) {
       blocks.push({ kind: "row", text: r.name, meta: meta || void 0 });
     }
   }
+  if (section.section_type === "work_shaping") {
+    for (const r of workShapingRows(Array.isArray(section.lines) ? section.lines : [])) {
+      blocks.push({ kind: "row", text: r.isNew ? `${r.text} (${DEVELOPMENT_WORDS.newMark})` : r.text, meta: r.material || void 0 });
+    }
+    if (typeof section.window_days === "number" && section.window_days > 0 && blocks.length) blocks.push({ kind: "row", text: DEVELOPMENT_WORDS.window(section.window_days) });
+  }
+  if (section.section_type === "skills_shown") {
+    for (const sk of Array.isArray(section.skills) ? section.skills : []) {
+      const row = skillRow(sk);
+      if (row) blocks.push({ kind: "row", text: row.name, meta: row.meta || void 0 });
+    }
+    const asks = section.asks_for && typeof section.asks_for === "object" ? section.asks_for : null;
+    const head = asks ? asksForHeading(asks) : null;
+    const askRows = asks ? roleAskRows(asks.items) : [];
+    if (head && askRows.length) {
+      blocks.push({ kind: "narrative", text: head });
+      for (const r of askRows) blocks.push({ kind: "row", text: r.name, meta: r.level });
+    }
+    const target = section.target && typeof section.target === "object" ? section.target : null;
+    const tHead = target ? targetHeading(target) : null;
+    const tRows = target ? roleAskRows(target.items) : [];
+    if (tHead && tRows.length) {
+      blocks.push({ kind: "narrative", text: tHead });
+      for (const r of tRows) blocks.push({ kind: "row", text: r.name, meta: r.level });
+    }
+    const next2 = (Array.isArray(section.next_roles) ? section.next_roles : []).map((r) => ({ title: (r.role_title ?? "").trim(), items: roleAskRows(r.items) })).filter((r) => r.title);
+    if (next2.length) {
+      blocks.push({ kind: "narrative", text: DEVELOPMENT_WORDS.nextRoles });
+      for (const r of next2) {
+        blocks.push({ kind: "row", text: r.title });
+        for (const i of r.items) blocks.push({ kind: "row", text: `\u21B3 ${i.name}`, meta: i.level });
+      }
+    }
+    if (typeof section.window_days === "number" && section.window_days > 0 && blocks.length) blocks.push({ kind: "row", text: DEVELOPMENT_WORDS.window(section.window_days) });
+    const waiting = typeof section.waiting_for === "string" ? section.waiting_for.trim() : "";
+    if (waiting) blocks.push({ kind: "narrative", text: waiting });
+  }
   const patterns = section.patterns;
   const placeholder = typeof section.placeholder_text === "string" ? section.placeholder_text.trim() : "";
   if (Array.isArray(patterns) && !patterns.length && placeholder && !blocks.length) blocks.push({ kind: "narrative", text: placeholder });
@@ -6271,11 +6753,11 @@ function sectionBlocks(rawSection) {
   const predictions = section.predictions;
   if (Array.isArray(predictions)) {
     for (const p of predictions) {
-      const text = p?.prediction?.trim() || p?.label?.trim();
-      if (!text) continue;
+      const text2 = p?.prediction?.trim() || p?.label?.trim();
+      if (!text2) continue;
       const shown2 = predictionScoreShown(p);
       const meta = [shown2 && typeof p.score === "number" ? `${Math.round(p.score * 100)}%` : null, shown2 ? p.basis?.trim() : null].filter(Boolean).join(" \xB7 ");
-      blocks.push({ kind: "row", text, meta: meta || void 0 });
+      blocks.push({ kind: "row", text: text2, meta: meta || void 0 });
     }
   }
   const next = section.top_prediction?.next_phase_name?.trim();
@@ -6288,8 +6770,8 @@ function sectionBlocks(rawSection) {
       if (!what) continue;
       const more = e.title && e.description ? ` \u2014 ${e.description}` : "";
       const from = e.kind === "structure" ? null : timelineSourceWords(e.source);
-      const text = `${what}${more}${e.current ? " (now)" : ""}${from ? ` \xB7 ${from}` : ""}`;
-      blocks.push({ kind: "row", text, meta: timelineWhen(e) || void 0 });
+      const text2 = `${what}${more}${e.current ? " (now)" : ""}${from ? ` \xB7 ${from}` : ""}`;
+      blocks.push({ kind: "row", text: text2, meta: timelineWhen(e) || void 0 });
     }
   }
   const voiced = section.voiced_narrative;
@@ -6332,19 +6814,19 @@ function standingWords(tier) {
 
 // src/todayLines.ts
 var FOR_YOU_ROWS = 5;
-function isWaitingLine(line) {
-  return line.ask_kind === "wait";
+function isWaitingLine(line2) {
+  return line2.ask_kind === "wait";
 }
-function lineNeedsYou(line) {
-  return !!line.needs_you && (line.state ?? "released") === "released";
+function lineNeedsYou(line2) {
+  return !!line2.needs_you && (line2.state ?? "released") === "released";
 }
 function dedupeLines(lines) {
   const seen = /* @__PURE__ */ new Set();
   const out = [];
   for (const l of lines) {
-    const text = (l.text ?? "").trim();
-    if (!text) continue;
-    const key = `${l.ask_kind ?? ""}|${text}`;
+    const text2 = (l.text ?? "").trim();
+    if (!text2) continue;
+    const key = `${l.ask_kind ?? ""}|${text2}`;
     if (seen.has(key)) continue;
     seen.add(key);
     out.push(l);
@@ -6370,8 +6852,8 @@ function stackOf(lines) {
 }
 var ROLE_SUBJECT = "debrief_role";
 var NOT_AN_INTERVIEW = "not_interview";
-function isDraftLine(line) {
-  return (line.choices ?? []).some((c) => c?.id === NOT_AN_INTERVIEW);
+function isDraftLine(line2) {
+  return (line2.choices ?? []).some((c) => c?.id === NOT_AN_INTERVIEW);
 }
 function fallbackLabel(type) {
   return type === "space" ? "A space" : type === "company" ? "A company" : type === ROLE_SUBJECT ? "Interview debrief" : "Someone";
@@ -6415,6 +6897,421 @@ function foldRows(groups, limit = FOR_YOU_ROWS) {
   const ordered = [...groups.filter((g) => g.needsYou), ...groups.filter((g) => !g.needsYou)];
   const keep = Math.max(limit, ordered.filter((g) => g.needsYou).length);
   return { shown: ordered.slice(0, keep), folded: ordered.slice(keep) };
+}
+function linesAfterRead(read, before, answeredHere, closedHere = /* @__PURE__ */ new Set()) {
+  const open = read.filter((l) => !l.state || l.state === "queued" || l.state === "released" || answeredHere.has(l.line_id));
+  const have = new Set(open.map((l) => l.line_id));
+  return [...open, ...before.filter((l) => closedHere.has(l.line_id) && !have.has(l.line_id)).map((l) => ({ ...l, state: "expired", needs_you: false }))];
+}
+function readsAgainFor(lineId, shown2, answeredHere) {
+  return typeof lineId === "string" && !!lineId && !answeredHere.has(lineId) && (shown2 ?? []).some((l) => l.line_id === lineId);
+}
+
+// src/chartSource.ts
+function chartSourceCaption(source) {
+  const s2 = typeof source === "string" ? source.replace(/\s+/g, " ").trim() : "";
+  if (!s2) return null;
+  return /[.!?…]$/.test(s2) ? s2 : `${s2}.`;
+}
+
+// src/chartSpec.ts
+var CHART_TYPES = ["bar", "line", "area", "composed", "pie", "scatter", "radar", "radial_bar", "funnel", "treemap", "sankey", "heatmap", "box_plot"];
+var ROW_TYPES = /* @__PURE__ */ new Set(["bar", "line", "area", "composed", "pie", "scatter", "radar", "radial_bar", "funnel", "treemap"]);
+var CHART_LIMITS = { series: 6, rows: 500, pieSlices: 8, heatmapSide: 40, boxGroups: 12, panels: 12 };
+var CHART_WORDS = {
+  other: "Other",
+  from: "From",
+  to: "To",
+  amount: "Amount",
+  lowest: "Lowest",
+  lowerQuarter: "Lower quarter",
+  middle: "Middle",
+  upperQuarter: "Upper quarter",
+  highest: "Highest",
+  count: "Values",
+  outliers: "Far out",
+  fewer: "fewer",
+  more: "more",
+  below: "below",
+  above: "above"
+};
+var str3 = (v) => typeof v === "string" ? v.trim() : "";
+var num = (v) => typeof v === "number" && Number.isFinite(v) ? v : null;
+var isObj = (v) => !!v && typeof v === "object" && !Array.isArray(v);
+var rowsOf = (v) => Array.isArray(v) ? v.filter(isObj) : [];
+function chartSeries(desc) {
+  const given = Array.isArray(desc.series) ? desc.series.filter((s2) => isObj(s2) && !!str3(s2.key)) : [];
+  if (given.length) return given.slice(0, CHART_LIMITS.series).map((s2) => ({ ...s2, key: str3(s2.key), label: str3(s2.label) || str3(s2.key) }));
+  const y = str3(desc.y_key);
+  return y ? [{ key: y, label: str3(desc.y_label) || y }] : [];
+}
+function hasCycle(links) {
+  const next = /* @__PURE__ */ new Map();
+  for (const l of links) next.set(l.from, [...next.get(l.from) ?? [], l.to]);
+  const state = /* @__PURE__ */ new Map();
+  const visit = (n) => {
+    if (state.get(n) === 1) return true;
+    if (state.get(n) === 2) return false;
+    state.set(n, 1);
+    for (const m of next.get(n) ?? []) if (visit(m)) return true;
+    state.set(n, 2);
+    return false;
+  };
+  return [...next.keys()].some((n) => visit(n));
+}
+function readChart(raw) {
+  if (!isObj(raw)) return null;
+  const type = str3(raw.type);
+  if (!CHART_TYPES.includes(type)) return null;
+  const desc = { ...raw, type };
+  if (ROW_TYPES.has(type)) {
+    const data = rowsOf(raw.data).slice(0, CHART_LIMITS.rows);
+    const x = str3(raw.x_key);
+    if (!data.length || !x || !data.some((r) => r[x] !== void 0 && r[x] !== null)) return null;
+    let series = chartSeries(desc);
+    if (!Array.isArray(raw.series) && (type === "bar" || type === "line") && !raw.range && !raw.facet) {
+      const extra = Object.keys(data[0]).filter((k) => k !== x && k !== str3(raw.y_key) && typeof data[0][k] === "number");
+      series = [...series, ...extra.map((k) => ({ key: k, label: k }))].slice(0, CHART_LIMITS.series);
+    }
+    const range = isObj(raw.range) && str3(raw.range.low_key) && str3(raw.range.high_key) ? raw.range : void 0;
+    if (!series.length && !range) return null;
+    const numeric = (k) => data.some((r) => num(r[k]) !== null);
+    if (series.some((s2) => !numeric(s2.key))) return null;
+    if (range && (!numeric(range.low_key) || !numeric(range.high_key))) return null;
+    if (type === "scatter" && !data.some((r) => num(r[x]) !== null)) return null;
+    if (type === "composed" && !Array.isArray(raw.series)) return null;
+    const out = { ...desc, data, x_key: x, series, range };
+    if (out.y_scale === "log" && series.some((s2) => data.some((r) => (num(r[s2.key]) ?? 1) <= 0))) out.y_scale = "linear";
+    if (type === "pie") out.data = pieSlices(data, x, series[0].key);
+    return out;
+  }
+  if (type === "sankey") {
+    const data = rowsOf(raw.data).map((r) => ({ ...r, from: str3(r.from), to: str3(r.to), value: num(r.value) ?? 0 })).filter((r) => r.from && r.to && r.from !== r.to && r.value > 0).slice(0, CHART_LIMITS.rows);
+    if (!data.length || hasCycle(data)) return null;
+    return { ...desc, data };
+  }
+  if (type === "heatmap") {
+    const cells = rowsOf(raw.cells).map((c) => ({ ...c, row: str3(c.row), column: str3(c.column), value: num(c.value) })).filter((c) => c.row && c.column);
+    if (!cells.length || !cells.some((c) => c.value !== null)) return null;
+    return { ...desc, cells };
+  }
+  const groups = rowsOf(raw.groups).map((g) => ({ ...g, label: str3(g.label), min: num(g.min), q1: num(g.q1), median: num(g.median), q3: num(g.q3), max: num(g.max) })).filter((g) => !!g.label && [g.min, g.q1, g.median, g.q3, g.max].every((v) => v !== null) && g.min <= g.q1 && g.q1 <= g.median && g.median <= g.q3 && g.q3 <= g.max).map((g) => ({ ...g, outliers: Array.isArray(g.outliers) ? g.outliers.map(num).filter((v) => v !== null) : void 0 })).slice(0, CHART_LIMITS.boxGroups);
+  if (!groups.length) return null;
+  return { ...desc, groups };
+}
+function pieSlices(data, x, y) {
+  if (data.length <= CHART_LIMITS.pieSlices) return data;
+  const sorted = [...data].sort((a, b) => (num(b[y]) ?? 0) - (num(a[y]) ?? 0));
+  const rest = sorted.slice(CHART_LIMITS.pieSlices - 1).reduce((s2, r) => s2 + (num(r[y]) ?? 0), 0);
+  return [...sorted.slice(0, CHART_LIMITS.pieSlices - 1), { [x]: CHART_WORDS.other, [y]: rest }];
+}
+function chartValue(v, unit) {
+  const n = num(v);
+  if (n === null) return v === null || v === void 0 ? "" : String(v);
+  const s2 = Number.isInteger(n) ? String(n) : String(Math.round(n * 100) / 100);
+  const u = str3(unit);
+  return u ? u === "%" ? `${s2}%` : `${s2} ${u}` : s2;
+}
+function chartHeading(key) {
+  const s2 = key.replace(/_/g, " ").trim();
+  return s2 ? s2.charAt(0).toUpperCase() + s2.slice(1) : s2;
+}
+function chartTable(raw) {
+  const empty = { columns: [], rows: [] };
+  if (!isObj(raw)) return empty;
+  const type = str3(raw.type);
+  const unit = str3(raw.unit);
+  if (type === "heatmap" || !Array.isArray(raw.data) && Array.isArray(raw.cells)) {
+    const grid = heatmapGrid(raw);
+    if (!grid.rows.length) return empty;
+    return { columns: ["", ...grid.columns], rows: grid.rows.map((r) => [r, ...grid.columns.map((c) => chartValue(grid.value(r, c), unit))]) };
+  }
+  if (type === "box_plot" || !Array.isArray(raw.data) && Array.isArray(raw.groups)) {
+    const groups = rowsOf(raw.groups);
+    if (!groups.length) return empty;
+    const withN = groups.some((g) => num(g.n) !== null);
+    const withOut = groups.some((g) => Array.isArray(g.outliers) && g.outliers.length);
+    return {
+      columns: ["", CHART_WORDS.lowest, CHART_WORDS.lowerQuarter, CHART_WORDS.middle, CHART_WORDS.upperQuarter, CHART_WORDS.highest, ...withOut ? [CHART_WORDS.outliers] : [], ...withN ? [CHART_WORDS.count] : []],
+      rows: groups.map((g) => [
+        str3(g.label),
+        ...["min", "q1", "median", "q3", "max"].map((k) => chartValue(g[k], unit)),
+        ...withOut ? [Array.isArray(g.outliers) ? g.outliers.map((o) => chartValue(o, unit)).join(", ") : ""] : [],
+        ...withN ? [chartValue(g.n)] : []
+      ])
+    };
+  }
+  const data = rowsOf(raw.data).slice(0, CHART_LIMITS.rows);
+  if (!data.length) return empty;
+  if (type === "sankey") {
+    return { columns: [CHART_WORDS.from, CHART_WORDS.to, str3(raw.value_label) ? chartHeading(str3(raw.value_label)) : CHART_WORDS.amount], rows: data.map((r) => [str3(r.from), str3(r.to), chartValue(r.value, unit)]) };
+  }
+  const x = str3(raw.x_key);
+  const keys = [];
+  for (const r of data) for (const k of Object.keys(r)) if (!keys.includes(k)) keys.push(k);
+  const ordered = x && keys.includes(x) ? [x, ...keys.filter((k) => k !== x)] : keys;
+  const labels = /* @__PURE__ */ new Map();
+  if (Array.isArray(raw.series)) {
+    for (const s2 of raw.series) if (isObj(s2) && str3(s2.key) && str3(s2.label)) labels.set(str3(s2.key), str3(s2.label));
+  }
+  const heading = (k) => labels.get(k) ?? (k === x && str3(raw.x_label) ? str3(raw.x_label) : k === str3(raw.y_key) && str3(raw.y_label) ? str3(raw.y_label) : chartHeading(k));
+  return { columns: ordered.map(heading), rows: data.map((r) => ordered.map((k) => chartValue(r[k], typeof r[k] === "number" ? unit : void 0))) };
+}
+function heatmapGrid(raw) {
+  const cells = isObj(raw) ? rowsOf(raw.cells) : [];
+  const seen = (pick) => {
+    const out = [];
+    for (const c of cells) {
+      const v = pick(c);
+      if (v && !out.includes(v)) out.push(v);
+    }
+    return out;
+  };
+  const given = (v) => Array.isArray(v) ? v.map(str3).filter(Boolean) : [];
+  const rowsGiven = isObj(raw) ? given(raw.rows) : [];
+  const colsGiven = isObj(raw) ? given(raw.columns) : [];
+  const rows = (rowsGiven.length ? rowsGiven : seen((c) => str3(c.row))).slice(0, CHART_LIMITS.heatmapSide);
+  const columns = (colsGiven.length ? colsGiven : seen((c) => str3(c.column))).slice(0, CHART_LIMITS.heatmapSide);
+  const at = /* @__PURE__ */ new Map();
+  for (const c of cells) at.set(`${str3(c.row)}\0${str3(c.column)}`, num(c.value));
+  const values = [...at.values()].filter((v) => v !== null);
+  return {
+    rows,
+    columns,
+    value: (r, c) => at.has(`${r}\0${c}`) ? at.get(`${r}\0${c}`) : void 0,
+    min: values.length ? Math.min(...values) : 0,
+    max: values.length ? Math.max(...values) : 0
+  };
+}
+function heatmapShade(value, min, max, diverging = false) {
+  if (diverging) {
+    const reach = Math.max(Math.abs(min), Math.abs(max)) || 1;
+    return { strength: Math.min(1, Math.abs(value) / reach), side: value < 0 ? "low" : "high" };
+  }
+  const span = max - min;
+  return { strength: span > 0 ? (value - min) / span : 1, side: "high" };
+}
+function boxPlotDomain(groups) {
+  const all = groups.flatMap((g) => [g.min, g.max, ...g.outliers ?? []]).filter((v) => Number.isFinite(v));
+  if (!all.length) return [0, 1];
+  const lo = Math.min(...all);
+  const hi = Math.max(...all);
+  return lo === hi ? [lo - 1, hi + 1] : [lo, hi];
+}
+
+// src/prepList.ts
+var PREP_LIST_WORDS = {
+  addPlaceholder: "Add an item to your list",
+  add: "Add",
+  privateNotes: "Your private notes for this meeting.",
+  listLabel: "To cover",
+  addLink: "+ add",
+  notesLabel: "Notes",
+  notesPlaceholder: "What\u2019s said and decided, as you go. Only you see this.",
+  savedAsYouType: "Saved as you type",
+  quiet: "Myu won\u2019t interrupt. Ask it in the chat if you need it.",
+  done: "Done \u25B8",
+  join: "Join the call \u25B8",
+  now: "NOW",
+  myuPrep: "Myu\u2019s prep",
+  show: "show \u25B8",
+  hide: "hide \u25BE",
+  open: "Open \u25B8",
+  laterThisWeek: "Later this week",
+  fromLastTime: "from last time",
+  drop: "Drop",
+  remove: "Remove",
+  fromNotes: "From your notes",
+  myuReading: "Myu\u2019s reading",
+  yes: "Yes \u25B8",
+  addsToList: "adds it to your list",
+  onYourList: "on your list",
+  reading: "Reading your notes and the calendar for this meeting\u2026",
+  readingLong: "Taking longer than usual. Your list is saved.",
+  readingFailed: "Couldn\u2019t read this meeting this time. Try again \u25B8",
+  personMore: "more \u25BE",
+  personLess: "less \u25B4",
+  fullCard: "Full card \u25B8",
+  since: "Since last time",
+  room: "The room",
+  beforeYouGo: "Before you go in",
+  labels: {
+    changed: "Changed",
+    youOwe: "You owe",
+    theyOwe: (first) => `${first} owes`,
+    thread: "Open thread",
+    worksBest: "Works best",
+    lastTime: "Last time",
+    planned: "What\u2019s planned",
+    documents: "Documents",
+    setUpEmail: "The email that set it up",
+    notReplied: "Hasn\u2019t replied",
+    history: "History"
+  },
+  covered: (n, m) => `${n} of ${m}`,
+  coveredAfter: (n, m) => `${n} of ${m} covered`,
+  carriedTo: (date) => `Carried to ${date}`,
+  onTheListFor: (day) => `On the list for ${day}.`,
+  toCover: (n) => `${n} to cover`,
+  more: (n) => `+${n} more`,
+  plus: (text2) => `+ ${text2}`,
+  openCount: (n) => `${n} open`,
+  pastMeetings: (first) => `Past 1:1s with ${first} \u25B8`,
+  pastSeries: (meeting) => `Earlier ${meeting} \u25B8`
+};
+var TODAY_ROW_ITEMS = 3;
+var NOTES_SAVE_MS = 800;
+var READING_LONG_MS = 2e4;
+var READING_POLL_MS = 4e3;
+var str4 = (v) => typeof v === "string" ? v.trim() : "";
+var list3 = (v) => Array.isArray(v) ? v : [];
+function prepFirstName(name) {
+  return str4(name).split(/\s+/)[0] ?? "";
+}
+function prepTimeWords(d) {
+  const h = d.getHours();
+  const m = String(d.getMinutes()).padStart(2, "0");
+  return `${h % 12 === 0 ? 12 : h % 12}:${m} ${h < 12 ? "am" : "pm"}`;
+}
+var WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+var MONTHS3 = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+var startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+function prepDayWord(startsAt, now = /* @__PURE__ */ new Date()) {
+  const t = Date.parse(str4(startsAt));
+  if (!Number.isFinite(t)) return null;
+  const d = new Date(t);
+  const days = Math.round((startOfDay(d) - startOfDay(now)) / 864e5);
+  if (days === 0) return "today";
+  if (days === 1) return "tomorrow";
+  if (days > 1 && days < 7) return WEEKDAYS[d.getDay()];
+  return `${d.getDate()} ${MONTHS3[d.getMonth()]}`;
+}
+function prepWhenWords(startsAt) {
+  const t = Date.parse(str4(startsAt));
+  if (!Number.isFinite(t)) return "";
+  const d = new Date(t);
+  return `${WEEKDAYS[d.getDay()]} ${d.getDate()} ${MONTHS3[d.getMonth()]} \xB7 ${prepTimeWords(d)}`;
+}
+function todayRowItems(items, count2) {
+  const all = [...list3(items)].sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+  const shown2 = all.slice(0, TODAY_ROW_ITEMS);
+  const total = typeof count2 === "number" && count2 >= all.length ? count2 : all.length;
+  return { shown: shown2, more: Math.max(0, total - shown2.length) };
+}
+function toCoverWords(items, count2) {
+  const all = list3(items);
+  const total = typeof count2 === "number" && count2 >= all.length ? count2 : all.length;
+  const open = total === all.length ? all.filter((i) => !i.done).length : total - all.filter((i) => i.done).length;
+  return open > 0 ? PREP_LIST_WORDS.toCover(open) : null;
+}
+function prepStateOf(prep) {
+  const s2 = prep?.state;
+  return s2 === "now" || s2 === "after" ? s2 : "before";
+}
+function prepCoveredLabel(prep) {
+  const state = prepStateOf(prep);
+  if (state === "before") return null;
+  const items = list3(prep.items);
+  const total = prep.covered?.total ?? items.length;
+  const done = prep.covered?.done ?? items.filter((i) => i.done).length;
+  if (!total) return null;
+  return state === "now" ? PREP_LIST_WORDS.covered(done, total) : PREP_LIST_WORDS.coveredAfter(done, total);
+}
+function prepItemNote(item, state) {
+  if (state === "after" && !item.done) {
+    const date = str4(item.carried_to?.date);
+    return date ? { text: PREP_LIST_WORDS.carriedTo(date), drop: !!str4(item.carried_to?.item_id) } : null;
+  }
+  return item.source === "carried" ? { text: PREP_LIST_WORDS.fromLastTime, drop: false } : null;
+}
+function moveItem(items, from, to) {
+  const out = [...items];
+  if (from < 0 || from >= out.length || to < 0 || to >= out.length || from === to) return out;
+  const [it] = out.splice(from, 1);
+  out.splice(to, 0, it);
+  return out.map((i, n) => ({ ...i, position: n }));
+}
+function prepAskIsList(ask) {
+  if (!ask) return false;
+  if (str4(ask.kind)) return ask.kind === "want";
+  return ask.select !== "many" && ask.input === "text" && list3(ask.choices).length === 0;
+}
+function prepReadingStage(prep, waitedMs) {
+  if (prep.reading_failed) return "failed";
+  if (!prep.reading) return null;
+  return waitedMs >= READING_LONG_MS ? "long" : "reading";
+}
+function prepPersonRows(p) {
+  if (p.thin) return [];
+  const W3 = PREP_LIST_WORDS.labels;
+  const first = prepFirstName(p.name) || p.name;
+  const rows = [];
+  list3(p.changed).forEach((c, i) => {
+    const text2 = str4(c?.text);
+    if (text2) rows.push({ key: `changed-${i}`, label: W3.changed, text: text2, sub: str4(c?.source) || null });
+  });
+  list3(p.open).forEach((o, i) => {
+    const text2 = str4(o?.text);
+    if (!text2) return;
+    const label2 = o.kind === "you_owe" ? W3.youOwe : o.kind === "they_owe" ? W3.theyOwe(first) : W3.thread;
+    rows.push({ key: `open-${i}`, label: label2, text: text2, sub: str4(o?.when) || null });
+  });
+  for (const [kind, of] of [["decided", p.decided], ["told", p.told]]) {
+    list3(of).forEach((r, i) => {
+      const w = checkRecordRow({ ...r, kind }, Date.now());
+      if (w.text) rows.push({ key: `${kind}-${i}`, label: w.label, text: w.text, sub: [w.sub, w.right].filter(Boolean).join(" \xB7 ") || null });
+    });
+  }
+  const wb = p.works_best;
+  const wbText = typeof wb === "string" ? str4(wb) : wb && typeof wb === "object" ? str4(wb.text) : "";
+  const wbSource = wb && typeof wb === "object" ? str4(wb.source) : "";
+  if (wbText) rows.push({ key: "works-best", label: W3.worksBest, text: wbText, sub: wbSource || null });
+  return rows;
+}
+function prepPersonStrip(p) {
+  const open = list3(p.open);
+  const n = typeof p.open_count === "number" ? p.open_count : open.length;
+  const line2 = str4(p.line);
+  const says = p.line_kind === "open" || p.line_kind === "changed" && open.length > 0 && line2.includes(str4(open[0]?.text)) ? 1 : 0;
+  return n > says ? PREP_LIST_WORDS.openCount(n) : null;
+}
+function prepPersonLine(p) {
+  return str4(p.line) || null;
+}
+function listOffersOf(reply) {
+  const raw = reply && typeof reply === "object" ? reply.list_offers : null;
+  const out = [];
+  for (const o of Array.isArray(raw) ? raw : []) {
+    const t = str4(o && typeof o === "object" ? o.text : o);
+    if (t && !out.some((x) => x.toLowerCase() === t.toLowerCase())) out.push(t);
+    if (out.length === 3) break;
+  }
+  return out;
+}
+function prepHistoryLink(prep) {
+  if (prep.kind === "one_on_one") {
+    const p = list3(prep.people).find((x) => !!str4(x?.relationship_id));
+    const first = prepFirstName(p?.name);
+    if (p && first) return { relationship_id: str4(p.relationship_id), label: PREP_LIST_WORDS.pastMeetings(first) };
+  }
+  const series = str4(prep.event_series);
+  const title = str4(prep.title);
+  return series && title ? { event_series: series, label: PREP_LIST_WORDS.pastSeries(title) } : null;
+}
+function prepSuggestionTarget(meeting, suggestion) {
+  const t = suggestion.target;
+  if (t && str4(t.event_id)) return { event_id: str4(t.event_id), occurrence_key: str4(t.occurrence_key) || null };
+  if (t && str4(t.relationship_id)) return { relationship_id: str4(t.relationship_id) };
+  if (t && str4(t.series_id)) return { series_id: str4(t.series_id) };
+  return { event_id: meeting.event_id, occurrence_key: meeting.occurrence_key ?? null };
+}
+function prepHistoryRowWords(row) {
+  const t = Date.parse(str4(row.starts_at));
+  const d = Number.isFinite(t) ? new Date(t) : null;
+  const day = d ? `${WEEKDAYS[d.getDay()].slice(0, 3)} ${d.getDate()} ${MONTHS3[d.getMonth()].slice(0, 3)}` : "";
+  const total = row.items_total ?? 0;
+  const covered = total > 0 ? PREP_LIST_WORDS.coveredAfter(row.items_done ?? 0, total) : "";
+  return [day, covered].filter(Boolean).join(" \xB7 ");
 }
 
 // src/vault/myuFiles.ts
@@ -6467,28 +7364,28 @@ function frontmatter(pairs) {
 function commitmentLine(c, checked) {
   const box = checked ? "x" : " ";
   const owner = c.owner ? `[[${sanitizeName(c.owner)}]] ` : "";
-  const text = (c.content ?? "").trim() || "(encrypted \u2014 open in Myu)";
+  const text2 = (c.content ?? "").trim() || "(encrypted \u2014 open in Myu)";
   const due = c.deadline ? ` \u{1F4C5} ${c.deadline.slice(0, 10)}` : "";
   const from = c.meeting_title ? ` *(from ${c.meeting_title})*` : "";
-  return `- [${box}] ${owner}${text}${due}${from} %%myu-id:${c.commitment_id}%%`;
+  return `- [${box}] ${owner}${text2}${due}${from} %%myu-id:${c.commitment_id}%%`;
 }
-function lineKey(text) {
+function lineKey(text2) {
   let h = 5381;
-  for (let i = 0; i < text.length; i++) h = (h << 5) + h + text.charCodeAt(i) | 0;
+  for (let i = 0; i < text2.length; i++) h = (h << 5) + h + text2.charCodeAt(i) | 0;
   return (h >>> 0).toString(36);
 }
 function meetingAdditions(contents) {
   const out = { decisions: [], commitments: [] };
   let section = null;
   for (const raw of contents.split("\n")) {
-    const line = raw.trimEnd();
-    if (/^## /.test(line)) {
-      section = /^## Decisions\s*$/.test(line) ? "decisions" : /^## Commitments\s*$/.test(line) ? "commitments" : null;
+    const line2 = raw.trimEnd();
+    if (/^## /.test(line2)) {
+      section = /^## Decisions\s*$/.test(line2) ? "decisions" : /^## Commitments\s*$/.test(line2) ? "commitments" : null;
       continue;
     }
     if (!section) continue;
-    const m = /^- (?!\[[ xX]\])(.+)$/.exec(line);
-    if (!m || MYU_ID_RE.test(line)) continue;
+    const m = /^- (?!\[[ xX]\])(.+)$/.exec(line2);
+    if (!m || MYU_ID_RE.test(line2)) continue;
     const body = m[1].trim();
     if (!body) continue;
     if (section === "decisions") {
@@ -6502,16 +7399,16 @@ function meetingAdditions(contents) {
 }
 function parseCheckboxes(contents) {
   const out = [];
-  for (const line of contents.split("\n")) {
-    const id = MYU_ID_RE.exec(line)?.[1];
+  for (const line2 of contents.split("\n")) {
+    const id = MYU_ID_RE.exec(line2)?.[1];
     if (!id) continue;
-    const box = CHECKBOX_RE.exec(line);
+    const box = CHECKBOX_RE.exec(line2);
     if (!box) continue;
-    out.push({ myuId: id, checked: box[1].toLowerCase() === "x", line });
+    out.push({ myuId: id, checked: box[1].toLowerCase() === "x", line: line2 });
   }
   return out;
 }
-function buildMeetingHistoryMarkdown(meeting) {
+function buildMeetingHistoryMarkdown(meeting, page = {}) {
   const title = String(meeting.title ?? meeting.meeting_title ?? "Meeting");
   const whenDate = parseWhen(firstPresent(meeting.meeting_date, meeting.occurred_at, meeting.created_at));
   const when = whenDate ? whenDate.toISOString().slice(0, 10) : "";
@@ -6527,19 +7424,22 @@ function buildMeetingHistoryMarkdown(meeting) {
     ["source", String(meeting.source ?? "") || null]
   ]);
   const parts = [head, "", `# ${title}`];
+  const door = page.event_id ? `[${PREP_LIST_WORDS.open}](${prepLink(page.event_id, title)})` : "";
+  const doorLine = [door, page.counts?.trim() ?? ""].filter(Boolean).join(" \xB7 ");
+  if (doorLine) parts.push("", doorLine);
   if (attendees.length > 0) {
     parts.push("", `**Attendees:** ${attendees.map((a) => `[[${sanitizeName(a)}]]`).join(", ")}`);
   }
-  const text = (v) => typeof v === "string" ? v.trim() : "";
-  const list2 = (v) => Array.isArray(v) ? v.map((i) => typeof i === "string" ? i : text(i?.text) || text(i?.content)).filter(Boolean) : [];
-  const summary = text(meeting.summary) || text(meeting.debrief);
+  const text2 = (v) => typeof v === "string" ? v.trim() : "";
+  const list7 = (v) => Array.isArray(v) ? v.map((i) => typeof i === "string" ? i : text2(i?.text) || text2(i?.content)).filter(Boolean) : [];
+  const summary = text2(meeting.summary) || text2(meeting.debrief);
   if (summary) parts.push("", "## Summary", "", summary);
-  const keyPoints = list2(meeting.key_points);
+  const keyPoints = list7(meeting.key_points);
   if (keyPoints.length > 0) {
     parts.push("", "## Key points");
     for (const p of keyPoints) parts.push(`- ${p}`);
   }
-  const decisions = list2(meeting.decisions);
+  const decisions = list7(meeting.decisions);
   if (decisions.length > 0) {
     parts.push("", "## Decisions");
     for (const d of decisions) parts.push(`- ${d} %%myu-id:d-${lineKey(d)}%%`);
@@ -6548,9 +7448,9 @@ function buildMeetingHistoryMarkdown(meeting) {
   if (commitments.length > 0) {
     parts.push("", "## Commitments");
     for (const c of commitments) {
-      const owner = text(c.owner);
-      const line = text(c.content) || text(c.text);
-      if (line) parts.push(`- ${owner ? `[[${sanitizeName(owner)}]] ` : ""}${line} %%myu-id:${text(c.commitment_id) || `c-${lineKey(line)}`}%%`);
+      const owner = text2(c.owner);
+      const line2 = text2(c.content) || text2(c.text);
+      if (line2) parts.push(`- ${owner ? `[[${sanitizeName(owner)}]] ` : ""}${line2} %%myu-id:${text2(c.commitment_id) || `c-${lineKey(line2)}`}%%`);
     }
   }
   let topics = [];
@@ -6570,16 +7470,16 @@ function buildMeetingHistoryMarkdown(meeting) {
       parts.push(`- ${t.name}${typeof t.time_spent_percent === "number" ? ` *(${t.time_spent_percent}%)*` : ""}`);
     }
   }
-  const notes = text(meeting.content) || text(meeting.raw_notes);
+  const notes = text2(meeting.content) || text2(meeting.raw_notes);
   if (notes && notes !== summary) parts.push("", "## Notes", "", notes);
-  const transcript = text(meeting.transcript);
+  const transcript = text2(meeting.transcript);
   if (transcript) parts.push("", "## Transcript", "", transcript);
   parts.push("", "*Written by Myu from your meeting history. Any edits here will be overwritten.*", "");
   return parts.join("\n");
 }
 function pastedCallout(block, n, depth = 1) {
   const quote2 = Array(depth).fill(">").join(" ");
-  return [`[!quote]- ${cardLabel(block, n)}`, ...block.text.split("\n")].map((line) => line ? `${quote2} ${line}` : quote2).join("\n");
+  return [`[!quote]- ${cardLabel(block, n)}`, ...block.text.split("\n")].map((line2) => line2 ? `${quote2} ${line2}` : quote2).join("\n");
 }
 var pastedNumber = (blocks, i) => blocks.length > 1 ? i + 1 : void 0;
 function buildJournalDayMarkdown(date, entries) {
@@ -6599,8 +7499,8 @@ function buildJournalDayMarkdown(date, entries) {
       parts.push("");
       for (const turn of entry.turns) {
         const speaker = turn.role === "myu" ? "myu" : "you";
-        for (const line of turn.text.trim().split("\n")) {
-          parts.push(`> **${speaker}:** ${line}`.trimEnd());
+        for (const line2 of turn.text.trim().split("\n")) {
+          parts.push(`> **${speaker}:** ${line2}`.trimEnd());
         }
         const turnPasted = turn.pasted ?? [];
         turnPasted.forEach((block, i) => parts.push(">", pastedCallout(block, pastedNumber(turnPasted, i), 2)));
@@ -6615,6 +7515,10 @@ function buildJournalDayMarkdown(date, entries) {
   parts.push("", "*Written by Myu \u2014 your journal, decrypted into your vault. Any edits here will be overwritten.*", "");
   return parts.join("\n");
 }
+function prepLink(eventId, title) {
+  const t = (title ?? "").trim();
+  return `obsidian://myu-prep?event=${encodeURIComponent(eventId)}${t ? `&title=${encodeURIComponent(t)}` : ""}`;
+}
 function buildDayMarkdown(date, events, meetingLinks, hasJournal, memoryPeople = []) {
   const head = frontmatter([
     ["type", "myu-day"],
@@ -6627,13 +7531,23 @@ function buildDayMarkdown(date, events, meetingLinks, hasJournal, memoryPeople =
     parts.push("", "## Schedule");
     for (const e of events) {
       const time = e.all_day ? "all day" : (e.start_time ?? "").slice(11, 16) || "\u2014";
-      const door = e.event_id ? ` [prepare \u25B8](obsidian://myu-prep?event=${e.event_id})` : "";
+      const door = e.event_id ? ` [${PREP_LIST_WORDS.open}](${prepLink(e.event_id, e.title)})` : "";
       parts.push(`- **${time}** ${e.title ?? "Busy"}${door}`);
     }
   }
   if (meetingLinks.length > 0) {
     parts.push("", "## Meetings");
-    for (const link of meetingLinks) parts.push(`- [[${link}]]`);
+    for (const m of meetingLinks) {
+      if (typeof m === "string" || !m.event_id) {
+        const link2 = typeof m === "string" ? m : m.link;
+        const counts = typeof m === "string" ? "" : m.counts?.trim() ?? "";
+        parts.push(`- [[${link2}]]${counts ? ` \xB7 ${counts}` : ""}`);
+        continue;
+      }
+      const title = m.title?.trim() || m.link.replace(/^Meetings\//, "");
+      const bits = [`**${title}**`, m.counts?.trim() || "", `[${PREP_LIST_WORDS.open}](${prepLink(m.event_id, title)})`, `[[${m.link}|${MEETING_POST_WORDS.openNotes}]]`].filter(Boolean);
+      parts.push(`- ${bits.join(" \xB7 ")}`);
+    }
   }
   if (hasJournal) {
     parts.push("", `## Journal`, "", `![[Journal/${date}]]`);
@@ -6651,8 +7565,8 @@ function buildMonthCalendarMarkdown(months, busy) {
   const head = frontmatter([["type", "myu-calendar"], [MYU_GENERATED_KEY, true]]);
   const parts = [head, "", "# Calendar"];
   for (const { year, month } of months) {
-    const label = new Date(Date.UTC(year, month, 1)).toLocaleString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
-    parts.push("", `## ${label}`, "", "| Mon | Tue | Wed | Thu | Fri | Sat | Sun |", "| --- | --- | --- | --- | --- | --- | --- |");
+    const label2 = new Date(Date.UTC(year, month, 1)).toLocaleString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
+    parts.push("", `## ${label2}`, "", "| Mon | Tue | Wed | Thu | Fri | Sat | Sun |", "| --- | --- | --- | --- | --- | --- | --- |");
     const first = new Date(Date.UTC(year, month, 1));
     const startOffset = (first.getUTCDay() + 6) % 7;
     const daysInMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
@@ -6873,26 +7787,26 @@ function scalarOf(key, value) {
 }
 function cellOf(key, value) {
   if (value === null || value === void 0) return "";
-  let text;
+  let text2;
   if (Array.isArray(value)) {
     if (value.length === 2 && value.every((v) => typeof v === "number") && /(?:months|years|weeks|days|range)$/.test(key)) {
-      text = `${value[0]}\u2013${value[1]}`;
+      text2 = `${value[0]}\u2013${value[1]}`;
     } else {
-      text = value.map((v) => v && typeof v === "object" ? readableOf(v) : scalarOf(key, v)).filter(Boolean).join(", ");
+      text2 = value.map((v) => v && typeof v === "object" ? readableOf(v) : scalarOf(key, v)).filter(Boolean).join(", ");
     }
   } else if (typeof value === "object") {
-    text = readableOf(value);
+    text2 = readableOf(value);
   } else {
-    text = scalarOf(key, value);
+    text2 = scalarOf(key, value);
   }
-  return text.replace(/\|/g, "\\|").replace(/\s*\n\s*/g, " ").trim();
+  return text2.replace(/\|/g, "\\|").replace(/\s*\n\s*/g, " ").trim();
 }
-function readableOf(obj) {
+function readableOf(obj3) {
   for (const k of ["display_name", "name", "label", "title", "text", "preview", "summary", "what", "action"]) {
-    const v = obj[k];
+    const v = obj3[k];
     if (typeof v === "string" && v.trim()) return v.trim();
   }
-  const scalars = Object.entries(obj).filter(([k, v]) => !isPlumbing(k) && v !== null && typeof v !== "object");
+  const scalars = Object.entries(obj3).filter(([k, v]) => !isPlumbing(k) && v !== null && typeof v !== "object");
   return scalars.map(([, v]) => String(v)).join(" \xB7 ");
 }
 function rowsToTable(value, columnsOverride) {
@@ -6907,6 +7821,11 @@ function rowsToTable(value, columnsOverride) {
     `| ${columns.map(() => "---").join(" | ")} |`,
     ...rows.map((r) => `| ${columns.map((c) => cellOf(c, r[c])).join(" | ")} |`)
   ];
+}
+function tableLines(t) {
+  if (!t.rows.length) return [];
+  const cell2 = (v) => v.replace(/\|/g, "\\|");
+  return [`| ${t.columns.map(cell2).join(" | ")} |`, `| ${t.columns.map(() => "---").join(" | ")} |`, ...t.rows.map((r) => `| ${r.map(cell2).join(" | ")} |`)];
 }
 function bulletsOf(value) {
   if (!Array.isArray(value)) return [];
@@ -6935,9 +7854,9 @@ function genericMarkdown(data, heading, opts = {}) {
       if (inner) blocks.push(`**${name}**`, "", inner, "");
       continue;
     }
-    const text = scalarOf(key, value);
-    if (!text) continue;
-    blocks.push(text.length > 80 || text.includes("\n") ? text : `- **${name}** \u2014 ${text}`, "");
+    const text2 = scalarOf(key, value);
+    if (!text2) continue;
+    blocks.push(text2.length > 80 || text2.includes("\n") ? text2 : `- **${name}** \u2014 ${text2}`, "");
   }
   const body = blocks.join("\n").replace(/\n{3,}/g, "\n\n").replace(/(- \*\*[^\n]+)\n\n(?=- \*\*)/g, "$1\n").trimEnd();
   if (!body) return heading;
@@ -6963,8 +7882,8 @@ function callout(kind, title, body) {
   return body ? `> [!${kind}] ${title}
 > ${body.split("\n").join("\n> ")}` : `> [!${kind}] ${title}`;
 }
-function quote(text) {
-  return `> ${text.split("\n").join("\n> ")}`;
+function quote(text2) {
+  return `> ${text2.split("\n").join("\n> ")}`;
 }
 function personLink(name, resolvePersonName) {
   const own = resolvePersonName?.(name);
@@ -6972,11 +7891,11 @@ function personLink(name, resolvePersonName) {
 }
 function componentMarkdown(component, depth, resolvePersonName, siblings, mode = "file") {
   const data = component.data ?? {};
-  const h = (text) => text ? `${"#".repeat(Math.min(Math.max(depth, 1), 6))} ${text}` : "";
-  const sub = (text) => text ? `${"#".repeat(Math.min(Math.max(depth + 1, 1), 6))} ${text}` : "";
-  const label = (component.label || textOf(data.title) || textOf(data.headline) || textOf(data.statement)).trim();
-  const heading = h(label);
-  const generic = (skip = []) => genericMarkdown(data, heading, { skip, headingText: label });
+  const h = (text2) => text2 ? `${"#".repeat(Math.min(Math.max(depth, 1), 6))} ${text2}` : "";
+  const sub = (text2) => text2 ? `${"#".repeat(Math.min(Math.max(depth + 1, 1), 6))} ${text2}` : "";
+  const label2 = (component.label || textOf(data.title) || textOf(data.headline) || textOf(data.statement)).trim();
+  const heading = h(label2);
+  const generic = (skip = []) => genericMarkdown(data, heading, { skip, headingText: label2 });
   const nameOfSibling = (id) => {
     const s2 = typeof id === "string" ? siblings?.find((c) => c.id === id) : void 0;
     const d = s2?.data ?? {};
@@ -6985,17 +7904,17 @@ function componentMarkdown(component, depth, resolvePersonName, siblings, mode =
   switch (component.type) {
     // ── headers ──────────────────────────────────────────────────────────
     case "subject_header": {
-      const name = textOf(data.subject_name) || label;
+      const name = textOf(data.subject_name) || label2;
       if (!name) return "";
       const kind = textOf(data.subject_type);
       const person = kind === "person" ? personLink(name, resolvePersonName) : name;
       const badges = bulletsOf(data.badges).map((b) => b.slice(2)).map((b) => `\`${b}\``).join(" ");
-      const line = [textOf(data.tagline), badges].filter(Boolean).join(" \xB7 ");
-      return [h(person), line ? `
-${line}` : ""].join("\n").trimEnd();
+      const line2 = [textOf(data.tagline), badges].filter(Boolean).join(" \xB7 ");
+      return [h(person), line2 ? `
+${line2}` : ""].join("\n").trimEnd();
     }
     case "section_header": {
-      const title = textOf(data.title) || label;
+      const title = textOf(data.title) || label2;
       const subtitle = textOf(data.subtitle);
       return title ? subtitle ? `${h(title)}
 
@@ -7006,21 +7925,21 @@ ${line}` : ""].join("\n").trimEnd();
     case "person": {
       const name = textOf(data.name) || textOf(data.display_name) || component.label || "";
       if (!name) return "";
-      const link = personLink(name, resolvePersonName);
+      const link2 = personLink(name, resolvePersonName);
       const stakeholder = component.variant === "stakeholder" || data.mode === "stakeholder" || !!data.stance;
       const role = textOf(data.subject_role) || [textOf(data.role), textOf(data.company)].filter(Boolean).join(", ");
       const health = [standingWords(textOf(data.health_tier)), textOf(data.trajectory)].filter(Boolean).join(", ");
       const insight = textOf(data.key_insight) || textOf(data.summary) || textOf(data.text) || textOf(data.tone_summary);
       const tags = Array.isArray(data.tags) ? bulletsOf(data.tags).map((t) => `\`${t.slice(2)}\``).join(" ") : "";
       const tail = [role, health && `*${health}*`, insight].filter(Boolean).join(" \u2014 ");
-      const line = `- ${link}${tail ? ` \u2014 ${tail}` : ""}${tags ? ` ${tags}` : ""}`;
+      const line2 = `- ${link2}${tail ? ` \u2014 ${tail}` : ""}${tags ? ` ${tags}` : ""}`;
       if (!stakeholder) {
         const extra = [];
         if (textOf(data.card_spec_narrative)) extra.push("", `  ${textOf(data.card_spec_narrative)}`);
         for (const p of listOf(data.card_spec_patterns)) extra.push(`  - ${p}`);
         if (textOf(data.card_spec_prediction)) extra.push(`  - *${textOf(data.card_spec_prediction)}*`);
         if (textOf(data.flag_reason)) extra.push(`  - \u2691 ${textOf(data.flag_reason)}`);
-        return [line, ...extra].join("\n");
+        return [line2, ...extra].join("\n");
       }
       const rows = [];
       if (textOf(data.stance)) rows.push(`  - **Stance** \u2014 ${textOf(data.stance)}`);
@@ -7032,7 +7951,7 @@ ${line}` : ""].join("\n").trimEnd();
       quadrant("what_they_can_block", "What they can block");
       quadrant("what_signals_their_stance", "What signals their stance");
       quadrant("your_leverage", "Your leverage");
-      return [line, ...rows].join("\n");
+      return [line2, ...rows].join("\n");
     }
     case "team_grid": {
       const people = Array.isArray(data.people) ? data.people : [];
@@ -7051,8 +7970,8 @@ ${line}` : ""].join("\n").trimEnd();
     case "shape":
       return joinBlock(heading, textOf(data.text) || textOf(data.content), []);
     case "note_editor": {
-      const text = textOf(data.initial_text);
-      return text ? joinBlock(h(textOf(data.context_title) || label), text, []) : "";
+      const text2 = textOf(data.initial_text);
+      return text2 ? joinBlock(h(textOf(data.context_title) || label2), text2, []) : "";
     }
     case "prepared_content":
       return joinBlock(heading, textOf(data.content), []);
@@ -7073,10 +7992,10 @@ ${line}` : ""].join("\n").trimEnd();
     }
     case "context_annotation": {
       const anchor = nameOfSibling(data.anchor_id);
-      const text = textOf(data.text);
-      if (!text) return "";
+      const text2 = textOf(data.text);
+      if (!text2) return "";
       const kind = textOf(data.severity) === "warning" ? "warning" : "info";
-      return callout(kind, anchor ? `re ${anchor}` : "Note", text);
+      return callout(kind, anchor ? `re ${anchor}` : "Note", text2);
     }
     case "severity_indicator": {
       const level = textOf(data.level) || "attention";
@@ -7093,7 +8012,7 @@ ${line}` : ""].join("\n").trimEnd();
 *${foot}*` : block;
     }
     case "pattern_card": {
-      const title = textOf(data.pattern_name) || label;
+      const title = textOf(data.pattern_name) || label2;
       const conf = typeof data.confidence === "number" ? ` *(${Math.round(data.confidence * 100)}% confidence)*` : "";
       const body = [textOf(data.description) + conf, textOf(data.outcome_summary)].filter((s2) => s2.trim()).join("\n\n");
       const rows = rowsToTable(data.instances, ["context", "date_range", "detail", "outcome"]);
@@ -7148,7 +8067,7 @@ ${line}` : ""].join("\n").trimEnd();
       return joinBlock(heading, "", actions.map((a) => textOf(a.label)).filter(Boolean));
     }
     case "trackable": {
-      const title = textOf(data.title) || label;
+      const title = textOf(data.title) || label2;
       const done = textOf(data.status) === "completed" || textOf(data.status) === "resolved";
       const bits = [textOf(data.status), textOf(data.due_date) && `due ${textOf(data.due_date)}`, typeof data.progress_percent === "number" && `${data.progress_percent}%`, textOf(data.linked_person) && `with ${personLink(textOf(data.linked_person), resolvePersonName)}`].filter(Boolean);
       return `- [${done ? "x" : " "}] ${title}${bits.length ? ` \u2014 ${bits.join(" \xB7 ")}` : ""}`;
@@ -7222,7 +8141,7 @@ ${line}` : ""].join("\n").trimEnd();
       return joinBlock(heading, "", out, false);
     }
     case "career_trajectory": {
-      const title = textOf(data.pattern_name) || label;
+      const title = textOf(data.pattern_name) || label2;
       const now = [textOf(data.current_phase_name) && `**Now: ${textOf(data.current_phase_name)}**`, textOf(data.current_phase_description)].filter(Boolean).join(" \u2014 ");
       const phases = Array.isArray(data.phases) ? data.phases : [];
       const rows = phases.map((p) => `- ${textOf(p.status) === "current" ? "**" : ""}${textOf(p.name)}${textOf(p.status) === "current" ? "**" : ""} \u2014 ${textOf(p.description)}${textOf(p.status) && textOf(p.status) !== "current" ? ` *(${textOf(p.status)})*` : ""}`);
@@ -7273,7 +8192,7 @@ ${line}` : ""].join("\n").trimEnd();
     case "career_pathway": {
       const from = data.from ?? {};
       const to = data.to ?? {};
-      const title = label || (textOf(from.title) && textOf(to.title) ? `${textOf(from.title)} \u2192 ${textOf(to.title)}` : "Pathway");
+      const title = label2 || (textOf(from.title) && textOf(to.title) ? `${textOf(from.title)} \u2192 ${textOf(to.title)}` : "Pathway");
       const yrs = data.estimated_years ?? {};
       const eta = typeof yrs.typical === "number" ? `*~${yrs.typical} years${typeof yrs.optimistic === "number" ? ` (${yrs.optimistic} if it goes well)` : ""}*` : "";
       const body = [textOf(data.narrative), eta, textOf(data.reason)].filter(Boolean).join("\n\n");
@@ -7336,33 +8255,35 @@ ${line}` : ""].join("\n").trimEnd();
     // ── process & change ─────────────────────────────────────────────────
     case "process_card": {
       const bits = [textOf(data.cadence), textOf(data.current_state)].filter(Boolean).join(" \xB7 ");
-      return joinBlock(h(textOf(data.title) || label), bits ? `*${bits}*
+      return joinBlock(h(textOf(data.title) || label2), bits ? `*${bits}*
 
 ${textOf(data.summary)}`.trim() : textOf(data.summary), []);
     }
     case "change_suggestion":
-      return joinBlock(h(textOf(data.title) || label), textOf(data.rationale), textOf(data.expected_effect) ? [`\u2192 ${textOf(data.expected_effect)}${textOf(data.status) ? ` *(${textOf(data.status)})*` : ""}`] : [], false);
+      return joinBlock(h(textOf(data.title) || label2), textOf(data.rationale), textOf(data.expected_effect) ? [`\u2192 ${textOf(data.expected_effect)}${textOf(data.status) ? ` *(${textOf(data.status)})*` : ""}`] : [], false);
     case "intervention_tracker": {
       const bits = [textOf(data.status), typeof data.watch_period_weeks === "number" && `${data.watch_period_weeks}-week watch`, typeof data.started_at === "number" && `since ${scalarOf("started_at", data.started_at)}`].filter(Boolean).join(" \xB7 ");
       const rows = [textOf(data.expected_effect) && `- **Expecting** \u2014 ${textOf(data.expected_effect)}`, textOf(data.latest_signal_value) && `- **Latest** \u2014 ${textOf(data.latest_signal_value)}`].filter(Boolean);
-      return joinBlock(h(textOf(data.title) || label), bits ? `*${bits}*` : "", rows, false);
+      return joinBlock(h(textOf(data.title) || label2), bits ? `*${bits}*` : "", rows, false);
     }
     // ── drawn structure ──────────────────────────────────────────────────
     case "diagram": {
       const code = textOf(data.source) || textOf(data.mermaid) || textOf(data.definition) || textOf(data.code);
       if (!code) return joinBlock(heading, textOf(data.fallback_text), []);
       const caption = textOf(data.caption);
-      return joinBlock(heading, "", ["```mermaid", code, "```", ...caption ? ["", `*${caption}*`] : []], false);
+      const source = textOf(data.data_source);
+      return joinBlock(heading, "", ["```mermaid", code, "```", ...caption ? ["", `*${caption}*`] : [], ...source ? ["", source] : []], false);
     }
     case "chart": {
       const rc = data.recharts_config ?? {};
       const vl = data.vega_lite_spec ?? {};
       const vlData = vl.data ?? {};
-      const rows = rowsToTable(rc.data ?? vlData.values ?? data.data ?? data.rows);
+      const shaped = rc.type === "heatmap" || rc.type === "box_plot" ? chartTable(rc) : null;
+      const rows = shaped ? tableLines(shaped) : rowsToTable(rc.data ?? vlData.values ?? data.data ?? data.rows);
       const caption = textOf(data.fallback_text) || textOf(data.summary) || textOf(data.caption);
-      const src = textOf(data.data_source);
+      const src = chartSourceCaption(data.data_source);
       if (rows.length === 0 && !caption) return joinBlock(heading, "", ["*No data in this chart yet.*"], false);
-      return joinBlock(heading, "", [...rows, ...caption ? ["", caption] : [], ...src ? ["", `*source: ${src}*`] : []], false);
+      return joinBlock(heading, "", [...rows, ...caption ? ["", caption] : [], ...src ? ["", `*${src}*`] : []], false);
     }
     case "connection_overlay": {
       const from = nameOfSibling(data.from_id);
@@ -7384,9 +8305,9 @@ ${textOf(data.summary)}`.trim() : textOf(data.summary), []);
     case "hierarchy": {
       const walk = (node, indent) => {
         const standing = standingWords(textOf(node.health_tier));
-        const line = `${"  ".repeat(indent)}- ${textOf(node.label)}${standing ? ` *(${standing})*` : ""}`;
+        const line2 = `${"  ".repeat(indent)}- ${textOf(node.label)}${standing ? ` *(${standing})*` : ""}`;
         const kids = Array.isArray(node.children) ? node.children : [];
-        return [line, ...kids.flatMap((k) => walk(k, indent + 1))];
+        return [line2, ...kids.flatMap((k) => walk(k, indent + 1))];
       };
       const root = data.root;
       return joinBlock(heading, "", root ? walk(root, 0) : [], false);
@@ -7426,20 +8347,23 @@ ${textOf(data.summary)}`.trim() : textOf(data.summary), []);
       const rows = sets.map((s2) => `- **${textOf(s2.label)}** \u2014 ${cellOf("size", s2.size)}`);
       const inter = Array.isArray(data.intersections) ? data.intersections : [];
       for (const i of inter) {
-        const names = (Array.isArray(i.sets) ? i.sets : []).map((id) => setName.get(id) || id).join(" \u2229 ");
+        const ids = Array.isArray(i.sets) ? i.sets : [];
+        const names = vennOverlapLabel(textOf(i.label), ids.map((id) => setName.get(id) || id), sets.length);
         const members = bulletsOf(i.members).map((m) => m.slice(2)).join(", ");
         rows.push(`- **${names}** \u2014 ${cellOf("size", i.size)}${members ? `: ${members}` : ""}`);
       }
+      const source = textOf(data.data_source);
+      if (source) rows.push("", source);
       return joinBlock(heading, "", rows, false);
     }
     case "card_section": {
-      const s2 = normalizeSection({ section_type: textOf(data.section_type), title: textOf(data.section_title) || label, data: data.section_data });
+      const s2 = normalizeSection({ section_type: textOf(data.section_type), title: textOf(data.section_title) || label2, data: data.section_data });
       const rows = (s2.items ?? []).filter((i) => i.text?.trim()).map((i) => `- ${i.text}${i.date ? ` *(${i.date})*` : ""}`);
       return joinBlock(h(s2.title?.trim() || ""), s2.narrative?.trim() || "", rows, false);
     }
     case "container": {
       const bits = [textOf(data.defining_characteristic), textOf(data.risk_label), textOf(data.departed_reason)].filter(Boolean);
-      return joinBlock(h(textOf(data.label) || label), bits.join(" \u2014 "), []);
+      return joinBlock(h(textOf(data.label) || label2), bits.join(" \u2014 "), []);
     }
     default:
       return generic();
@@ -7465,11 +8389,11 @@ function buildSelfMarkdown(card) {
     rendered++;
     parts.push("", "## What Myu knows so far", "", "*Correct any of it under Settings \u2192 askMyu \u2192 Account.*", "");
     for (const f of facts) {
-      const label = knownFactLabel({ key: f.key ?? "", kind: f.kind });
-      const text = knownFactText({ value: f.value ?? "", full: f.full }, true);
+      const label2 = knownFactLabel({ key: f.key ?? "", kind: f.kind });
+      const text2 = knownFactText({ value: f.value ?? "", full: f.full }, true);
       const from = knownFactSource({ source: f.source, kind: f.kind });
-      if (f.kind === "read") parts.push(`- **${label}** \u2014 *${text}* (${from})`);
-      else parts.push(`- **${label}** \u2014 ${text}${from ? ` \xB7 ${from}` : ""}`);
+      if (f.kind === "read") parts.push(`- **${label2}** \u2014 *${text2}* (${from})`);
+      else parts.push(`- **${label2}** \u2014 ${text2}${from ? ` \xB7 ${from}` : ""}`);
     }
   }
   const sectionNotes = (card?.sections ?? []).map((raw) => ({ type: raw.section_type, lines: sectionMarkdown(raw) }));
@@ -7541,7 +8465,12 @@ var AGENTIC_SECTIONS = /* @__PURE__ */ new Set([
   "emissions",
   "log"
 ]);
-function renderAgenticSection(section, webUrl) {
+function betweenLine(r, first) {
+  const b = betweenRow(r, first);
+  if (!b.text) return null;
+  return `**${b.label}** ${b.text}${b.right ? ` \xB7 ${b.right}` : ""}${b.sub ? ` *(${b.sub})*` : ""}`;
+}
+function renderAgenticSection(section, webUrl2, firstName = "") {
   const out = [];
   const title = section.title?.trim() || section.section_type || "Notes";
   const data = section.data ?? {};
@@ -7551,11 +8480,23 @@ function renderAgenticSection(section, webUrl) {
     out.push("", `## ${title}`);
     for (const it of items) {
       const name = textOf(it.name) || "a space";
-      const line = textOf(it.line);
+      const line2 = textOf(it.line);
       const spaceId = textOf(it.space_id);
-      const link = spaceId ? `obsidian://myu-chat?about=${encodeURIComponent(`space:${spaceId}`)}` : webUrl;
-      out.push(`- **[${name}](${link})**${line ? ` \u2014 ${line}` : ""}`);
+      const link2 = spaceId ? `obsidian://myu-chat?about=${encodeURIComponent(`space:${spaceId}`)}` : webUrl2;
+      out.push(`- **[${name}](${link2})**${line2 ? ` \u2014 ${line2}` : ""}`);
     }
+    return out;
+  }
+  if (section.section_type === "commitments_between" && Array.isArray(data.rows)) {
+    const rows = data.rows.map((r) => betweenLine(r, firstName)).filter((l) => !!l);
+    const older = data.older && typeof data.older === "object" ? data.older : null;
+    const fold = olderLine(older);
+    if (!rows.length && !fold) return out;
+    out.push("", `## ${title}`);
+    for (const l of rows) out.push(`- ${l}`);
+    const olderRows = (older?.rows ?? []).map((r) => betweenLine(r, firstName)).filter((l) => !!l);
+    if (fold && olderRows.length) out.push("", `> [!note]- ${fold}`, ...olderRows.map((l) => `> - ${l}`));
+    else if (fold) out.push("", `*${fold}*`);
     return out;
   }
   if (section.section_type === "commitments_between") {
@@ -7582,7 +8523,7 @@ function renderAgenticSection(section, webUrl) {
       const words = r.words === "alike" ? "You read this alike" : r.words === "differently" ? "You see this differently. Worth a conversation" : "Not shared";
       out.push(`| ${dim} | ${words} |`);
     }
-    out.push("", "*Words only. The numbers are an experiment, and both of you need to turn them on.*");
+    out.push("", "*Words only. The numbers are an experiment, and everyone in the space needs to turn them on.*");
     return out;
   }
   if (section.section_type === "emissions") {
@@ -7599,14 +8540,14 @@ function renderAgenticSection(section, webUrl) {
     out.push("", `## What Myu did about them`);
     for (const it of items) {
       const kind = textOf(it.kind);
-      const text = textOf(it.text);
-      out.push(`- ${kind ? `**${kind}** ` : ""}${text}${dayOf(it.at) ? ` *(${dayOf(it.at)})*` : ""}`);
+      const text2 = textOf(it.text);
+      out.push(`- ${kind ? `**${kind}** ` : ""}${text2}${dayOf(it.at) ? ` *(${dayOf(it.at)})*` : ""}`);
     }
     return out;
   }
   return out;
 }
-function buildPersonMarkdown(entity, card, openCommitments, checkedState, theirPageName, memories = [], aliases = [], webUrl = "https://myu.askmyu.com") {
+function buildPersonMarkdown(entity, card, openCommitments, checkedState, theirPageName, memories = [], aliases = [], webUrl2 = "https://myu.askmyu.com") {
   const head = frontmatter([
     ["type", "myu-person"],
     ["myu-id", entity.entity_id],
@@ -7649,7 +8590,7 @@ function buildPersonMarkdown(entity, card, openCommitments, checkedState, theirP
   for (const rawSection of card?.sections ?? []) {
     const agentic = rawSection;
     if (AGENTIC_SECTIONS.has(agentic.section_type ?? "")) {
-      parts.push(...renderAgenticSection(agentic, webUrl));
+      parts.push(...renderAgenticSection(agentic, webUrl2, (entity.display_name ?? "").trim().split(/\s+/)[0] ?? ""));
       continue;
     }
     const lines = sectionMarkdown(rawSection);
@@ -7703,15 +8644,15 @@ function buildTodayLinesSection(lines) {
   const groups = groupBySubject(shown2.filter((l) => !isWaitingLine(l)));
   for (const g of [...groups.filter((x) => x.needsYou), ...groups.filter((x) => !x.needsYou)]) {
     const stack = stackOf(g.lines);
-    const text = textOf(stack.top?.text);
-    if (!text) continue;
+    const text2 = textOf(stack.top?.text);
+    if (!text2) continue;
     const dot = g.needsYou ? "\u25CF " : "";
     const named = g.lines.some((l) => textOf(l.subjects?.[0]?.label));
     const name = !g.id ? "" : g.type === "person" && named ? `[[${sanitizeName(g.label)}]] \u2014 ` : `**${g.label}** \u2014 `;
     const more = stack.rest.length > 0 ? ` (and ${stack.rest.length} more)` : "";
     const talk = rowOpensConversation(g) ? ` \u2014 [talk \u25B8](obsidian://myu-chat?about=${encodeURIComponent(`${g.type}:${g.id}`)})` : "";
     if (g.id) {
-      items.push(`${dot}${name}*${text}*${more}${talk}`);
+      items.push(`${dot}${name}*${text2}*${more}${talk}`);
       continue;
     }
     for (const l of g.lines) items.push(`${lineNeedsYou(l) ? "\u25CF " : ""}*${textOf(l.text)}*`);
@@ -7731,11 +8672,11 @@ function buildMyuLogMarkdown(day, items) {
   }
   for (const it of items) {
     const kind = textOf(it.kind);
-    const text = textOf(it.text);
+    const text2 = textOf(it.text);
     const when = it.at ? String(it.at).slice(11, 16) : "";
     const p = it.provenance;
     const via = p?.agent === "claude_code" ? " \xB7 via your Claude Code session" : p?.surface === "cli" ? " \xB7 via terminal" : "";
-    parts.push(`- ${when ? `\`${when}\` ` : ""}${kind ? `**${kind}** ` : ""}${text}${via}`);
+    parts.push(`- ${when ? `\`${when}\` ` : ""}${kind ? `**${kind}** ` : ""}${text2}${via}`);
   }
   parts.push("");
   return parts.join("\n");
@@ -7875,9 +8816,15 @@ function buildPeopleBase(peopleFolder) {
     ""
   ].join("\n");
 }
+function vennOverlapLabel(own, setNames, setCount) {
+  if (own.trim()) return own.trim();
+  if (setNames.length >= setCount && setCount === 2) return "In both";
+  if (setNames.length >= setCount && setCount === 3) return "In all three";
+  return `In ${setNames.filter(Boolean).join(" and ")}`;
+}
 
 // src/buildStamp.ts
-var BUILD_STAMP = true ? "0.1.3" : "dev";
+var BUILD_STAMP = true ? "0.1.4" : "dev";
 
 // src/calendarMyu.ts
 function isMyuCalendarEntry(e) {
@@ -7986,6 +8933,128 @@ function createVisitSince() {
   };
 }
 
+// src/personIdentities.ts
+var IDENTITY_ASK_KIND = "identity_ask";
+var IDENTITY_ASSUMED_KIND = "identity_assumed";
+var SOMEONE_ELSE = "someone_else";
+function identityLineOf(line2) {
+  const evidence = (line2.why?.evidence ?? []).find((e) => e?.kind === "identity");
+  const id = line2.identity?.identity_id ?? evidence?.ref ?? null;
+  const asks = line2.kind === IDENTITY_ASK_KIND || !line2.kind && !!evidence && line2.ask_kind === "choice" && (line2.choices ?? []).some((c) => c.id === SOMEONE_ELSE);
+  const assumed = line2.kind === IDENTITY_ASSUMED_KIND || !line2.kind && !!evidence && line2.ask_kind === "assume";
+  if (!asks && !assumed) return null;
+  return { which: asks ? "ask" : "assumed", identity_id: id, guess_relationship_id: line2.identity?.guess_relationship_id ?? null, relationship_id: line2.identity?.relationship_id ?? null };
+}
+function someoneElseAnswer(who) {
+  return "relationship_id" in who ? { choice_id: SOMEONE_ELSE, relationship_id: who.relationship_id } : { choice_id: SOMEONE_ELSE, text: who.text.trim() };
+}
+function saidMoveId(res) {
+  const said = (res?.effects ?? []).find((e) => e.type === "said" && typeof e.move_id === "string" && e.move_id);
+  return said?.move_id ?? null;
+}
+function undoWords(res) {
+  if (res?.success) return IDENTITY_WORDS.undone;
+  if (res?.error === "already_undone") return IDENTITY_WORDS.alreadyUndone;
+  if (res?.error === "changed_since") return IDENTITY_WORDS.changedSince;
+  return IDENTITY_WORDS.didNotGoThrough;
+}
+function saidBack(res) {
+  const said = (res?.effects ?? []).find((e) => e.type === "said" && typeof e.text === "string" && e.text.trim());
+  return said?.text?.trim() || res?.readback?.text?.trim() || null;
+}
+function assumedParts(text2) {
+  const m = /^([\s\S]*?[.!])\s*(Not (?:her|him|them)\?)\s*$/.exec(text2.trim());
+  return m ? { claim: m[1], notThem: m[2] } : { claim: text2.trim(), notThem: IDENTITY_WORDS.notThem };
+}
+function objective(pronouns) {
+  const first = (pronouns ?? "").trim().toLowerCase().split(/[/\s]+/)[0];
+  return first === "she" ? "her" : first === "he" ? "him" : "them";
+}
+var SOURCE_NAMES = { github: "GitHub", slack: "Slack", zulip: "Zulip", linear: "Linear", jira: "Jira" };
+function knownAsLabel(k) {
+  const chat = k.name_seen?.trim() || k.shown;
+  switch (k.kind) {
+    case "github":
+      return `${k.shown} on GitHub`;
+    case "slack":
+    case "zulip":
+      return `${chat} on ${SOURCE_NAMES[k.kind]}`;
+    case "linear":
+    case "jira":
+      return `${chat} in ${SOURCE_NAMES[k.kind]}`;
+    case "email":
+      return k.shown;
+    default:
+      return `\u201C${k.shown}\u201D`;
+  }
+}
+var things = (n) => n === 1 ? "1 thing" : `${n} things`;
+var IDENTITY_WORDS = {
+  knownAs: "Also known as",
+  unplaced: "Names Myu could not place",
+  unplacedNone: "None right now.",
+  /** Beside a name nobody is behind: what waits under it. */
+  waiting: (n) => `${things(n)} waiting under it`,
+  /** Beside a way someone is known: what came under it. */
+  cameUnder: (n) => n ? `${things(n)} came under it` : "",
+  /** Beside a way Myu tied by itself. */
+  assumedNote: (pronouns) => `Myu took this to be ${objective(pronouns)}`,
+  takeOff: "Take off",
+  takeOffAsk: (name, n) => n ? `Take this off ${name}? ${n === 1 ? "1 thing that came under it will" : `${n} things that came under it will`} go back to waiting.` : `Take this off ${name}?`,
+  keep: "Keep it",
+  undo: "Undo",
+  undone: "Put back as it was.",
+  notThem: "Not them?",
+  chooseWho: "Choose who",
+  pickPrompt: "Who is it?",
+  /** Where the person types part of a name of one of their people, or a whole new name. */
+  pickPlaceholder: "One of your people, or a name",
+  /** A name typed as it is: the one person by that whole name, else a new person by it. */
+  nameTyped: (name) => `Use \u201C${name.trim()}\u201D`,
+  back: "Back",
+  /** "Same person" from a person's card or a list, in place of the old "Merge … into…". */
+  samePerson: "Same person",
+  samePersonTitle: (name) => `${name} is the same person as\u2026`,
+  samePersonHint: (name) => `Choose who ${name} really is. Everything kept under ${name} moves to them.`,
+  samePersonSearch: "Search your people",
+  /** Two real names (16 Nov): the order said decides which is kept; how to keep the other. */
+  sayOtherWay: "To keep the other name, say it the other way round.",
+  /** The web's way to say it the other way round: the button under the question. */
+  keepInstead: (name) => `Keep ${name} instead`,
+  /** The help queue's row where the order decides (two real names): either can be kept. */
+  keepWhich: "Keep the name you choose; the other becomes another name for the same person.",
+  /** When the server says nothing back. */
+  didNotGoThrough: "That did not go through. Try again.",
+  /** 2026-11-15 follow-up: what waits under a name, folded until asked for; a question closed while it was on screen; an undo refused. */
+  seeThem: "See them \u25B8",
+  hide: "Hide",
+  alreadyAnswered: "Already answered.",
+  alreadyUndone: "That was already put back.",
+  changedSince: "That has changed since, so nothing was put back.",
+  question: (u) => unplacedQuestion(u),
+  choices: (hasGuess) => [
+    ...hasGuess ? [{ id: "yes", label: "Yes" }] : [],
+    { id: "someone_else", label: hasGuess ? "No, someone else" : "Choose who" },
+    { id: "not_a_person", label: "Not a person" },
+    { id: "not_now", label: "Not now" }
+  ]
+};
+function unplacedQuestion(u) {
+  const label2 = u.label?.trim() || knownAsLabel(u);
+  const name = u.guess?.name?.trim() || null;
+  if (u.kind === "email" && u.name_seen?.trim() && name) return `Mail came from ${u.shown} under the name ${u.name_seen.trim()}. Is that the ${name} you know?`;
+  const waiting = u.things > 0 ? ` ${u.things === 1 ? "1 thing is" : `${u.things} things are`} waiting under that name.` : "";
+  return name ? `Is ${label2} ${name}?${waiting}` : `Who is ${label2}?${waiting}`;
+}
+var IDENTITY_PATHS = {
+  knownAs: (relationshipId) => `/myu/person/identities?relationship_id=${encodeURIComponent(relationshipId)}`,
+  takeOff: "/myu/person/identities/remove",
+  unplaced: "/myu/identities/unplaced",
+  answer: "/myu/identities/answer",
+  undo: "/myu/person/undo",
+  merge: "/relationships/merge"
+};
+
 // src/transport/api.ts
 var COLD_START_OFF = { split_consent: false, onboarding_payback: false, offer_block: false, week_state: false, per_card_offer: false, self_card_legible: false };
 function parseColdStartFlags(data) {
@@ -8089,6 +9158,14 @@ function parseChatTurn(data) {
   if (similar.length) out.similar_entries = similar;
   if (received !== void 0) out.pasted_blocks_received = received;
   return out;
+}
+function meetingBody(m) {
+  return { event_id: m.event_id, ...m.occurrence_key ? { occurrence_key: String(m.occurrence_key) } : {} };
+}
+function targetBody(t) {
+  if (t.event_id) return meetingBody({ event_id: t.event_id, occurrence_key: t.occurrence_key });
+  if (t.relationship_id) return { relationship_id: t.relationship_id };
+  return t.series_id ? { series_id: t.series_id } : {};
 }
 function normalizePreferences(data) {
   if (!data || typeof data !== "object" || Array.isArray(data)) return {};
@@ -8213,6 +9290,9 @@ var Api = class {
     if (!lineIds.length) return null;
     return linesSeenOf(await this.transport.post("/myu/lines/seen", { line_ids: lineIds }));
   }
+  updateCommitment(commitmentId, change) {
+    return this.transport.post("/commitments/update", { commitment_id: commitmentId, ...change });
+  }
   getCommitments() {
     return this.transport.get("/commitments");
   }
@@ -8248,6 +9328,31 @@ var Api = class {
   }
   getMeetingPrep(eventId) {
     return this.transport.get(`/prep/meeting?event_id=${encodeURIComponent(eventId)}`);
+  }
+  addPrepItems(target, text2, source = "user") {
+    return this.transport.post("/prep/items/add", { ...targetBody(target), text: text2, source });
+  }
+  updatePrepItem(itemId, change) {
+    return this.transport.post("/prep/items/update", { item_id: itemId, ...change });
+  }
+  removePrepItem(itemId) {
+    return this.transport.post("/prep/items/remove", { item_id: itemId });
+  }
+  savePrepNotes(meeting, text2) {
+    return this.transport.post("/prep/notes/save", { ...meetingBody(meeting), text: text2 });
+  }
+  prepDone(meeting) {
+    return this.transport.post("/prep/done", meetingBody(meeting));
+  }
+  removePrepAction(meeting, actionId) {
+    return this.transport.post("/prep/action/remove", { ...meetingBody(meeting), action_id: actionId });
+  }
+  answerPrepReminder(meeting, reminderId, yes) {
+    return this.transport.post("/prep/reminder/answer", { ...meetingBody(meeting), reminder_id: reminderId, yes });
+  }
+  getPrepHistory(of, limit = 10) {
+    const by = of.relationship_id ? `relationship_id=${encodeURIComponent(of.relationship_id)}` : `event_series=${encodeURIComponent(of.event_series ?? "")}`;
+    return this.transport.get(`/prep/history?${by}&limit=${limit}`);
   }
   searchEntities(query) {
     return this.transport.get(
@@ -8453,12 +9558,23 @@ var Api = class {
       client: "obsidian",
       ...termsVersion ? { terms_version: termsVersion } : {}
     });
+    if (!res.ok) return res;
     const flat = res.data?.account ?? res.data ?? null;
-    return { ...res, data: flat ? { autoken: flat.autoken, account_id: flat.account_id } : null };
+    return {
+      ...res,
+      data: flat ? {
+        autoken: flat.autoken,
+        account_id: flat.account_id,
+        email: flat.email,
+        email_confirmed: flat.email_confirmed,
+        email_confirmation: flat.email_confirmation,
+        email_message: flat.email_message
+      } : null
+    };
   }
-  createPluginToken(label) {
+  createPluginToken(label2) {
     return this.transport.post("/account/plugin-token/create", {
-      label,
+      label: label2,
       client: "obsidian"
     });
   }
@@ -8480,6 +9596,9 @@ var Api = class {
       `/auth/magic-link/validate?token=${encodeURIComponent(token)}`,
       { headers: { "X-Client-Type": "obsidian" } }
     );
+  }
+  answerAddressHeld(body) {
+    return this.transport.post("/auth/address-held", body, { anonymous: true });
   }
   resolveLinkedInSuggestion(body) {
     return this.transport.post("/v2/relationships/linkedin/suggestion/resolve", body);
@@ -8601,6 +9720,9 @@ var Api = class {
   resendAccountEmail(email) {
     return this.transport.post("/account/emails/resend", { email });
   }
+  getAccount() {
+    return this.transport.get("/account/get");
+  }
   removeAccountEmail(email) {
     return this.transport.post("/account/emails/remove", { email });
   }
@@ -8627,8 +9749,11 @@ var Api = class {
       ...correction ? { correction } : {}
     });
   }
-  mergeRelationships(sourceId, targetId, reason = "user_initiated_merge") {
-    return this.transport.post("/v2/relationships/merge", { source_id: sourceId, target_id: targetId, reason });
+  samePerson(sourceId, targetId) {
+    return this.transport.post(IDENTITY_PATHS.merge, { source_id: sourceId, target_id: targetId, action: "confirm" });
+  }
+  undoPersonChange(moveId) {
+    return this.transport.post(IDENTITY_PATHS.undo, { move_id: moveId });
   }
   markRelationshipAsSelf(relationshipId) {
     return this.transport.post("/experiments/relationships/mark-as-self", { relationship_id: relationshipId });
@@ -8679,7 +9804,7 @@ var Api = class {
     const ext = fileName.toLowerCase().split(".").pop() ?? "";
     const mime = { pdf: "application/pdf", doc: "application/msword", docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", txt: "text/plain" }[ext] ?? "application/octet-stream";
     const parts = [];
-    const push = (text) => parts.push(enc.encode(text));
+    const push = (text2) => parts.push(enc.encode(text2));
     push(`--${boundary}\r
 Content-Disposition: form-data; name="file"; filename="${fileName}"\r
 Content-Type: ${mime}\r
@@ -8726,6 +9851,7 @@ var PersonActionConfirmModal = class extends import_obsidian13.Modal {
     contentEl.addClass("myu-power-down");
     contentEl.createEl("h2", { text: this.copy.title });
     contentEl.createEl("p", { cls: "myu-prose", text: this.copy.body });
+    if (this.copy.note) contentEl.createEl("p", { cls: "myu-prose myu-quiet", text: this.copy.note });
     new import_obsidian13.Setting(contentEl).addButton((b) => b.setButtonText("Not now").onClick(() => this.answer(false))).addButton((b) => b.setButtonText(this.copy.cta).setDestructive().onClick(() => this.answer(true)));
   }
   answer(yes) {
@@ -8741,6 +9867,79 @@ var PersonActionConfirmModal = class extends import_obsidian13.Modal {
     }
   }
 };
+
+// src/addressHeld.ts
+var ADDRESS_HELD = "address_held";
+var ADDRESS_HELD_WORDS = {
+  message: "An account was made at this address with a password and never confirmed. If it's yours, enter that password to open it (that confirms it). If it isn't, start your own.",
+  password: "Enter its password",
+  startOwn: "Start my own account",
+  passwordField: "Its password",
+  open: "Open it",
+  back: "Back to the start",
+  wrong: "That isn't its password.",
+  triesLeft: (n) => n === 1 ? "1 try left." : `${n} tries left.`,
+  tooMany: "Too many tries. Go back to the start and sign in again.",
+  expired: "This question has ended. Go back to the start and sign in again.",
+  failed: "That didn't go through. Try again in a moment."
+};
+var str5 = (v) => typeof v === "string" && v.trim() ? v.trim() : null;
+function choicesOf(raw) {
+  const sent = Array.isArray(raw) ? raw : [];
+  const label2 = (id, fallback) => {
+    const c = sent.find((x) => !!x && typeof x === "object" && x.id === id);
+    return str5(c?.label) ?? fallback;
+  };
+  return [
+    { id: "password", label: label2("password", ADDRESS_HELD_WORDS.password) },
+    { id: "start_own", label: label2("start_own", ADDRESS_HELD_WORDS.startOwn) }
+  ];
+}
+function addressHeldOf(status, body) {
+  const o = body && typeof body === "object" ? body : null;
+  if (!o) return null;
+  const isHeld = status === 409 && o.error === ADDRESS_HELD || status === 200 && o.error === void 0 && typeof o.held_token === "string";
+  const token = str5(o.held_token);
+  if (!isHeld || !token) return null;
+  return { held_token: token, email: str5(o.email) ?? "", message: str5(o.message) ?? ADDRESS_HELD_WORDS.message, choices: choicesOf(o.choices) };
+}
+function addressHeldBody(heldToken, choice, password) {
+  return choice === "password" ? { held_token: heldToken, choice, password: password ?? "" } : { held_token: heldToken, choice };
+}
+function addressHeldOutcome(status, body) {
+  const o = body && typeof body === "object" ? body : {};
+  const message = str5(o.message);
+  if (status === 200 && o.success !== false) return { kind: "done", choice: str5(o.choice) ?? "", ...str5(o.again_url) ? { again_url: str5(o.again_url) } : {} };
+  if (status === 401) {
+    const left = typeof o.tries_left === "number" && Number.isFinite(o.tries_left) ? o.tries_left : void 0;
+    return { kind: "wrong", message: message ?? ADDRESS_HELD_WORDS.wrong + (left !== void 0 ? " " + ADDRESS_HELD_WORDS.triesLeft(left) : ""), ...left !== void 0 ? { tries_left: left } : {} };
+  }
+  if (status === 429) return { kind: "too_many", message: message ?? ADDRESS_HELD_WORDS.tooMany };
+  if (status === 410) return { kind: "expired", message: message ?? ADDRESS_HELD_WORDS.expired };
+  return { kind: "failed", message: message ?? ADDRESS_HELD_WORDS.failed };
+}
+function signupConfirmationOf(data, email) {
+  const o = data && typeof data === "object" ? data : {};
+  const sent = o.email_confirmation === "sent" || o.email_confirmation === "not_sent" ? o.email_confirmation : null;
+  return { email: str5(o.email) ?? email, confirmed: typeof o.email_confirmed === "boolean" ? o.email_confirmed : null, sent, message: str5(o.email_message) };
+}
+var ADDRESS_CONFIRM_WORDS = {
+  /** Said once, after sign-up, when the confirmation went. */
+  mailed: (email) => `We've mailed ${email}. Confirm it from that mail to get invitations and connect with people there.`,
+  /** …when it could not go: the server's sentence where it sends one. */
+  notMailed: (email) => `We couldn't mail ${email} just now. Mail the confirmation again from Settings to get invitations and connect with people there.`,
+  /** Where the account is shown. */
+  confirmed: "confirmed",
+  notConfirmed: "not confirmed yet: invitations and connections at this address wait until it is",
+  mailAgain: "Mail the confirmation again",
+  mailedAgain: (email) => `Mailed ${email} again.`,
+  mailFailed: "That didn't go. Try again in a moment."
+};
+function signupConfirmationWords(c) {
+  if (c.confirmed !== false) return null;
+  if (c.sent === "not_sent") return c.message ?? ADDRESS_CONFIRM_WORDS.notMailed(c.email);
+  return ADDRESS_CONFIRM_WORDS.mailed(c.email);
+}
 
 // src/views/SettingsTab.ts
 function ymdMonthsAgo(n) {
@@ -8763,6 +9962,15 @@ function ago(when) {
   const h = Math.round(m / 60);
   if (h < 48) return `${h} h ago`;
   return `${Math.round(h / 24)} d ago`;
+}
+function confirmWords(confirmed) {
+  return confirmed ? ADDRESS_CONFIRM_WORDS.confirmed : ADDRESS_CONFIRM_WORDS.notConfirmed;
+}
+function mailedAgainWords(res, email) {
+  const data = res?.ok ? res.data : null;
+  if (!data || data.success === false || data.email_confirmation === "not_sent") return null;
+  const message = typeof data.email_message === "string" ? data.email_message.trim() : "";
+  return message || ADDRESS_CONFIRM_WORDS.mailedAgain(email);
 }
 var MYU_LOOK_URL = "https://github.com/AskMyu/askmyu-obsidian-plugin/raw/main/snippets/myu-look.css";
 var INTEGRATION_CARDS = {
@@ -9036,7 +10244,7 @@ var AskMyuSettingTab = class extends import_obsidian14.PluginSettingTab {
    * that could not work.
    */
   async renderAccountEmails(host) {
-    const res = await this.plugin.backend.listAccountEmails().catch(() => null);
+    const [res, own] = await Promise.all([this.plugin.backend.listAccountEmails().catch(() => null), this.ownAddress()]);
     const why = loadFailure(res);
     if (why) {
       this.renderLoadFailure(host, "Email addresses", why, () => {
@@ -9051,12 +10259,17 @@ var AskMyuSettingTab = class extends import_obsidian14.PluginSettingTab {
         new AddAccountEmailModal(this.app, this.plugin, () => this.rerender()).open();
       })
     );
+    let ownShown = false;
     for (const entry of emails) {
       const address = String(entry.email ?? "");
       if (!address) continue;
       const isPrimary = entry.is_primary === true;
       const verified = entry.verified === true;
-      const row = new import_obsidian14.Setting(host).setName(address).setDesc(isPrimary ? "Primary" : verified ? "Verified" : "Waiting for you to click the link Myu emailed");
+      const mine = own && address.toLowerCase() === own.email.toLowerCase() ? own : null;
+      if (mine) ownShown = true;
+      const listed = isPrimary ? "Primary" : verified ? "Verified" : "Waiting for you to click the link Myu emailed";
+      const row = new import_obsidian14.Setting(host).setName(address).setDesc(mine ? `${listed} \xB7 ${confirmWords(mine.confirmed)}` : listed);
+      if (mine && !mine.confirmed) this.addMailAgain(row, mine.email);
       if (!verified) {
         row.addButton(
           (b) => b.setButtonText("Resend").onClick(async () => {
@@ -9084,6 +10297,37 @@ var AskMyuSettingTab = class extends import_obsidian14.PluginSettingTab {
         );
       }
     }
+    if (own && !ownShown) {
+      const row = new import_obsidian14.Setting(host).setName(own.email).setDesc(confirmWords(own.confirmed));
+      if (!own.confirmed) this.addMailAgain(row, own.email);
+    }
+  }
+  /**
+   * The account's own address and whether it is confirmed (`GET /account/get`, 2026-11-17). Null when the server does
+   * not say (an older one leaves `email_confirmed` out) or could not be asked: then nothing new is shown.
+   */
+  async ownAddress() {
+    try {
+      const res = await this.plugin.backend.getAccount();
+      const data = res.ok ? res.data : null;
+      const email = typeof data?.email === "string" ? data.email.trim() : "";
+      return email && typeof data?.email_confirmed === "boolean" ? { email, confirmed: data.email_confirmed } : null;
+    } catch {
+      return null;
+    }
+  }
+  /** "Mail the confirmation again" on the account's own address: `POST /account/emails/resend` with that address. */
+  addMailAgain(row, email) {
+    row.addButton(
+      (b) => b.setButtonText(ADDRESS_CONFIRM_WORDS.mailAgain).onClick(async () => {
+        b.setDisabled(true);
+        const res = await this.plugin.backend.resendAccountEmail(email).catch(() => null);
+        b.setDisabled(false);
+        const said = mailedAgainWords(res, email);
+        if (said) notifyStatus(said);
+        else notifyError(ADDRESS_CONFIRM_WORDS.mailFailed);
+      })
+    );
   }
   /** How Myu addresses you, and how directly it speaks. Account state, so it
       is written back rather than mirrored (rule 3). */
@@ -9301,8 +10545,8 @@ var AskMyuSettingTab = class extends import_obsidian14.PluginSettingTab {
       for (const c of creds) {
         if (!c.credential_id) continue;
         const id = c.credential_id;
-        const line = new import_obsidian14.Setting(host).setName(c.email ?? id).setDesc(c.is_primary ? "Primary \u2014 meetings and mail are read from this account first." : "");
-        if (!c.is_primary) line.addButton((b) => b.setButtonText("Set primary").onClick(async () => {
+        const line2 = new import_obsidian14.Setting(host).setName(c.email ?? id).setDesc(c.is_primary ? "Primary \u2014 meetings and mail are read from this account first." : "");
+        if (!c.is_primary) line2.addButton((b) => b.setButtonText("Set primary").onClick(async () => {
           const r = provider === "google" ? await this.plugin.backend.googleSetPrimaryCredential(id) : await this.plugin.backend.microsoftSetPrimaryCredential(id);
           if (r.ok && r.data?.success !== false) {
             notifyStatus(r.data?.message || "Primary set.");
@@ -9310,7 +10554,7 @@ var AskMyuSettingTab = class extends import_obsidian14.PluginSettingTab {
           } else notifyError(r.data?.error || "Couldn\u2019t set primary.");
         }));
         if (c.services) this.renderServiceRows(host, provider, c.services, split2, c.credential_id);
-        line.addButton((b) => {
+        line2.addButton((b) => {
           let armed = false;
           b.setButtonText("Disconnect").onClick(async () => {
             if (!armed) {
@@ -9619,12 +10863,12 @@ var AskMyuSettingTab = class extends import_obsidian14.PluginSettingTab {
         text: "Nothing is shared. No folder or tag is selected, so Myu is not watching this vault and has not read any note."
       });
     } else {
-      const list2 = root.createDiv({ cls: "myu-list" });
+      const list7 = root.createDiv({ cls: "myu-list" });
       for (const folder of allowlist_folders) {
-        list2.createDiv({ cls: "myu-list-row" }).createSpan({ text: `${folder}/` });
+        list7.createDiv({ cls: "myu-list-row" }).createSpan({ text: `${folder}/` });
       }
       for (const tag of allowlist_tags) {
-        list2.createDiv({ cls: "myu-list-row" }).createSpan({ text: `#${tag}` });
+        list7.createDiv({ cls: "myu-list-row" }).createSpan({ text: `#${tag}` });
       }
       root.createEl("p", {
         cls: "myu-prose myu-quiet",
@@ -9736,6 +10980,7 @@ function describeState(state, detail) {
       if (detail === "genesis_pending") return "one step left: the twelve-word recovery phrase";
       if (detail === "genesis_failed") return "key setup did not finish. Try again";
       if (detail === "existing_account") return "welcome back. Approve this device or use your recovery phrase";
+      if (detail === "not_this_account") return "this device can't open your account yet. Approve it from a device you already use, or use your recovery phrase";
       return detail === "device_revoked" ? "this device was removed. Approve it again" : "needs approval";
     default:
       return "not connected";
@@ -9814,9 +11059,13 @@ function readsFromBundle(res) {
 // src/vault/WeeklyReviewWriter.ts
 var import_obsidian15 = require("obsidian");
 function isWeeklyEditionFresh(edition, now = /* @__PURE__ */ new Date()) {
-  if (!edition.period || !Array.isArray(edition.sections) || edition.sections.length === 0) return false;
+  if (!Array.isArray(edition.sections) || edition.sections.length === 0) return false;
+  return isWeeklyPeriodFresh(edition.period, now);
+}
+function isWeeklyPeriodFresh(period, now = /* @__PURE__ */ new Date()) {
+  if (!period) return false;
   const lastWeek = new Date(now.getTime() - 7 * 864e5);
-  return edition.period === isoWeek(now) || edition.period === isoWeek(lastWeek);
+  return period === isoWeek(now) || period === isoWeek(lastWeek);
 }
 function isoWeek(d) {
   const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
@@ -9882,7 +11131,7 @@ var WeeklyReviewWriter = class {
     }
   }
   renderSection(input) {
-    const body = input.lines.map((line) => `- ${line}`).join("\n");
+    const body = input.lines.map((line2) => `- ${line2}`).join("\n");
     return [
       BEGIN,
       `## From Myu \u2014 week of ${input.weekOf}`,
@@ -9905,6 +11154,433 @@ function replaceSection(contents, section) {
 `;
 }
 
+// src/lastMoments.ts
+var LAST_MOMENTS_WORDS = {
+  week: {
+    line: "Myu: your week.",
+    /** "Your week, 9 to 13 November". */
+    title: (range) => `Your week, ${range}`,
+    yourSide: "Your side of the work",
+    goals: "Your goals",
+    last: "The week before"
+  },
+  send: {
+    /** The yes box for several: "Send these 3, as you?" */
+    ask: (n) => `Send these ${n}, as you?`,
+    /** Where the box cannot take one out. */
+    all: "Send all",
+    change: "Let me change one",
+    none: "None"
+  },
+  repeated: "What has repeated",
+  mayAsk: "They may ask about",
+  fullDay: { keep: "Keep", move: "Move it", notPromise: "Not a promise", whichDay: "Which day?" },
+  addIt: { add: "Add it", no: "No" },
+  invite: {
+    /** Before an invitation that carries a question goes: the inviter sees it, and can take it out. */
+    willSay: "The invitation will say you have a question for them.",
+    takeOut: "Take that out",
+    putBack: "Keep it in",
+    /** After "Send it yourself" on "Myu has no connection with Ana": the question's own words, to copy. */
+    sendYourself: "To send it yourself, here are the words:"
+  }
+};
+var LAST_MOMENTS_LINE_KINDS = {
+  fullDay: ["full_day", "promise_full_day"],
+  answerBearsOn: ["answer_bears_on", "add_answer"],
+  reportBearsOn: ["report_bears_on", "add_report"],
+  sendMany: ["send_many", "send_batch"],
+  noConnection: ["pair_no_connection"],
+  questionReached: ["invite_question_reached"],
+  questionNotDelivered: ["invite_question_not_delivered"]
+};
+var kindIn = (list7, line2) => !!line2?.kind && list7.includes(line2.kind);
+var isFullDayLine = (l) => kindIn(LAST_MOMENTS_LINE_KINDS.fullDay, l);
+var isBearsOnLine = (l) => kindIn(LAST_MOMENTS_LINE_KINDS.answerBearsOn, l) || kindIn(LAST_MOMENTS_LINE_KINDS.reportBearsOn, l);
+var str6 = (v) => typeof v === "string" && v.trim() ? v.trim() : null;
+var num2 = (v) => typeof v === "number" && Number.isFinite(v) ? v : typeof v === "string" && v.trim() && Number.isFinite(Number(v)) ? Number(v) : null;
+var list4 = (v) => Array.isArray(v) ? v : [];
+var obj = (v) => v && typeof v === "object" && !Array.isArray(v) ? v : null;
+function sourceFrom(raw) {
+  const o = obj(raw);
+  const quote2 = o ? str6(o.quote) ?? str6(o.words) ?? str6(o.text) : null;
+  return o && quote2 ? { quote: quote2, whenMs: num2(o.when_ms) ?? num2(o.at_ms), link: str6(o.link) ?? str6(o.url) } : null;
+}
+var sources = (v) => list4(v).map(sourceFrom).filter((s2) => !!s2);
+var MONTHS4 = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+function weekRangeWords(fromDay, toDay) {
+  const day = (v) => {
+    const m = typeof v === "string" ? /^(\d{4})-(\d{2})-(\d{2})$/.exec(v.trim()) : null;
+    const month = m ? Number(m[2]) : 0;
+    return m && month >= 1 && month <= 12 ? { y: Number(m[1]), m: month, d: Number(m[3]) } : null;
+  };
+  const a = day(fromDay);
+  const b = day(toDay);
+  if (!a || !b) return null;
+  const end = `${b.d} ${MONTHS4[b.m - 1]}`;
+  if (a.y !== b.y) return `${a.d} ${MONTHS4[a.m - 1]} ${a.y} to ${end} ${b.y}`;
+  return a.m === b.m ? `${a.d} to ${end}` : `${a.d} ${MONTHS4[a.m - 1]} to ${end}`;
+}
+function yourWeekFrom(res) {
+  const o = obj(res);
+  const side = obj(o?.your_side) ?? obj(obj(o?.review)?.your_side) ?? obj(obj(o?.sections)?.your_side);
+  if (!side) return null;
+  const counts = list4(side.counts).map((c) => {
+    const r = obj(c);
+    const sentence2 = r ? str6(r.sentence) ?? str6(r.text) : null;
+    if (!r || !sentence2) return null;
+    return {
+      key: str6(r.key) ?? sentence2,
+      count: num2(r.count),
+      sentence: sentence2,
+      items: list4(r.items).map((i) => obj(i)).filter((i) => !!i && !!(str6(i.text) ?? str6(i.words))).map((i) => ({ text: str6(i.text) ?? str6(i.words), link: str6(i.link), who: str6(i.who) ?? str6(i.waits_on) }))
+    };
+  }).filter((c) => !!c && c.count !== 0);
+  for (const sRaw of list4(side.sentences)) {
+    const sentence2 = str6(sRaw);
+    if (sentence2 && !counts.some((c) => c.sentence === sentence2)) counts.push({ key: sentence2, count: null, sentence: sentence2, items: [] });
+  }
+  const goals = list4(side.goals).map((g) => {
+    const r = obj(g);
+    const goal = r ? str6(r.goal) ?? str6(r.text) ?? str6(r.title) : null;
+    if (!r || !goal) return null;
+    const ex = obj(r.example);
+    return { goal, count: num2(r.count) ?? 0, example: ex && str6(ex.text) ? { text: str6(ex.text), link: str6(ex.link) } : null };
+  }).filter((g) => !!g);
+  const range = obj(side.range);
+  return { range: str6(side.range) ?? (range ? weekRangeWords(range.from_day, range.to_day) : null) ?? str6(o?.range), counts, goals };
+}
+function repeatedFrom(res) {
+  const o = obj(res);
+  const raw = o?.noticed ?? obj(o?.card)?.noticed ?? (Array.isArray(res) ? res : []);
+  return list4(raw).map((n) => {
+    const r = obj(n);
+    const text2 = r ? str6(r.text) : null;
+    return r && text2 ? { text: text2, count: num2(r.count), sinceMs: num2(r.since) ?? num2(r.since_ms), sources: sources(r.sources) } : null;
+  }).filter((n) => !!n);
+}
+function mayAskFrom(res) {
+  const o = obj(res);
+  const raw = o?.may_ask ?? obj(o?.prep)?.may_ask;
+  return list4(raw).map((m) => {
+    const r = obj(m);
+    const text2 = r ? str6(r.text) ?? str6(r.title) : null;
+    if (!r || !text2) return null;
+    return {
+      text: text2,
+      steps: list4(r.steps).map((s2) => obj(s2)).filter((s2) => !!s2 && !!str6(s2.text)).map((s2) => ({ text: str6(s2.text), atMs: num2(s2.at_ms) })),
+      told: list4(r.told).map((t) => obj(t)).filter((t) => !!t).map((t) => ({ sentence: str6(t.sentence), to: str6(t.to), whenMs: num2(t.when_ms), quote: str6(t.quote) })),
+      sources: sources(r.sources)
+    };
+  }).filter((m) => !!m);
+}
+
+// src/checkPromise.ts
+var CHECK_PROMISE_KIND = "check_promise";
+var isCheckPromiseLine = (line2) => line2?.kind === CHECK_PROMISE_KIND;
+var CHECK_PROMISE_CHOICES = [
+  { id: "tell", label: "Tell them" },
+  { id: "let_go", label: "Let it go" },
+  { id: "keep", label: "Keep it" }
+];
+var CHECK_PROMISE_DRAFT_EFFECT = "check_promise_draft";
+
+// src/lastMomentsVault.ts
+var MONTHS5 = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+var DAYS3 = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+var dayStart2 = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+function draftWhen(ms, now) {
+  if (!ms || ms <= 0) return "some time ago";
+  const day = new Date(ms);
+  const today = new Date(now);
+  const ago2 = Math.round((dayStart2(today) - dayStart2(day)) / 864e5);
+  if (ago2 === 0) return "today";
+  if (ago2 === 1) return "yesterday";
+  if (ago2 > 1 && ago2 < 7) return DAYS3[day.getDay()];
+  const dm = `${day.getDate()} ${MONTHS5[day.getMonth()]}`;
+  return day.getFullYear() === today.getFullYear() ? dm : `${dm} ${day.getFullYear()}`;
+}
+var clockWords = (at) => {
+  const ms = typeof at === "number" ? at : at ? Date.parse(at) : NaN;
+  if (!Number.isFinite(ms)) return "";
+  const d = new Date(ms);
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+};
+var SERVICE_LABELS = { slack: "Slack", zulip: "Zulip", github: "GitHub", mail: "mail", linear: "Linear", jira: "Jira", teams: "Teams", microsoft: "Microsoft", google: "Google" };
+var label = (service) => SERVICE_LABELS[service.toLowerCase()] ?? service;
+function placeWords(service, where) {
+  const s2 = service.toLowerCase();
+  const base = { slack: "in Slack", zulip: "in Zulip", github: "on GitHub", mail: "by mail" };
+  const plain = base[s2] ?? `in ${label(service)}`;
+  if (!where) return plain;
+  return s2 === "mail" ? plain : `in ${where} on ${label(service)}`;
+}
+function whoWords(to) {
+  const n = to.map((x) => x.includes("@") ? x : x.split(/\s+/)[0]);
+  if (!n.length) return "them";
+  return n.length === 1 ? n[0] : `${n.slice(0, -1).join(", ")} and ${n[n.length - 1]}`;
+}
+function whoFor(t) {
+  const place = (t.where ?? "").trim().toLowerCase();
+  const people = t.names.filter((n) => {
+    const x = n.trim().toLowerCase();
+    return x && x !== place && !x.startsWith("#");
+  });
+  return people.length ? whoWords(people) : null;
+}
+var onWhen = (when) => !when ? "" : when === "today" || when === "yesterday" ? ` ${when}` : ` on ${when}`;
+var upFirst = (s2) => s2 ? s2.charAt(0).toUpperCase() + s2.slice(1) : s2;
+var LAST_MOMENTS_VAULT_WORDS = {
+  /** Over the message a Move it came back with: "Myu's message to Priya:" (the web's and the terminal's words). */
+  messageTo: (who) => who ? `Myu's message to ${who}:` : "Myu's message:",
+  /** Over the addition an Add it came back with, where it goes: "To prd-review in Slack", "On GitHub" (the web's words). */
+  goesTo: (who, place) => who ? `To ${who} ${place}` : upFirst(place),
+  /** Under "Which day?": the date for a day the line did not offer. */
+  anotherDay: "Another day",
+  /** "You told Sofia yesterday: “…”", made here only when the server sends the parts and not its own sentence. */
+  told: (to, when, quote2) => `You told ${to ?? "them"}${onWhen(when)}: \u201C${quote2}\u201D`
+};
+var W = LAST_MOMENTS_VAULT_WORDS;
+var obj2 = (v) => v && typeof v === "object" && !Array.isArray(v) ? v : null;
+var str7 = (v) => typeof v === "string" && v.trim() ? v.trim() : null;
+var list5 = (v) => Array.isArray(v) ? v : [];
+var norm = (s2) => (s2 ?? "").trim().toLowerCase();
+function served(choices) {
+  return list5(choices).map(obj2).filter((c) => !!c && !!str7(c.id) && !!str7(c.label)).map((c) => ({ id: str7(c.id), label: str7(c.label) }));
+}
+var fullDayRole = (id, words) => {
+  const i = norm(id);
+  const l = norm(words);
+  const F = LAST_MOMENTS_WORDS.fullDay;
+  if (i === "keep" || l === norm(F.keep)) return "keep";
+  if (i === "move" || i === "move_it" || l === norm(F.move)) return "move";
+  if (i === "not_promise" || i === "not_a_promise" || l === norm(F.notPromise)) return "not_promise";
+  return "other";
+};
+function fullDayChoices(line2) {
+  const own = served(line2.choices);
+  if (own.length) return own.map((c) => ({ ...c, role: fullDayRole(c.id, c.label) }));
+  const F = LAST_MOMENTS_WORDS.fullDay;
+  return [
+    { id: "keep", label: F.keep, role: "keep" },
+    { id: "move", label: F.move, role: "move" },
+    { id: "not_promise", label: F.notPromise, role: "not_promise" }
+  ];
+}
+var DAY_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
+function isDay(v) {
+  const m = typeof v === "string" ? DAY_RE.exec(v.trim()) : null;
+  if (!m) return false;
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  return d.getFullYear() === Number(m[1]) && d.getMonth() === Number(m[2]) - 1 && d.getDate() === Number(m[3]);
+}
+function dayLabel(day) {
+  if (!isDay(day)) return day;
+  const [y, m, d] = day.trim().split("-").map(Number);
+  const date = new Date(y, m - 1, d);
+  return `${DAYS3[date.getDay()]} ${d} ${MONTHS5[m - 1]}`;
+}
+function todayIso(now = /* @__PURE__ */ new Date()) {
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+}
+var FREE_DAY_FIELDS = ["free_days", "next_free_days", "days", "offer_days"];
+function freeDaysOf(line2) {
+  const o = obj2(line2);
+  const payload = obj2(o?.payload);
+  const raw = FREE_DAY_FIELDS.map((k) => o?.[k] ?? payload?.[k]).find((v) => Array.isArray(v));
+  const out = [];
+  for (const d of list5(raw)) {
+    const r = obj2(d);
+    const day = typeof d === "string" ? d.trim() : r ? str7(r.day) ?? str7(r.date) : null;
+    if (!day || !isDay(day) || out.some((x) => x.day === day)) continue;
+    out.push({ day, label: (r ? str7(r.label) ?? str7(r.words) : null) ?? dayLabel(day) });
+  }
+  return out;
+}
+var moveAnswer = (choiceId, day) => ({ choice_id: choiceId, day });
+function bearsOnChoices(line2) {
+  const A = LAST_MOMENTS_WORDS.addIt;
+  const own = served(line2.choices);
+  if (own.length) {
+    return own.map((c) => {
+      const i = norm(c.id);
+      const l = norm(c.label);
+      const role = i === "add" || i === "add_it" || l === norm(A.add) ? "add" : i === "no" || l === norm(A.no) ? "no" : "other";
+      return { ...c, role };
+    });
+  }
+  return [
+    { id: "add", label: A.add, role: "add" },
+    { id: "no", label: A.no, role: "no" }
+  ];
+}
+function recipients(v) {
+  return (Array.isArray(v) ? v : v ? [v] : []).map((r) => typeof r === "string" ? r.trim() : str7(obj2(r)?.name) ?? str7(obj2(r)?.address) ?? str7(obj2(r)?.email) ?? str7(obj2(r)?.id) ?? "").filter((x) => !!x);
+}
+function answerDraftOf(reply, line2) {
+  const o = obj2(reply);
+  const told = list5(o?.effects).map(obj2).find((e) => !!e && str7(e.type) === CHECK_PROMISE_DRAFT_EFFECT) ?? null;
+  const own = obj2(o?.draft);
+  const d = own ?? obj2(told?.draft);
+  const text2 = d ? str7(d.text) ?? str7(d.draft) : null;
+  if (!d || !text2) return null;
+  const names = recipients(d.to ?? d.recipients);
+  const service = str7(d.in) ?? str7(d.service);
+  const where = str7(d.where) ?? str7(d.channel) ?? str7(d.place) ?? names.find((n) => n.startsWith("#")) ?? null;
+  const who = whoFor({ names, where });
+  const placed = isBearsOnLine(line2) || isCheckPromiseLine(line2) || !own && !!told;
+  const lead = placed && service ? W.goesTo(who, placeWords(service, where)) : W.messageTo(who);
+  return { text: text2, lead, toName: who, said: !own && told ? str7(told.readback) : null };
+}
+var REPEATED_SECTIONS = /* @__PURE__ */ new Set(["noticed", "repeated", "what_has_repeated"]);
+var isRepeatedSection = (s2) => REPEATED_SECTIONS.has(norm(str7(obj2(s2)?.section_type)));
+function repeatedOf(read) {
+  const own = repeatedFrom(read);
+  if (own.length) return own;
+  const o = obj2(read);
+  const card = obj2(o?.card) ?? o;
+  const section = list5(card?.sections).map(obj2).find((s2) => !!s2 && isRepeatedSection(s2));
+  const data = obj2(section?.data);
+  return data ? repeatedFrom(data.noticed ?? data.items ?? data) : [];
+}
+var MAY_ASK_SHOWN = 3;
+var mayAskOf = (prep) => mayAskFrom(prep).slice(0, MAY_ASK_SHOWN);
+function toldWords(t, now) {
+  if (t.sentence) return t.sentence;
+  if (!t.quote) return null;
+  return W.told(t.to, t.whenMs ? draftWhen(t.whenMs, now) : null, t.quote);
+}
+function stepWhen(ms, now) {
+  if (!ms) return null;
+  const clock = clockWords(ms);
+  return clock ? `${upFirst(draftWhen(ms, now))} ${clock}` : null;
+}
+var sourceWhen = (s2, now) => s2.whenMs ? upFirst(draftWhen(s2.whenMs, now)) : null;
+var webLink = (l) => l && /^https?:\/\//i.test(l.trim()) ? l.trim() : null;
+var YOUR_SIDE_SECTIONS = /* @__PURE__ */ new Set(["your_side", "your_week", "your_side_of_the_work"]);
+var isYourSideSection = (s2) => YOUR_SIDE_SECTIONS.has(norm(str7(obj2(s2)?.section)));
+function yourWeekOf(edition, data) {
+  const ed = obj2(edition);
+  const asSection = list5(ed?.sections).map(obj2).find((s2) => !!s2 && isYourSideSection(s2));
+  const w = yourWeekFrom(data) ?? yourWeekFrom(ed) ?? (asSection ? yourWeekFrom({ your_side: asSection }) : null);
+  return w && (w.counts.length > 0 || w.goals.length > 0) ? w : null;
+}
+function weekShown(data, fresh) {
+  const ed = data?.edition ?? null;
+  if (!ed) return null;
+  const side = yourWeekOf(ed, data);
+  const sections = Array.isArray(ed.sections) ? ed.sections.filter((s2) => !isYourSideSection(s2)) : [];
+  if (!sections.length && !side || !fresh(ed.period)) return null;
+  return { edition: { ...ed, sections }, side };
+}
+var weekItemWords = (i) => `${i.text}${i.who ? ` \xB7 ${i.who}` : ""}`;
+var goalWords = (g) => `${g.goal}${g.count > 0 ? `: ${g.count}` : ""}`;
+
+// src/views/lastMomentsParts.ts
+function link(host, text2, href, cls = "myu-line-link") {
+  host.createEl("a", { cls, text: text2, href, attr: { target: "_blank", rel: "noopener" } });
+}
+function renderSources(host, sources2, now = Date.now()) {
+  if (!sources2.length) return;
+  const list7 = host.createDiv({ cls: "myu-lm-sources" });
+  for (const s2 of sources2) {
+    const row = list7.createDiv({ cls: "myu-lm-source" });
+    const when = sourceWhen(s2, now);
+    if (when) row.createSpan({ cls: "myu-lm-when", text: `${when}: ` });
+    const quote2 = `\u201C${s2.quote}\u201D`;
+    const href = webLink(s2.link);
+    if (href) link(row, quote2, href);
+    else row.createSpan({ text: quote2 });
+  }
+}
+function opener(head, under, key, opened, fill) {
+  const paint = () => {
+    under.empty();
+    head.setAttr("aria-expanded", String(opened.has(key)));
+    if (opened.has(key)) fill(under);
+  };
+  head.onclick = () => {
+    if (opened.has(key)) opened.delete(key);
+    else opened.add(key);
+    paint();
+  };
+  paint();
+}
+function sentence(host, text2, opens, cls) {
+  return opens ? host.createEl("button", { cls: `myu-aff myu-lm-open ${cls}`, text: text2 }) : host.createDiv({ cls, text: text2 });
+}
+function renderRepeated(root, items, opened, now = Date.now()) {
+  if (!items.length) return;
+  const zone = root.createDiv({ cls: "myu-zone myu-lm-repeated" });
+  zone.createDiv({ cls: "myu-whisper", text: LAST_MOMENTS_WORDS.repeated });
+  items.forEach((r, i) => {
+    const item = zone.createDiv({ cls: "myu-lm-item" });
+    const head = sentence(item, r.text, r.sources.length > 0, "myu-lm-text");
+    if (!r.sources.length) return;
+    opener(head, item.createDiv({ cls: "myu-lm-under" }), `repeated:${i}:${r.text}`, opened, (under) => renderSources(under, r.sources, now));
+  });
+}
+function renderMayAsk(root, items, opened, now = Date.now()) {
+  if (!items.length) return;
+  const zone = root.createDiv({ cls: "myu-zone myu-lm-may-ask" });
+  zone.createDiv({ cls: "myu-whisper", text: LAST_MOMENTS_WORDS.mayAsk });
+  items.forEach((m, i) => {
+    const item = zone.createDiv({ cls: "myu-lm-item" });
+    const head = sentence(item, m.text, m.sources.length > 0, "myu-lm-text");
+    for (const s2 of m.steps) {
+      const step = item.createDiv({ cls: "myu-lm-step" });
+      const when = stepWhen(s2.atMs, now);
+      if (when) step.createSpan({ cls: "myu-time", text: when });
+      step.createSpan({ text: s2.text });
+    }
+    for (const t of m.told) {
+      const said = toldWords(t, now);
+      if (said) item.createDiv({ cls: "myu-lm-told", text: said });
+    }
+    if (!m.sources.length) return;
+    opener(head, item.createDiv({ cls: "myu-lm-under" }), `may-ask:${i}:${m.text}`, opened, (under) => renderSources(under, m.sources, now));
+  });
+}
+function renderYourWeek(host, week, opened) {
+  if (!week.counts.length && !week.goals.length) return;
+  const part = host.createDiv({ cls: "myu-lm-week" });
+  if (week.counts.length) {
+    const side = part.createDiv({ cls: "myu-lm-week-side" });
+    side.createDiv({ cls: "myu-whisper", text: LAST_MOMENTS_WORDS.week.yourSide });
+    week.counts.forEach((c, i) => {
+      const item = side.createDiv({ cls: "myu-lm-item" });
+      const head = sentence(item, c.sentence, c.items.length > 0, "myu-lm-text");
+      if (!c.items.length) return;
+      opener(head, item.createDiv({ cls: "myu-lm-under" }), `week:${i}:${c.key}`, opened, (under) => {
+        const list7 = under.createDiv({ cls: "myu-lm-sources" });
+        for (const it of c.items) {
+          const row = list7.createDiv({ cls: "myu-lm-source" });
+          const href = webLink(it.link);
+          if (href) {
+            link(row, it.text, href);
+            if (it.who) row.createSpan({ text: ` \xB7 ${it.who}` });
+          } else {
+            row.createSpan({ text: weekItemWords(it) });
+          }
+        }
+      });
+    });
+  }
+  if (week.goals.length) {
+    const goals = part.createDiv({ cls: "myu-lm-week-goals" });
+    goals.createDiv({ cls: "myu-whisper", text: LAST_MOMENTS_WORDS.week.goals });
+    for (const g of week.goals) {
+      const item = goals.createDiv({ cls: "myu-lm-item" });
+      item.createDiv({ cls: "myu-lm-text", text: goalWords(g) });
+      if (!g.example) continue;
+      const ex = item.createDiv({ cls: "myu-lm-example" });
+      const href = webLink(g.example.link);
+      if (href) link(ex, g.example.text, href);
+      else ex.createSpan({ text: g.example.text });
+    }
+  }
+}
+
 // src/pickMany.ts
 var SINGLE_CHOICE_IDS = ["no_one", "not_sure"];
 var PICK_MANY_WORDS = {
@@ -9912,22 +11588,22 @@ var PICK_MANY_WORDS = {
   typedHint: "Type their name, then send.",
   pickFirst: "Pick someone first, or type a name."
 };
-function isPickMany(line) {
-  return line?.select === "many";
+function isPickMany(line2) {
+  return line2?.select === "many";
 }
-function typedChoiceOf(line) {
-  if (!line?.typed) return null;
-  return (line.choices ?? []).find((c) => c.id === line.typed) ?? null;
+function typedChoiceOf(line2) {
+  if (!line2?.typed) return null;
+  return (line2.choices ?? []).find((c) => c.id === line2.typed) ?? null;
 }
-function typedHint(line) {
-  return line?.typed_hint?.trim() || PICK_MANY_WORDS.typedPlaceholder;
+function typedHint(line2) {
+  return line2?.typed_hint?.trim() || PICK_MANY_WORDS.typedPlaceholder;
 }
-function pickManyParts(line) {
-  const choices = line?.choices ?? [];
-  const typed = typedChoiceOf(line);
+function pickManyParts(line2) {
+  const choices = line2?.choices ?? [];
+  const typed = typedChoiceOf(line2);
   const rest = choices.filter((c) => c.id !== typed?.id);
-  if (!isPickMany(line)) return { picks: [], send: null, typed, singles: rest };
-  const sendId = line?.send ?? "done";
+  if (!isPickMany(line2)) return { picks: [], send: null, typed, singles: rest };
+  const sendId = line2?.send ?? "done";
   const send = rest.find((c) => c.id === sendId) ?? null;
   const singles = rest.filter((c) => c.id !== sendId && (SINGLE_CHOICE_IDS.includes(c.id) || !!c.readback?.trim()));
   const picks = rest.filter((c) => c.id !== sendId && !singles.includes(c));
@@ -9936,15 +11612,15 @@ function pickManyParts(line) {
 function canSendPicks(picked, typedText) {
   return picked.length > 0 || !!typedText?.trim();
 }
-function pickManyAnswer(line, picked, typedText) {
-  const parts = pickManyParts(line);
+function pickManyAnswer(line2, picked, typedText) {
+  const parts = pickManyParts(line2);
   const ids = parts.picks.map((c) => c.id).filter((id) => picked.includes(id));
-  const text = typedText?.trim();
-  return { choice_id: parts.send?.id ?? line.send ?? "done", choice_ids: ids, ...text ? { text } : {} };
+  const text2 = typedText?.trim();
+  return { choice_id: parts.send?.id ?? line2.send ?? "done", choice_ids: ids, ...text2 ? { text: text2 } : {} };
 }
-function typedAnswer(line, text) {
-  const typed = typedChoiceOf(line);
-  const t = text.trim();
+function typedAnswer(line2, text2) {
+  const typed = typedChoiceOf(line2);
+  const t = text2.trim();
   return typed && t ? { choice_id: typed.id, text: t } : null;
 }
 function togglePick(picked, id) {
@@ -9972,16 +11648,16 @@ var SPACE_MODE_WORDS = {
   agentRefused: "This session can read the retro's state, not act in it."
 };
 var LOCKED_TEXT = "[Encrypted content - unlock required]";
-function isLockedText(text) {
-  return text === LOCKED_TEXT || text === "locked";
+function isLockedText(text2) {
+  return text2 === LOCKED_TEXT || text2 === "locked";
 }
 function readbackText(res) {
   if (!res) return null;
   const eff = res.effects?.find((e) => e.type === "readback" && typeof e.text === "string");
   const effText = typeof eff?.text === "string" ? eff.text : void 0;
-  const text = effText ?? res.readback?.text ?? null;
+  const text2 = effText ?? res.readback?.text ?? null;
   const filled = (t) => !!t && !/\{[a-z_]+\}/.test(t);
-  return filled(text) ? text : filled(res.readback?.text) ? res.readback?.text ?? null : text;
+  return filled(text2) ? text2 : filled(res.readback?.text) ? res.readback?.text ?? null : text2;
 }
 function isSpaceMode(conv) {
   return conv?.mode === "space";
@@ -9994,8 +11670,8 @@ function layoutChoices(choices) {
   }
   return { choices: all, quiet: null };
 }
-function isAsk(line) {
-  return !!line && line.ask_kind !== "tell" && line.ask_kind !== "wait";
+function isAsk(line2) {
+  return !!line2 && line2.ask_kind !== "tell" && line2.ask_kind !== "wait";
 }
 function spaceModeView(conv, focusLineId) {
   const history = conv.history ?? [];
@@ -10038,9 +11714,9 @@ function spaceModeView(conv, focusLineId) {
     earlier: !!conv.history_from && conv.has_earlier !== false
   };
 }
-function readbackParts(text) {
-  if (!text) return null;
-  const lines = text.split("\n").map((l) => l.trim()).filter((l) => l.length > 0);
+function readbackParts(text2) {
+  if (!text2) return null;
+  const lines = text2.split("\n").map((l) => l.trim()).filter((l) => l.length > 0);
   const isBullet = (l) => l.startsWith("\u2022");
   const firstBullet = lines.findIndex(isBullet);
   if (firstBullet < 0) return null;
@@ -10058,7 +11734,7 @@ function effectSteps(effects) {
   const out = [];
   for (const e of effects ?? []) {
     if (e.type === "open_journal") out.push({ do: "open_journal", text: typeof e.text === "string" ? e.text : "" });
-    else if (e.type === "consent_needed" && e.provider === "space") out.push({ do: "unlock_space" });
+    else if (e.type === "consent_needed" && e.provider === "space" && e.reason !== "space_waiting") out.push({ do: "unlock_space" });
     else if (e.type === "open_onboarding" && (e.step === "linkedin" || e.step === "resume")) out.push({ do: "open_onboarding", step: e.step });
   }
   return out;
@@ -10110,8 +11786,77 @@ function spaceDoorWords(mine) {
   return ask;
 }
 
+// src/identityLines.ts
+var PICK_SHOWN = 6;
+var PICK_WAIT_MS = 250;
+var PEOPLE_FRESH_MS = 5 * 6e4;
+function identityLine(line2) {
+  const choices = (line2.choices ?? []).filter((c) => typeof c?.id === "string");
+  return identityLineOf({ kind: line2.kind, ask_kind: line2.ask_kind, choices, why: line2.why ?? null, identity: line2.identity ?? null });
+}
+var isIdentityAsk = (line2) => identityLine(line2)?.which === "ask" && line2.ask_kind !== "tell" && line2.ask_kind !== "wait";
+var isIdentityAssumed = (line2) => identityLine(line2)?.which === "assumed" && line2.ask_kind === "assume";
+function identityChoices(line2) {
+  const own = (line2.choices ?? []).filter((c) => typeof c?.id === "string" && c.id.length > 0);
+  const hasGuess = own.some((c) => c.id === "yes") || !!line2.identity?.guess_relationship_id;
+  const words = new Map(IDENTITY_WORDS.choices(hasGuess).map((c) => [c.id, c.label]));
+  const base = own.length ? own : IDENTITY_WORDS.choices(hasGuess);
+  return base.map((c) => ({
+    id: c.id,
+    label: c.label?.trim() || words.get(c.id) || c.id,
+    quiet: c.id === "not_now",
+    ...c.id === SOMEONE_ELSE ? { opens: "who" } : {}
+  }));
+}
+function lineWords(line2) {
+  const text2 = (line2.text ?? "").trim();
+  return isIdentityAssumed(line2) ? assumedParts(text2).claim : text2;
+}
+function notThemLabel(line2) {
+  return assumedParts(line2.text ?? "").notThem;
+}
+function peopleMatching(listed, found, query, max = PICK_SHOWN) {
+  const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if (!words.length) return [];
+  const has = (name) => {
+    const parts = name.toLowerCase().split(/[\s.,'’()-]+/).filter(Boolean);
+    return words.every((w) => parts.some((p) => p.startsWith(w)));
+  };
+  const out = [];
+  const seen = /* @__PURE__ */ new Set();
+  for (const e of [...listed.filter((p) => has(p.display_name ?? "")), ...found]) {
+    const name = e.display_name?.trim();
+    if (e.entity_type !== "person" || !e.entity_id || !name || seen.has(e.entity_id)) continue;
+    seen.add(e.entity_id);
+    out.push({ id: e.entity_id, name, sub: e.organization?.trim() || e.subtitle?.trim() || null });
+    if (out.length >= max) break;
+  }
+  return out;
+}
+function peopleFinder(backend, opts = {}) {
+  const wait = opts.wait ?? ((ms) => new Promise((resolve) => window.setTimeout(resolve, ms)));
+  const now = opts.now ?? (() => Date.now());
+  let listed = null;
+  let latest = "";
+  return async (query) => {
+    const q = query.trim();
+    latest = q;
+    if (!q) return [];
+    await wait(PICK_WAIT_MS);
+    if (q !== latest) return [];
+    if (!listed || now() - listed.at > PEOPLE_FRESH_MS) {
+      const res = await backend().listEntities("person").catch(() => null);
+      if (res?.ok && res.data) listed = { at: now(), people: res.data.entities ?? [] };
+    }
+    const search = q.length >= 2 ? await backend().searchEntities(q).catch(() => null) : null;
+    return peopleMatching(listed?.people ?? [], search?.ok ? search.data?.results ?? [] : [], q);
+  };
+}
+
 // src/lineAnswers.ts
 var LINE_ANSWER_WORDS = {
+  /** Someone signing in (2026-11-11): the key goes from a device that holds it, never from a line's button here. */
+  newDevice: "Answer this in Myu in your browser: it shows the number to compare.",
   yes: "Yes",
   no: "No",
   /** The two quiet ways out (mirror of shared `WAY_OUT_WORDS`). */
@@ -10133,68 +11878,95 @@ var LINE_ANSWER_WORDS = {
   copy: "Copy",
   copied: "Copied",
   copyFailed: "It did not copy. Select the message and copy it yourself.",
-  draftLink: "Open the link"
+  draftLink: "Open the link",
+  /** "Myu has no connection with Ana" answered Invite (2026-11-13): the invitation carries the question only with its id. */
+  inviteWithQuestion: (who, questionId) => `To send the invitation${questionId ? " with your question" : ""}, in the terminal: myu invite ${/\s/.test(who) ? `"${who}"` : who}${questionId ? ` --question ${questionId}` : ""}`
 };
 var known = (choices) => (choices ?? []).filter((c) => typeof c?.id === "string" && c.id.length > 0).map((c) => ({ id: c.id, label: c.label?.trim() || c.id, ...c.readback?.trim() ? { readback: c.readback } : {} }));
-function answersInConversation(line) {
-  if (!isAsk(line)) return false;
-  return isPickMany(line) || typedChoiceOf({ typed: line.typed, choices: known(line.choices) }) !== null;
+function answersInConversation(line2) {
+  if (!isAsk(line2)) return false;
+  return isPickMany(line2) || typedChoiceOf({ typed: line2.typed, choices: known(line2.choices) }) !== null;
 }
-function carriesWayOut(line) {
-  return (line.choices ?? []).some((c) => {
-    const label = (c?.label ?? "").trim().toLowerCase();
-    return c?.id === "not_now" || c?.id === "later" || c?.id === "leave" || label === "not now" || label === "leave it";
+function carriesWayOut(line2) {
+  return (line2.choices ?? []).some((c) => {
+    const label2 = (c?.label ?? "").trim().toLowerCase();
+    return c?.id === "not_now" || c?.id === "later" || c?.id === "leave" || label2 === "not now" || label2 === "leave it";
   });
 }
-function quietWaysOut(line) {
-  if (carriesWayOut(line)) return [];
+function quietWaysOut(line2) {
+  if (carriesWayOut(line2)) return [];
   return [
     { id: "later", label: LINE_ANSWER_WORDS.later, answer: { later: true }, quiet: true },
     { id: "dismiss", label: LINE_ANSWER_WORDS.never, answer: { dismiss: true }, quiet: true }
   ];
 }
-function lineButtons(line) {
-  switch (line.ask_kind) {
+var CONNECT_LINE_KINDS = ["connect_invite", "invite_connect", "connect_invitation", "invitation_connect"];
+function isConnectLine(line2) {
+  if (line2.kind) return CONNECT_LINE_KINDS.includes(line2.kind);
+  return /invites you to connect on askMyu\b/.test((line2.text ?? "").trim());
+}
+function lineSentences(line2) {
+  const raw = line2.sentences;
+  const text2 = line2.text ?? "";
+  return (Array.isArray(raw) ? raw : []).filter((x) => typeof x === "string" && !!x.trim() && !text2.includes(x.trim())).map((x) => x.trim());
+}
+function lineButtons(line2) {
+  if (line2.kind === "new_device") return [];
+  if (isConnectLine(line2)) return known(line2.choices).map((c) => ({ id: c.id, label: c.label, answer: { choice_id: c.id }, quiet: c.id === "not_now" }));
+  if (isIdentityAsk(line2)) return identityChoices(line2).map((c) => ({ id: c.id, label: c.label, answer: { choice_id: c.id }, quiet: c.quiet, ...c.opens ? { opens: c.opens } : {} }));
+  if (isIdentityAssumed(line2)) return line2.assumed?.changeable ? [{ id: "change", label: notThemLabel(line2), answer: { change: true }, quiet: false }] : [];
+  if (isAsk(line2) && line2.ask_kind !== "assume" && (isFullDayLine(line2) || isBearsOnLine(line2) || isCheckPromiseLine(line2))) {
+    if (isCheckPromiseLine(line2)) {
+      const own = known(line2.choices);
+      return (own.length ? own : CHECK_PROMISE_CHOICES.map((c) => ({ id: c.id, label: c.label }))).map((c) => ({ id: c.id, label: c.label, answer: { choice_id: c.id }, quiet: c.id === "let_go" || c.id === "keep" }));
+    }
+    const answerFor = (id) => line2.ask_kind === "yes_no" && (id === "yes" || id === "no") ? { yes: id === "yes" } : { choice_id: id };
+    if (isFullDayLine(line2)) {
+      return fullDayChoices(line2).map((c) => ({ id: c.id, label: c.label, answer: answerFor(c.id), quiet: false, ...c.role === "move" ? { opens: "day" } : {} }));
+    }
+    return bearsOnChoices(line2).map((c) => ({ id: c.id, label: c.label, answer: answerFor(c.id), quiet: c.role === "no" }));
+  }
+  switch (line2.ask_kind) {
     case "tell":
     case "wait":
       return [];
     case "assume":
-      return line.assumed?.changeable ? [{ id: "change", label: LINE_ANSWER_WORDS.change, answer: { change: true }, quiet: false }] : [];
+      return line2.assumed?.changeable ? [{ id: "change", label: LINE_ANSWER_WORDS.change, answer: { change: true }, quiet: false }] : [];
     case "yes_no": {
-      const offered = known(line.choices);
+      const offered = known(line2.choices);
       const base = offered.length ? offered : [{ id: "yes", label: LINE_ANSWER_WORDS.yes }, { id: "no", label: LINE_ANSWER_WORDS.no }];
       return [
         ...base.map(
           (c) => c.id === "yes" || c.id === "no" ? { id: c.id, label: c.label, answer: { yes: c.id === "yes" }, quiet: false } : { id: c.id, label: c.label, answer: { choice_id: c.id }, quiet: false }
         ),
-        ...quietWaysOut(line)
+        ...quietWaysOut(line2)
       ];
     }
     default: {
-      if (!isAsk(line)) return [];
-      if (answersInConversation(line)) return [];
-      const laid = layoutChoices(known(line.choices));
+      if (!isAsk(line2)) return [];
+      if (answersInConversation(line2)) return [];
+      const laid = layoutChoices(known(line2.choices));
       if (laid.choices.length === 0 && !laid.quiet) return [];
       const out = laid.choices.map((c) => ({ id: c.id, label: c.label, answer: { choice_id: c.id }, quiet: false }));
       if (laid.quiet) out.push({ id: laid.quiet.id, label: laid.quiet.label, answer: { choice_id: laid.quiet.id }, quiet: true });
-      out.push(...quietWaysOut(line));
+      out.push(...quietWaysOut(line2));
       return out;
     }
   }
 }
-function tapAnswers(line) {
-  return lineButtons(line).some((b) => !b.quiet);
+function tapAnswers(line2) {
+  return lineButtons(line2).some((b) => !b.quiet);
 }
-function showEstimate(line) {
-  if (!line.est?.trim() || !isAsk(line)) return false;
-  return tapAnswers(line) || !/\btap\b/i.test(line.est);
+function showEstimate(line2) {
+  if (!line2.est?.trim() || !isAsk(line2)) return false;
+  return tapAnswers(line2) || !/\btap\b/i.test(line2.est);
 }
-function meetingQuestionAt(line, rowOccurrence) {
-  if (!line || !isAsk(line)) return null;
-  const meeting = (line.subjects ?? []).find((s2) => s2.type === "meeting");
-  const onMeeting = line.conversation?.subject_type === "meeting" || !line.conversation?.subject_type && !!meeting;
+function meetingQuestionAt(line2, rowOccurrence) {
+  if (!line2 || !isAsk(line2)) return null;
+  const meeting = (line2.subjects ?? []).find((s2) => s2.type === "meeting");
+  const onMeeting = line2.conversation?.subject_type === "meeting" || !line2.conversation?.subject_type && !!meeting;
   if (!onMeeting) return null;
-  const occurrenceKey = line.conversation?.occurrence_key || meeting?.occurrence_key || rowOccurrence;
+  const occurrenceKey = line2.conversation?.occurrence_key || meeting?.occurrence_key || rowOccurrence;
   return occurrenceKey ? { occurrenceKey } : {};
 }
 var trimBase = (apiBase) => apiBase.replace(/\/+$/, "");
@@ -10220,8 +11992,17 @@ function lineEffectActions(effects, apiBase) {
     } else if (e.type === "draft_ready") {
       if (typeof e.text !== "string" || !e.text.trim()) continue;
       const url = typeof e.url === "string" && /^https?:\/\//.test(e.url) ? e.url : void 0;
-      const label = typeof e.url_label === "string" && e.url_label.trim() ? e.url_label.trim() : LINE_ANSWER_WORDS.draftLink;
-      out.push({ kind: "draft", draft: { text: e.text, url, label, to_name: typeof e.to_name === "string" ? e.to_name : void 0 } });
+      const label2 = typeof e.url_label === "string" && e.url_label.trim() ? e.url_label.trim() : LINE_ANSWER_WORDS.draftLink;
+      out.push({ kind: "draft", draft: { text: e.text, url, label: label2, to_name: typeof e.to_name === "string" ? e.to_name : void 0 } });
+    } else if (e.type === "send_yourself") {
+      const text2 = e.text;
+      if (typeof text2 !== "string" || !text2.trim()) continue;
+      out.push({ kind: "draft", draft: { text: text2, label: LINE_ANSWER_WORDS.draftLink } });
+    } else if (e.type === "open_invite") {
+      const o = e;
+      const who = typeof o.email === "string" && o.email.trim() ? o.email.trim() : typeof o.name === "string" && o.name.trim() ? o.name.trim() : null;
+      if (!who) continue;
+      out.push({ kind: "note", text: LINE_ANSWER_WORDS.inviteWithQuestion(who, typeof o.question_id === "string" && o.question_id.trim() ? o.question_id.trim() : null) });
     } else if (e.type === "open_conversation") {
       if (typeof e.subject_type !== "string" || !e.subject_type || typeof e.subject_id !== "string" || !e.subject_id) continue;
       const occurrence = typeof e.occurrence_key === "string" && e.occurrence_key ? { occurrence_key: e.occurrence_key } : {};
@@ -10233,9 +12014,11 @@ function lineEffectActions(effects, apiBase) {
 function lineClosed(res) {
   return res?.status === 409 && res.error === "line_closed";
 }
-async function pressLineButton(deps, line, button) {
-  const res = await deps.answer(line.line_id, button.answer).catch(() => null);
-  if (lineClosed(res)) return { ui: {}, settled: false, closed: true, open: [] };
+async function pressLineButton(deps, line2, button) {
+  if (button.opens === "day" && !button.answer.day) return { ui: {}, settled: false, open: [] };
+  if (button.opens === "who" && !button.answer.relationship_id && !button.answer.text?.trim()) return { ui: {}, settled: false, open: [] };
+  const res = await deps.answer(line2.line_id, button.answer).catch(() => null);
+  if (lineClosed(res)) return { ui: identityLine(line2) ? { closed: IDENTITY_WORDS.alreadyAnswered } : {}, settled: false, closed: true, open: [] };
   if (!res?.ok || !res.data) {
     return { ui: { note: res?.error === "offline" ? LINE_ANSWER_WORDS.offline : LINE_ANSWER_WORDS.failed }, settled: false, open: [] };
   }
@@ -10243,12 +12026,18 @@ async function pressLineButton(deps, line, button) {
   const open = actions.flatMap((a) => a.kind === "open" ? [a.url] : []);
   const notes = actions.flatMap((a) => a.kind === "note" ? [a.text] : []);
   const links = actions.flatMap((a) => a.kind === "link" ? [a.link] : []);
-  const draft = actions.find((a) => a.kind === "draft")?.draft;
+  const own = answerDraftOf(res.data, line2);
+  const draft = actions.find((a) => a.kind === "draft")?.draft ?? (own ? { text: own.text, label: LINE_ANSWER_WORDS.draftLink, lead: own.lead, ...own.toName ? { to_name: own.toName } : {} } : void 0);
   const conversation = actions.find((a) => a.kind === "conversation")?.conversation;
   const also = conversation ? { conversation } : {};
-  const said = readbackText(res.data);
-  if (res.data.line_open) return { ui: { note: said, notes, links }, settled: false, open, ...also };
-  return { ui: { said: said ?? "", good: !button.answer.dismiss && !button.answer.later, notes, links, ...draft ? { draft } : {} }, settled: true, open, ...also };
+  const effects = (res.data.effects ?? []).map((e) => ({ type: e.type, text: typeof e.text === "string" ? e.text : void 0, move_id: typeof e.move_id === "string" ? e.move_id : void 0 }));
+  const told = saidBack({ effects });
+  const said = told ?? readbackText(res.data);
+  const moveId = saidMoveId({ effects });
+  const undo = moveId && said ? { undo: { said, moveId } } : {};
+  if (res.data.line_open) return { ui: { note: said, notes, links }, settled: false, open, ...also, ...undo };
+  const shown2 = said || own?.said || "";
+  return { ui: { said: shown2, good: !button.answer.dismiss && !button.answer.later, notes, links, ...draft ? { draft } : {} }, settled: true, open, ...also, ...undo };
 }
 
 // src/debriefPane.ts
@@ -10258,7 +12047,7 @@ var DEBRIEF_PANE_WORDS = {
   /** The door on Today, into the space's conversation. */
   door: "Ask Myu about this interview debrief \u25B8",
   /** "Add a CV": the file goes on the candidate's page on the web, or through the terminal. */
-  cvWhere: (name, link) => `To add ${name.trim() || "the candidate"}'s CV, open this interview debrief on the web: ${link} Or, in the terminal: myu debrief "${name.trim() || "name"}" --cv <file>`,
+  cvWhere: (name, link2) => `To add ${name.trim() || "the candidate"}'s CV, open this interview debrief on the web: ${link2} Or, in the terminal: myu debrief "${name.trim() || "name"}" --cv <file>`,
   /** "Paste a LinkedIn link", when the backend says nothing back. */
   linkedinHere: "Paste the LinkedIn link in the box below, and send it.",
   /** A session that may only read (403 `scope_required`). */
@@ -10281,6 +12070,190 @@ function debriefEffectSteps(effects) {
     else if (e.type === "paste_linkedin") out.push({ do: "paste_linkedin" });
   }
   return out;
+}
+
+// src/prepCard.ts
+var PREP_WORDS = {
+  parts: {
+    purpose: "What it\u2019s for",
+    since_last: "Since last time",
+    moves: "Your moves",
+    power: "Where power sits",
+    watch: "One thing to watch"
+  },
+  why: "why \u25B8",
+  whyOpen: "why \u25BE",
+  more: "more \u25B8",
+  less: "less \u25B4",
+  stands: "Where things stand",
+  youOwe: "You owe",
+  theyOwe: "They owe",
+  worksBest: "How they like to work",
+  stance: "In your threads",
+  room: "The room",
+  beforeYouGo: "Before you go in",
+  planned: "What\u2019s planned",
+  documents: "Documents",
+  setUpEmail: "The email that set it up",
+  lastNotes: "Last time\u2019s notes",
+  openNotes: "Open the notes \u25B8",
+  notReplied: "Hasn\u2019t replied",
+  notRepliedMany: "Haven\u2019t replied",
+  afterwards: "Afterwards",
+  candidateFacts: "About the candidate",
+  yourTopics: "Your topics",
+  openItem: "open \u25B8",
+  openConversation: "Open the conversation \u25B8",
+  writeHowItWent: "Write how it went \u25B8",
+  answerPlaceholder: "Type your answer",
+  sendAnswer: "Send",
+  partial: "From your calendar only for now. The rest comes when you open it with your key here.",
+  loading: "Getting it ready\u2026",
+  failed: "That didn\u2019t load. Try again in a moment."
+};
+function prepPartLabel(part) {
+  return PREP_WORDS.parts[part] ?? part.replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase());
+}
+function prepEvidenceFor(prep, ids) {
+  const out = [];
+  for (const id of ids ?? []) {
+    const ev = prep.evidence?.[id];
+    if (ev) out.push({ id, ev });
+  }
+  return out;
+}
+function prepPersonHasMore(p) {
+  return !!(p.stands || p.works_best || p.stance || p.last_time || p.you_owe.length || p.they_owe.length || (p.decided ?? []).length || (p.told ?? []).length);
+}
+function prepDocument(d) {
+  if (typeof d === "string") return { name: d, url: null };
+  return { name: d.title || d.name || d.fileUrl || d.url || "", url: d.fileUrl || d.url || null };
+}
+function prepNotRepliedLabel(names) {
+  return names.length === 1 ? PREP_WORDS.notReplied : PREP_WORDS.notRepliedMany;
+}
+function isPrepV2(p) {
+  return !!p && typeof p === "object" && p.version === 2 && Array.isArray(p.top);
+}
+function prepAskMode(ask) {
+  if (ask.select === "many") return "many";
+  return ask.input === "choice" ? "choice" : "text";
+}
+var PREP_VIEW_WORDS = {
+  /** The pane's tab before a card has loaded; with one, the meeting's title follows the dash. */
+  pane: "Myu \u2014 meeting",
+  /** 404: the event is not on this account's calendar. */
+  unknown: "Myu can\u2019t find this meeting on your calendar.",
+  retry: "Try again",
+  /** The label over Myu's own words (its question, the arc's invitation, what it said back). */
+  myu: "myu",
+  /** A typed answer went into the meeting's conversation. */
+  sent: "Sent. Myu\u2019s reply is in the conversation.",
+  /** A meeting's notes, shown in place when the vault has no note for that meeting. */
+  notesLoading: "Opening the notes\u2026",
+  notesEmpty: "Nothing in those notes yet.",
+  notesFailed: "Those notes didn\u2019t open. Try again in a moment.",
+  /** 2026-10-29: a change to the list that did not reach the server (it is put back). */
+  listFailed: "That didn\u2019t save. Try again in a moment.",
+  /** The meeting's notes did not save; the next key saves them again. */
+  notesNotSaved: "Your notes didn\u2019t save yet. They save again as you type.",
+  /** After the meeting: the reminder Myu read in the notes, as a row ("Remind you · to ask about the rota"). */
+  remindYou: "Remind you",
+  /** Whose action item it is, when it is the person's own (another's is their name). */
+  you: "You",
+  /** The past 1:1s, while they are read and when they could not be. */
+  historyLoading: "Opening your past meetings\u2026",
+  historyEmpty: "No past meetings with a list yet.",
+  historyFailed: "Your past meetings didn\u2019t open. Try again in a moment."
+};
+var MONTHS6 = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+function prepShortDate(iso) {
+  const d = new Date(iso ?? "");
+  return Number.isNaN(d.getTime()) ? "" : `${d.getDate()} ${MONTHS6[d.getMonth()]}`;
+}
+function evidenceOpening(ev) {
+  const open = ev.open;
+  if (!open?.id) return null;
+  switch (open.kind) {
+    case "url":
+    case "linkedin":
+      return /^https?:\/\//i.test(open.id) ? { kind: "link", url: open.id } : null;
+    case "email":
+      return open.url && /^https?:\/\//i.test(open.url) ? { kind: "link", url: open.url } : null;
+    case "journal":
+      return { kind: "journal", id: open.id };
+    case "meeting":
+      return { kind: "meeting", id: open.id };
+    case "space":
+      return { kind: "space", id: open.id };
+    default:
+      return null;
+  }
+}
+function meetingNoteLines(detail) {
+  const text2 = (v) => typeof v === "string" ? v.trim() : "";
+  const list7 = (v) => Array.isArray(v) ? v.map((i) => typeof i === "string" ? i.trim() : text2(i?.text) || text2(i?.content)).filter(Boolean) : [];
+  const m = detail?.meeting ?? {};
+  return [text2(m.summary) || text2(m.debrief), ...list7(detail?.key_points), ...list7(detail?.decisions)].filter(Boolean);
+}
+function prepOccurrenceKey(prep) {
+  if (prep.occurrence_key) return String(prep.occurrence_key);
+  const t = Date.parse(prep.starts_at);
+  return Number.isFinite(t) && t > 0 ? String(t) : null;
+}
+var settledNothing = () => ({ said: null, note: null, open: [], conversation: null, closed: false });
+var failedWords = (error) => error === "offline" ? LINE_ANSWER_WORDS.offline : LINE_ANSWER_WORDS.failed;
+function isHoldChoice(choiceId) {
+  return choiceId === "hold_time" || choiceId === "hold";
+}
+function holdPage(effects, arc) {
+  const ready = (effects ?? []).find((e) => e.type === "invite_ready" && typeof e.handoff_url === "string" && /^https?:\/\//i.test(e.handoff_url));
+  if (ready && typeof ready.handoff_url === "string") return ready.handoff_url;
+  return arc?.hold_link && /^https?:\/\//i.test(arc.hold_link) ? arc.hold_link : null;
+}
+function conversationOf(effects) {
+  const e = (effects ?? []).find((x) => x.type === "open_conversation" && typeof x.subject_type === "string" && typeof x.subject_id === "string");
+  if (!e || typeof e.subject_type !== "string" || typeof e.subject_id !== "string") return null;
+  return { subject_type: e.subject_type, subject_id: e.subject_id, ...typeof e.occurrence_key === "string" && e.occurrence_key ? { occurrence_key: e.occurrence_key } : {} };
+}
+async function answerPrepPick(backend, line2, answer) {
+  const res = await backend.answerMyuLine(line2.line_id, answer).catch(() => null);
+  if (lineClosed(res)) return { ...settledNothing(), closed: true };
+  if (!res?.ok || !res.data) return { ...settledNothing(), note: failedWords(res?.error) };
+  const said = readbackText(res.data);
+  if (res.data.line_open) return { ...settledNothing(), note: said };
+  return { ...settledNothing(), said: said ?? "" };
+}
+async function sendPrepAnswer(backend, prep, text2, pasted = []) {
+  const content = text2.trim();
+  if (!content && pasted.length === 0) return settledNothing();
+  const occurrenceKey = prepOccurrenceKey(prep) ?? void 0;
+  const read = await backend.getSubjectConversation("meeting", prep.event_id, { occurrenceKey }).catch(() => null);
+  const conversationId = read?.ok ? read.data?.conversation_id : void 0;
+  if (!conversationId) return { ...settledNothing(), note: failedWords(read?.error) };
+  const res = await backend.addSubjectTurn(conversationId, content, pasted).catch(() => null);
+  if (!res?.ok) return { ...settledNothing(), note: failedWords(res?.error) };
+  if (pastedTextLost(pasted.length, res.data)) return { ...settledNothing(), note: PASTE_WORDS.lost, pastedLost: true };
+  return { ...settledNothing(), said: PREP_VIEW_WORDS.sent };
+}
+async function answerPrepLine(backend, prep, line2, choiceId) {
+  const onArc = !!prep.arc && prep.arc.line_id === line2.line_id;
+  const hold = onArc && isHoldChoice(choiceId);
+  const res = await backend.answerMyuLine(line2.line_id, { choice_id: choiceId }).catch(() => null);
+  if (lineClosed(res)) return { ...settledNothing(), closed: true };
+  if (!res?.ok || !res.data) {
+    const page2 = hold ? holdPage(null, prep.arc) : null;
+    return { ...settledNothing(), note: failedWords(res?.error), open: page2 ? [page2] : [] };
+  }
+  const effects = res.data.effects ?? [];
+  const page = hold ? holdPage(effects, prep.arc) : null;
+  const occurrenceKey = prepOccurrenceKey(prep);
+  const nowRef = { subject_type: "meeting", subject_id: prep.event_id, ...occurrenceKey ? { occurrence_key: occurrenceKey } : {} };
+  const conversation = conversationOf(effects) ?? (onArc && choiceId === "now" ? nowRef : null);
+  const said = readbackText(res.data);
+  const open = page ? [page] : [];
+  if (res.data.line_open) return { ...settledNothing(), note: said, open, conversation };
+  return { ...settledNothing(), said: said ?? "", open, conversation };
 }
 
 // src/spaceConversation.ts
@@ -10354,30 +12327,30 @@ function lineAbout(l, type, id) {
   const s2 = l.subjects?.[0];
   return s2?.type === type && s2?.id === id;
 }
-function shown(text) {
-  return isLockedText(text) ? LOCKED_TURN_WORDS : text;
+function shown(text2) {
+  return isLockedText(text2) ? LOCKED_TURN_WORDS : text2;
 }
 function screenTurn(t) {
-  const text = shown(t.text);
+  const text2 = shown(t.text);
   const pasted = t.from === "you" ? readPastedBlocks(t.pasted_blocks) : [];
-  return { key: t.turn_id, from: t.from, text, parts: readbackParts(text), ...pasted.length ? { pasted } : {} };
+  return { key: t.turn_id, from: t.from, text: text2, parts: readbackParts(text2), ...pasted.length ? { pasted } : {} };
 }
 var pastedChars = (t) => (t.pasted_blocks ?? []).reduce((sum, b) => sum + (typeof b?.text === "string" ? b.text.length : 0), 0);
 function carries(t, l) {
   if (t.from !== l.from) return false;
-  const text = t.text.trim();
-  if (text === l.text.trim() && pastedChars(t) === pastedChars(l)) return true;
+  const text2 = t.text.trim();
+  if (text2 === l.text.trim() && pastedChars(t) === pastedChars(l)) return true;
   if (!l.pasted_blocks?.length || t.pasted_blocks?.length) return false;
-  return text === l.text.trim() || text === [l.text, ...l.pasted_blocks.map((b) => b.text)].filter((s2) => s2.trim()).join("\n\n").trim();
+  return text2 === l.text.trim() || text2 === [l.text, ...l.pasted_blocks.map((b) => b.text)].filter((s2) => s2.trim()).join("\n\n").trim();
 }
 var SpaceConversation = class {
   /**
    * `spaceId` is the subject's id: the space's, for a meeting the calendar event's, for the account's own
    * question the account's.
    */
-  constructor(spaceId, label, deps, subject = { type: "space" }) {
+  constructor(spaceId, label2, deps, subject = { type: "space" }) {
     this.spaceId = spaceId;
-    this.label = label;
+    this.label = label2;
     this.deps = deps;
     this.subject = subject;
     this.conv = null;
@@ -10416,6 +12389,11 @@ var SpaceConversation = class {
     this.typedMode = null;
     this.typedKept = null;
     this.pickLineId = null;
+    /**
+     * Myu's offers for the meeting's list on its last reply (2026-10-29, `list_offers`): the reply's words they ride
+     * under, the phrases, which went onto the list, which are on their way, and what did not go. A new message clears them.
+     */
+    this.offers = null;
     this.withEarlier = false;
     /** The account's own conversation was refused at the door (a server from before 2026-10-03): the lines list is read. */
     this.noDoor = false;
@@ -10503,11 +12481,11 @@ var SpaceConversation = class {
     }
     this.failed = null;
     const mine = (res.data.lines ?? []).filter((l) => lineAbout(l, this.subject.type, this.spaceId) && isAsk(l)).map(lineAsAsk);
-    const label = mine[0]?.subjects?.[0]?.label ?? this.conv?.subject?.label;
+    const label2 = mine[0]?.subjects?.[0]?.label ?? this.conv?.subject?.label;
     this.conv = {
       success: true,
       conversation_id: mine[0]?.conversation?.conversation_id ?? this.conv?.conversation_id ?? "",
-      subject: { type: this.subject.type, id: this.spaceId, ...label ? { label } : {} },
+      subject: { type: this.subject.type, id: this.spaceId, ...label2 ? { label: label2 } : {} },
       history: [],
       open_line: mine[0],
       open_lines: mine
@@ -10542,8 +12520,8 @@ var SpaceConversation = class {
     return !!this.typedMode;
   }
   /** A paste or a drop became a chip; `value` is the box's text without the selection the paste replaced. */
-  addPasted(text, source, at, value) {
-    const out = chipAdded(this.pasted, text, source, at);
+  addPasted(text2, source, at, value) {
+    const out = chipAdded(this.pasted, text2, source, at);
     this.pasted = out.chips;
     this.undo = out.undo;
     this.pastedNote = null;
@@ -10583,8 +12561,8 @@ var SpaceConversation = class {
     return true;
   }
   /** Typed words: the person's turn shows at once; "Myu is reading…" until the answer lands. */
-  async send(text) {
-    const content = text.trim();
+  async send(text2) {
+    const content = text2.trim();
     if (this.typedMode) {
       const ask = this.currentAsk();
       const parts = pickManyParts(ask?.line);
@@ -10610,6 +12588,7 @@ var SpaceConversation = class {
     this.undo = null;
     this.pastedNote = null;
     this.note = null;
+    this.offers = null;
     const mine = { turn_id: `local-${++this.seq}`, from: "you", at: new Date((this.deps.now ?? Date.now)()).toISOString(), text: content, ...pasted.length ? { pasted_blocks: pasted } : {} };
     this.local.push(mine);
     this.reading = true;
@@ -10617,12 +12596,12 @@ var SpaceConversation = class {
     const res = await this.deps.backend.addSubjectTurn(this.conv.conversation_id, content, pasted).catch(() => null);
     this.reading = false;
     if (!res) {
-      this.giveBack(text, pasted, mine);
+      this.giveBack(text2, pasted, mine);
       this.say("Could not send this to Myu. Try again in a moment.");
       this.deps.onChange();
       return;
     }
-    if (!res.ok) this.giveBack(text, pasted, mine);
+    if (!res.ok) this.giveBack(text2, pasted, mine);
     if (!res.ok && res.error !== "scope_required" && res.data?.error !== "scope_required") {
       this.say(res.error === "offline" ? "You're offline. This message was not sent. Try again when you're back online." : "Could not send this to Myu. Try again in a moment.");
       this.deps.onChange();
@@ -10634,17 +12613,50 @@ var SpaceConversation = class {
       this.undo = null;
       this.pastedNote = PASTE_WORDS.lost;
     }
+    const listAdded = res.ok ? res.data?.list_added : void 0;
+    if (listAdded?.event_id) this.deps.onListChanged?.(listAdded.event_id);
+    const offers = this.isMeeting && res.ok ? listOffersOf(res.data) : [];
+    if (offers.length) this.offers = { reply: (res.data?.content ?? "").trim(), texts: offers, added: /* @__PURE__ */ new Set(), busy: /* @__PURE__ */ new Set(), note: null };
     await this.run(afterTyped(res.data ?? { error: res.error ?? void 0 }));
     this.deps.onChange();
+  }
+  /** "+ {text}" under Myu's reply: onto the meeting's list as Myu's offer (`/prep/items/add`). Myu never adds by itself. */
+  async addOffer(text2) {
+    const o = this.offers;
+    const backend = this.deps.backend;
+    if (!o || !this.isMeeting || !backend.addPrepItems || o.added.has(text2) || o.busy.has(text2)) return;
+    o.busy.add(text2);
+    o.note = null;
+    this.deps.onChange();
+    const occurrence = this.subject.occurrenceKey ?? this.conv?.subject?.occurrence_key ?? null;
+    const res = await backend.addPrepItems({ event_id: this.spaceId, occurrence_key: occurrence }, text2, "myu_offer").catch(() => null);
+    o.busy.delete(text2);
+    if (res?.ok) {
+      o.added.add(text2);
+      this.deps.onListChanged?.(this.spaceId);
+    } else {
+      o.note = res?.error === "offline" ? LINE_ANSWER_WORDS.offline : PREP_VIEW_WORDS.listFailed;
+    }
+    this.deps.onChange();
+  }
+  /** The offers ride under the reply they came with: the last of Myu's turns with its words (shown ahead of the read, or read). */
+  withOffers(turns, after) {
+    const o = this.offers;
+    if (!o) return;
+    const all = [...turns, ...after];
+    const at = [...all].reverse().find((t) => t.from === "myu" && (!o.reply || t.text.trim() === o.reply));
+    if (!at) return;
+    at.offers = o.texts.map((text2) => ({ text: text2, added: o.added.has(text2), busy: o.busy.has(text2) }));
+    at.offersNote = o.note;
   }
   /**
    * A send that did not go: the box gets its words and chips back, and the turn shown for it goes (it would show
    * twice), unless something new is in the box already; then the turn stays, so nothing is lost.
    */
-  giveBack(text, pasted, mine) {
+  giveBack(text2, pasted, mine) {
     if (this.draft.trim() || this.pasted.length > 0) return;
     this.local = this.local.filter((t) => t !== mine);
-    this.draft = text;
+    this.draft = text2;
     this.pasted = pasted;
     this.wantsFocus = true;
   }
@@ -10754,8 +12766,8 @@ var SpaceConversation = class {
     }
     this.deps.onChange();
   }
-  say(text) {
-    this.local.push({ turn_id: `local-${++this.seq}`, from: "myu", at: new Date((this.deps.now ?? Date.now)()).toISOString(), text });
+  say(text2) {
+    this.local.push({ turn_id: `local-${++this.seq}`, from: "myu", at: new Date((this.deps.now ?? Date.now)()).toISOString(), text: text2 });
   }
   async run(steps) {
     for (const step of steps) {
@@ -10791,9 +12803,9 @@ var SpaceConversation = class {
   /** The one ask as the pane draws it: its choices, or — pick-many — its toggles, send and singles; the typed choice; the ways out. */
   screenAsk(ask) {
     const askText = shown(ask.text);
-    const line = ask.line;
-    const parts = pickManyParts(line);
-    const many = isPickMany(line);
+    const line2 = ask.line;
+    const parts = pickManyParts(line2);
+    const many = isPickMany(line2);
     return {
       line_id: ask.line_id,
       text: askText,
@@ -10808,7 +12820,7 @@ var SpaceConversation = class {
       typed: parts.typed ? { id: parts.typed.id, label: parts.typed.label, on: this.typedMode === parts.typed.id } : null,
       kept: many ? this.typedKept : null,
       // A space's asks carry their own ways out; a meeting's were made with theirs (Skip, Nothing).
-      waysOut: this.isLineConversation ? quietWaysOut(line).map((b) => ({ id: b.id, label: b.label })) : []
+      waysOut: this.isLineConversation ? quietWaysOut(line2).map((b) => ({ id: b.id, label: b.label })) : []
     };
   }
   /** Everything the pane shows, as plain data. */
@@ -10819,9 +12831,14 @@ var SpaceConversation = class {
     const typing = !!this.typedMode;
     const box = { show: this.hasDoor || typing, placeholder: typing ? typedHint(null) : SPACE_MODE_WORDS.placeholder, hints: [], hintsLead: SPACE_MODE_WORDS.hintsLead, draft: this.draft };
     if (!conv) {
-      return { kind, title, loading: this.loading, failed: this.failed, earlier: null, turns: [], status: null, ask: null, after: this.local.map(screenTurn), note: this.note, empty: null, reading: this.reading, answering: this.answering, unlock: { show: false, busy: false, failed: false }, box };
+      const after2 = this.local.map(screenTurn);
+      this.withOffers([], after2);
+      return { kind, title, loading: this.loading, failed: this.failed, earlier: null, turns: [], status: null, ask: null, after: after2, note: this.note, empty: null, reading: this.reading, answering: this.answering, unlock: { show: false, busy: false, failed: false }, box };
     }
     const view = spaceModeView(conv, this.focusLineId);
+    const turns = view.turns.map(screenTurn);
+    const after = this.local.map(screenTurn);
+    this.withOffers(turns, after);
     const anyLocked = conv.history.some((t) => isLockedText(t.text)) || !!view.ask && isLockedText(view.ask.text);
     return {
       kind,
@@ -10829,10 +12846,10 @@ var SpaceConversation = class {
       loading: this.loading,
       failed: this.failed,
       earlier: this.earlier === "loading" ? "loading" : this.earlier === "none" ? this.showNothingEarlier ? "none" : null : view.earlier ? "link" : null,
-      turns: view.turns.map(screenTurn),
+      turns,
       status: view.status,
       ask: view.ask ? this.screenAsk(view.ask) : null,
-      after: this.local.map(screenTurn),
+      after,
       note: this.note,
       empty: !this.hasDoor && !view.ask && !this.loading && this.local.length === 0 ? LINE_CONVERSATION_WORDS.nothingOpen : null,
       reading: this.reading,
@@ -10842,6 +12859,46 @@ var SpaceConversation = class {
     };
   }
 };
+
+// src/spaceWaiting.ts
+var SPACE_WAITING = "space_waiting";
+var SPACE_CANNOT_OPEN = "space_cannot_open";
+var SPACE_WAITING_WORDS = {
+  waiting: "You're in. This opens for you as soon as someone in it is next here.",
+  /** A device whose key does not open a space it is a member of (2026-11-17, after the review: no button, the way on in words). */
+  cantOpen: "This device can't open this space. If it opens on another device of yours, use that one. Otherwise ask someone in it to take you out and invite you again.",
+  /** No key on this device (the server's `key_needed` sentence). */
+  keyNeeded: "Finish setting up askMyu on this device first, then try again."
+};
+var CODES = ["space_waiting", "space_cannot_open", "key_needed"];
+var DEFAULT_MESSAGE = {
+  space_waiting: SPACE_WAITING_WORDS.waiting,
+  space_cannot_open: SPACE_WAITING_WORDS.cantOpen,
+  key_needed: SPACE_WAITING_WORDS.keyNeeded
+};
+var objOf = (v) => v && typeof v === "object" && !Array.isArray(v) ? v : null;
+var text = (v) => typeof v === "string" && v.trim() ? v.trim() : null;
+function spaceKeyStateOf(body) {
+  const o = objOf(body);
+  if (!o) return null;
+  const ks = objOf(o.key_state);
+  let code = null;
+  let src = o;
+  if (ks && CODES.includes(ks.code)) {
+    code = ks.code;
+    src = ks;
+  } else {
+    const top = [o.error, o.code, o.state].find((v) => v === SPACE_WAITING || v === SPACE_CANNOT_OPEN);
+    if (top) code = top;
+  }
+  if (!code) return null;
+  return { code, message: text(src.message) ?? DEFAULT_MESSAGE[code] };
+}
+function waitingUnder(row, said = []) {
+  const s2 = spaceKeyStateOf(row);
+  if (!s2 || said.some((x) => (x ?? "").trim().toLowerCase() === s2.message.toLowerCase())) return null;
+  return s2.message;
+}
 
 // src/spaceRetro.ts
 var SPACE_RETRO_WORDS = {
@@ -10876,7 +12933,8 @@ function spaceKindWords(kind) {
     case "cofounder":
       return "Cofounders";
     case "dyad":
-      return "Two people";
+    case "pair":
+      return "Two or more people";
     case "remote_team":
       return "Remote team";
     case "family":
@@ -10895,13 +12953,13 @@ function foldSpaceRows(rows, needsYou, limit = SPACE_ROWS) {
   const keep = Math.max(limit, rows.filter(needsYou).length);
   return { shown: ordered.slice(0, keep), folded: ordered.slice(keep) };
 }
-function spaceIdOf(line) {
-  if (line.conversation?.subject_type === "space" && line.conversation.subject_id) return line.conversation.subject_id;
-  const s2 = (line.subjects ?? []).find((x) => x.type === "space" && x.id);
+function spaceIdOf(line2) {
+  if (line2.conversation?.subject_type === "space" && line2.conversation.subject_id) return line2.conversation.subject_id;
+  const s2 = (line2.subjects ?? []).find((x) => x.type === "space" && x.id);
   return s2?.id ?? null;
 }
-function isSpaceLine(line) {
-  return spaceIdOf(line) !== null;
+function isSpaceLine(line2) {
+  return spaceIdOf(line2) !== null;
 }
 function spaceRows(spaces, lines) {
   const bySpace = /* @__PURE__ */ new Map();
@@ -10912,8 +12970,8 @@ function spaceRows(spaces, lines) {
     const at = bySpace.get(id);
     if (at) at.push(l);
     else bySpace.set(id, [l]);
-    const label = (l.subjects ?? []).find((x) => x.type === "space" && x.id === id)?.label?.trim();
-    if (label && !labels.has(id)) labels.set(id, label);
+    const label2 = (l.subjects ?? []).find((x) => x.type === "space" && x.id === id)?.label?.trim();
+    if (label2 && !labels.has(id)) labels.set(id, label2);
   }
   const rows = [];
   const seen = /* @__PURE__ */ new Set();
@@ -10928,7 +12986,8 @@ function spaceRows(spaces, lines) {
       name: s2.name?.trim() || labels.get(s2.space_id) || "A space",
       small: debrief ? debriefSmall(s2.member_count) : [s2.kind_label?.trim() || spaceKindWords(s2.kind), members].filter(Boolean).join(" \xB7 "),
       lines: bySpace.get(s2.space_id) ?? [],
-      ...debrief ? { debrief: true } : {}
+      ...debrief ? { debrief: true } : {},
+      ...waitingUnder(s2) ? { waiting: waitingUnder(s2) } : {}
     });
   }
   if (spaces) return rows;
@@ -11008,8 +13067,8 @@ function retroView(read) {
   const resultsText = (read?.pinned?.results?.text ?? "").trim();
   const results = resultsText || resultItems.length ? { text: resultsText, items: resultItems } : null;
   let locked = false;
-  const open = (text) => {
-    const t = (text ?? "").trim();
+  const open = (text2) => {
+    const t = (text2 ?? "").trim();
     if (isLockedText(t)) {
       locked = true;
       return "";
@@ -11039,12 +13098,13 @@ var SpaceRetroPanel = class {
     this.open = false;
     this.loading = false;
     this.failed = false;
+    this.waiting = null;
     this.view = null;
     this.howOpen = null;
     this.seq = 0;
   }
   screen() {
-    return { open: this.open, loading: this.loading, failed: this.failed, view: this.view, howOpen: this.howOpen === true };
+    return { open: this.open, loading: this.loading, failed: this.failed, waiting: this.waiting, view: this.view, howOpen: this.howOpen === true };
   }
   /** Open it (and read), or close it. */
   async toggle() {
@@ -11082,7 +13142,11 @@ var SpaceRetroPanel = class {
     const res = await this.deps.backend.getRetro(this.spaceId).catch(() => null);
     if (mine !== this.seq) return;
     this.loading = false;
-    if (res?.ok && res.data) {
+    const keyState = spaceKeyStateOf(res?.data) ?? spaceKeyStateOf({ error: res?.error });
+    this.waiting = keyState?.message ?? null;
+    if (this.waiting) {
+      this.view = null;
+    } else if (res?.ok && res.data) {
       this.view = retroView(res.data);
       if (this.howOpen === null && this.view.how) {
         const seen = this.deps.howSeen?.seen() ?? false;
@@ -11331,9 +13395,186 @@ var SeenWatcher = class {
   }
 };
 
+// src/lineLinks.ts
+var LINE_LINK_WORDS = {
+  profile: "See the profile on LinkedIn",
+  page: "Open the page",
+  eachProfile: "See each profile on LinkedIn:",
+  eachPage: "Open each page:"
+};
+function safeLinkUrl(url) {
+  if (typeof url !== "string") return null;
+  const v = url.trim();
+  if (!/^https?:\/\/[^\s/?#]+/i.test(v) || /\s/.test(v)) return null;
+  return v;
+}
+function linkKind(url) {
+  const m = /^https?:\/\/([^/?#:]+)(?::\d+)?(\/[^?#]*)?/i.exec(url.trim());
+  if (!m) return "page";
+  const host = m[1].toLowerCase();
+  const onLinkedIn = host === "linkedin.com" || host.endsWith(".linkedin.com");
+  return onLinkedIn && /^\/in\/[^/]+/i.test(m[2] ?? "") ? "linkedin_profile" : "page";
+}
+function lineLinks(line2) {
+  const own = [];
+  const byChoice = [];
+  const given = line2?.links;
+  const raw = Array.isArray(given) ? given : [];
+  const choices = line2?.choices ?? [];
+  const seen = /* @__PURE__ */ new Set();
+  const forChoice = /* @__PURE__ */ new Map();
+  for (const l of raw) {
+    const url = safeLinkUrl(l?.url);
+    if (!url || seen.has(url)) continue;
+    seen.add(url);
+    const choiceId = typeof l?.choice_id === "string" ? l.choice_id.trim() : "";
+    if (choiceId && choices.some((c) => c.id === choiceId) && !forChoice.has(choiceId)) {
+      forChoice.set(choiceId, url);
+      continue;
+    }
+    const kind = linkKind(url);
+    own.push({ url, kind, label: kind === "linkedin_profile" ? LINE_LINK_WORDS.profile : LINE_LINK_WORDS.page });
+  }
+  for (const c of choices) {
+    const url = c.id ? forChoice.get(c.id) : void 0;
+    if (!url || !c.id) continue;
+    const kind = linkKind(url);
+    const label2 = (c.label ?? "").trim() || (kind === "linkedin_profile" ? LINE_LINK_WORDS.profile : LINE_LINK_WORDS.page);
+    byChoice.push({ url, kind, label: label2, choice_id: c.id });
+  }
+  return { own, byChoice };
+}
+function eachLinkWords(byChoice) {
+  return byChoice.length > 0 && byChoice.every((l) => l.kind === "linkedin_profile") ? LINE_LINK_WORDS.eachProfile : LINE_LINK_WORDS.eachPage;
+}
+
 // src/views/lineAsk.ts
+var choosingDay = /* @__PURE__ */ new Set();
+var typedDay = /* @__PURE__ */ new Map();
+var choosingWho = /* @__PURE__ */ new Set();
+var typedWho = /* @__PURE__ */ new Map();
+var foundWho = /* @__PURE__ */ new Map();
+function renderWho(host, line2, opener2, busy, press, find, closed, focus = false) {
+  host.empty();
+  const id = line2.line_id;
+  if (!choosingWho.has(id)) return;
+  const answerWith = (who) => ({ ...opener2, answer: someoneElseAnswer(who) });
+  host.createDiv({ cls: "myu-line myu-who-ask", text: IDENTITY_WORDS.pickPrompt });
+  const field = host.createEl("input", { cls: "myu-who-name", attr: { type: "text", placeholder: IDENTITY_WORDS.pickPlaceholder, "aria-label": IDENTITY_WORDS.pickPrompt } });
+  field.value = typedWho.get(id) ?? "";
+  field.disabled = busy;
+  const found = host.createDiv({ cls: "myu-who-found" });
+  const acts = host.createDiv({ cls: "myu-mrow-acts myu-line-choices myu-who-acts" });
+  let shown2 = [];
+  let asked = 0;
+  const back = () => {
+    choosingWho.delete(id);
+    typedWho.delete(id);
+    foundWho.delete(id);
+    host.empty();
+    closed();
+  };
+  const drawFound = (people) => {
+    shown2 = people;
+    found.empty();
+    for (const p of people) {
+      const b = found.createEl("button", { cls: "myu-aff myu-who-person", text: p.name, attr: { "data-person": p.id } });
+      if (p.sub) b.createSpan({ cls: "myu-quiet myu-who-sub", text: ` \xB7 ${p.sub}` });
+      b.disabled = busy;
+      b.onclick = () => press(answerWith({ relationship_id: p.id }));
+    }
+  };
+  const drawActs = () => {
+    acts.empty();
+    const name = field.value.trim();
+    if (name) {
+      const use = acts.createEl("button", { cls: "myu-aff myu-who-use", text: IDENTITY_WORDS.nameTyped(name) });
+      use.disabled = busy;
+      use.onclick = () => press(answerWith({ text: name }));
+    }
+    const b = acts.createEl("button", { cls: "myu-aff myu-line-quiet myu-who-back", text: IDENTITY_WORDS.back });
+    b.disabled = busy;
+    b.onclick = back;
+  };
+  const look = () => {
+    const name = field.value.trim();
+    const mine = ++asked;
+    if (!find || !name) {
+      drawFound([]);
+      return;
+    }
+    const kept = foundWho.get(id);
+    if (kept?.q === name) {
+      drawFound(kept.people);
+      return;
+    }
+    find(name).then((people) => {
+      if (mine !== asked || !choosingWho.has(id)) return;
+      foundWho.set(id, { q: name, people });
+      drawFound(people);
+    }).catch(() => {
+      if (mine === asked) drawFound([]);
+    });
+  };
+  field.addEventListener("input", () => {
+    typedWho.set(id, field.value);
+    drawActs();
+    look();
+  });
+  field.addEventListener("keydown", (ev) => {
+    if (ev.key === "Escape") back();
+    else if (ev.key === "Enter" && field.value.trim() && !shown2.length && !busy) {
+      ev.preventDefault?.();
+      press(answerWith({ text: field.value.trim() }));
+    }
+  });
+  drawActs();
+  look();
+  if (focus && !busy) field.focus?.();
+}
+function renderWhichDay(host, line2, move, busy, press) {
+  host.empty();
+  if (!choosingDay.has(line2.line_id)) return;
+  const answerWith = (day) => ({ ...move, answer: moveAnswer(move.id, day) });
+  host.createDiv({ cls: "myu-line myu-lm-which", text: LAST_MOMENTS_WORDS.fullDay.whichDay });
+  const days = freeDaysOf(line2);
+  if (days.length) {
+    const row = host.createDiv({ cls: "myu-mrow-acts myu-line-choices myu-lm-free" });
+    for (const d of days) {
+      const b = row.createEl("button", { cls: "myu-aff", text: d.label, attr: { "data-day": d.day } });
+      b.disabled = busy;
+      b.onclick = () => press(answerWith(d.day));
+    }
+  }
+  const other = host.createDiv({ cls: "myu-mrow-acts myu-line-choices myu-lm-another" });
+  other.createSpan({ cls: "myu-quiet", text: LAST_MOMENTS_VAULT_WORDS.anotherDay });
+  const field = other.createEl("input", { cls: "myu-lm-date", attr: { type: "date", min: todayIso(), "aria-label": LAST_MOMENTS_VAULT_WORDS.anotherDay } });
+  field.value = typedDay.get(line2.line_id) ?? "";
+  field.disabled = busy;
+  const go = other.createEl("button", { cls: "myu-aff myu-lm-move", text: move.label });
+  const typed = () => {
+    typedDay.set(line2.line_id, field.value);
+    go.disabled = busy || !isDay(field.value);
+  };
+  field.addEventListener("input", typed);
+  field.addEventListener("change", typed);
+  typed();
+  go.onclick = () => {
+    if (isDay(field.value)) press(answerWith(field.value.trim()));
+  };
+}
+function renderLinks(host, links, lead) {
+  if (!links.length) return;
+  const row = host.createDiv({ cls: "myu-quiet myu-line-note" });
+  if (lead) row.createSpan({ text: `${lead} ` });
+  links.forEach((l, i) => {
+    if (i > 0) row.createSpan({ text: " \xB7 " });
+    row.createEl("a", { cls: "myu-line-link", text: `${l.label} \u2197`, href: l.url, attr: { target: "_blank", rel: "noopener" } });
+  });
+}
 function renderLineDraft(host, draft) {
   const wrap = host.createDiv({ cls: "myu-line-draft" });
+  if (draft.lead) wrap.createDiv({ cls: "myu-quiet myu-line-note myu-line-draft-lead", text: draft.lead });
   const box = wrap.createEl("textarea", { cls: "myu-line-draft-box" });
   box.value = draft.text;
   box.setAttr("rows", String(Math.min(9, Math.max(3, Math.ceil(draft.text.length / 45)))));
@@ -11366,27 +13607,79 @@ function renderAfter(host, ui) {
   }
   if (ui.draft) renderLineDraft(host, ui.draft);
 }
-function renderLineAsk(host, line, ui, on, opts = {}) {
+function renderLineAsk(host, line2, ui, on, opts = {}) {
   if (ui.said !== void 0 && ui.said !== null) {
-    if (ui.said) host.createDiv({ cls: ui.good ? "myu-done myu-line-said" : "myu-quiet myu-line-said", text: ui.said });
+    choosingDay.delete(line2.line_id);
+    typedDay.delete(line2.line_id);
+    choosingWho.delete(line2.line_id);
+    typedWho.delete(line2.line_id);
+    foundWho.delete(line2.line_id);
+    if (ui.said) host.createDiv({ cls: ui.good ? "myu-done myu-line-said myu-line-words" : "myu-quiet myu-line-said myu-line-words", text: ui.said });
     renderAfter(host, ui);
     return;
   }
   if (opts.showText !== false) {
-    const cls = line.ask_kind === "tell" ? "myu-done" : line.ask_kind === "wait" ? "myu-quiet" : "myu-line";
-    const el = host.createDiv({ cls, text: (line.text ?? "").trim(), attr: lineIdAttr(line.line_id) });
-    if (showEstimate(line)) el.createSpan({ cls: "myu-est", text: (line.est ?? "").trim() });
+    const cls = line2.ask_kind === "tell" ? "myu-done" : line2.ask_kind === "wait" ? "myu-quiet" : "myu-line";
+    const el = host.createDiv({ cls: `${cls} myu-line-words`, text: lineWords(line2), attr: lineIdAttr(line2.line_id) });
+    if (showEstimate(line2)) el.createSpan({ cls: "myu-est", text: (line2.est ?? "").trim() });
+    for (const sentence2 of lineSentences(line2)) host.createDiv({ cls: "myu-line-sentence", text: sentence2 });
+  }
+  if (ui.closed) {
+    choosingWho.delete(line2.line_id);
+    typedWho.delete(line2.line_id);
+    foundWho.delete(line2.line_id);
+    host.createDiv({ cls: "myu-quiet myu-line-note myu-line-closed", text: ui.closed });
+    return;
   }
   if (ui.note) host.createDiv({ cls: "myu-quiet myu-line-note", text: ui.note });
-  const buttons = lineButtons(line);
+  if (line2.kind === "new_device") host.createDiv({ cls: "myu-quiet myu-line-note", text: LINE_ANSWER_WORDS.newDevice });
+  const links = lineLinks(line2);
+  renderLinks(host, links.own, null);
+  const buttons = lineButtons(line2);
   if (buttons.length > 0) {
     const acts = host.createDiv({ cls: "myu-mrow-acts myu-line-choices" });
+    let days = null;
+    let who = null;
+    let whoOpener = null;
+    const whoShut = () => whoOpener?.setAttr("aria-expanded", "false");
     for (const b of buttons) {
       const el = acts.createEl("button", { cls: b.quiet ? "myu-aff myu-line-quiet" : "myu-aff", text: b.label });
       el.disabled = !!ui.busy;
-      el.onclick = () => on.press(b);
+      if (b.opens === "who") {
+        whoOpener = el;
+        el.setAttr("aria-expanded", String(choosingWho.has(line2.line_id)));
+        el.onclick = () => {
+          if (choosingWho.has(line2.line_id)) choosingWho.delete(line2.line_id);
+          else choosingWho.add(line2.line_id);
+          el.setAttr("aria-expanded", String(choosingWho.has(line2.line_id)));
+          if (who) renderWho(who, line2, b, !!ui.busy, on.press, on.people, whoShut, true);
+        };
+        continue;
+      }
+      if (b.opens !== "day") {
+        el.onclick = () => on.press(b);
+        continue;
+      }
+      el.setAttr("aria-expanded", String(choosingDay.has(line2.line_id)));
+      el.onclick = () => {
+        if (choosingDay.has(line2.line_id)) choosingDay.delete(line2.line_id);
+        else choosingDay.add(line2.line_id);
+        el.setAttr("aria-expanded", String(choosingDay.has(line2.line_id)));
+        if (days) renderWhichDay(days, line2, b, !!ui.busy, on.press);
+      };
+    }
+    const move = buttons.find((b) => b.opens === "day");
+    if (move) {
+      days = host.createDiv({ cls: "myu-lm-days" });
+      renderWhichDay(days, line2, move, !!ui.busy, on.press);
+    }
+    const someoneElse = buttons.find((b) => b.opens === "who");
+    if (someoneElse) {
+      who = host.createDiv({ cls: "myu-who" });
+      renderWho(who, line2, someoneElse, !!ui.busy, on.press, on.people, whoShut);
     }
   }
+  renderLinks(host, links.byChoice, eachLinkWords(links.byChoice));
   renderAfter(host, ui);
 }
 
@@ -11444,6 +13737,322 @@ function commitmentsFold(items, opts = {}) {
     empty: mine.length + theirs.length === 0
   };
 }
+
+// src/views/prepListRows.ts
+function renderPrepItems(host, items, state, ui, on, noteOf) {
+  const list7 = host.createEl("ul", { cls: "myu-prep-list" });
+  const after = state === "after";
+  let dragFrom = null;
+  items.forEach((item, index) => {
+    const held = ui.busy.has(item.item_id);
+    const row = list7.createEl("li", { cls: "myu-prep-li", attr: { "data-item-id": item.item_id, "data-done": String(item.done) } });
+    if (on.move && !after && !held) {
+      row.setAttr("draggable", "true");
+      row.ondragstart = (event) => {
+        dragFrom = index;
+        event.dataTransfer?.setData("text/plain", item.item_id);
+      };
+      row.ondragover = (event) => {
+        if (dragFrom !== null) event.preventDefault();
+      };
+      row.ondrop = (event) => {
+        event.preventDefault();
+        const from = dragFrom;
+        dragFrom = null;
+        if (from !== null && from !== index) on.move?.(from, index);
+      };
+      row.ondragend = () => {
+        dragFrom = null;
+      };
+    }
+    const box = row.createEl("input", { cls: "myu-prep-check", attr: { type: "checkbox", "aria-label": item.text } });
+    box.checked = item.done;
+    box.disabled = held;
+    box.onchange = () => on.tick(item, box.checked);
+    if (ui.editing === item.item_id && !after) {
+      const edit = row.createEl("input", { cls: "myu-prep-li-edit", attr: { type: "text", "aria-label": item.text } });
+      edit.value = ui.editDraft;
+      edit.oninput = () => ui.onEditDraft(edit.value);
+      edit.onkeydown = (event) => {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          on.cancelEdit();
+          return;
+        }
+        if (event.key !== "Enter" || event.isComposing) return;
+        event.preventDefault();
+        const text2 = edit.value.trim();
+        if (!text2 || text2 === item.text.trim()) on.cancelEdit();
+        else on.saveEdit(item, text2);
+      };
+      queueMicrotask(() => {
+        edit.focus();
+        edit.setSelectionRange(edit.value.length, edit.value.length);
+      });
+    } else {
+      const words = row.createEl("button", { cls: "myu-prep-li-text", text: item.text });
+      words.disabled = held || after;
+      words.onclick = () => on.startEdit(item);
+      if (on.move && !after) {
+        words.onkeydown = (event) => {
+          if (!event.altKey || event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+          const to = index + (event.key === "ArrowUp" ? -1 : 1);
+          if (to < 0 || to >= items.length) return;
+          event.preventDefault();
+          on.move?.(index, to);
+        };
+      }
+    }
+    const note = noteOf ? noteOf(item) : prepItemNote(item, state);
+    if (note?.text) row.createSpan({ cls: `myu-quiet myu-prep-li-note${note.good ? " myu-prep-li-came" : ""}`, text: note.text });
+    if (note) {
+      if (note.drop && on.drop) {
+        row.createSpan({ cls: "myu-quiet", text: " \xB7 " });
+        const drop = row.createEl("button", { cls: "myu-aff myu-prep-drop", text: PREP_LIST_WORDS.drop });
+        drop.disabled = held;
+        drop.onclick = () => on.drop?.(item);
+      }
+    }
+    if (after) return;
+    const remove = row.createEl("button", { cls: "myu-aff myu-prep-li-x", text: "\xD7", attr: { "aria-label": PREP_LIST_WORDS.remove } });
+    remove.disabled = held;
+    remove.onclick = () => on.remove(item);
+  });
+  return list7;
+}
+function renderPrepAddBox(host, opts) {
+  const row = host.createDiv({ cls: "myu-prep-add" });
+  const box = row.createEl("textarea", {
+    cls: "myu-prep-add-box",
+    attr: { rows: String(lineCount(opts.draft)), placeholder: PREP_LIST_WORDS.addPlaceholder, "aria-label": PREP_LIST_WORDS.addPlaceholder }
+  });
+  box.value = opts.draft;
+  const add2 = row.createEl("button", { cls: "myu-affordance myu-prep-add-go", text: PREP_LIST_WORDS.add });
+  add2.disabled = opts.busy;
+  add2.onclick = () => opts.onAdd(box.value);
+  box.oninput = () => {
+    opts.onDraft(box.value);
+    box.setAttr("rows", String(lineCount(box.value)));
+  };
+  box.onkeydown = (event) => {
+    if (event.key !== "Enter" || event.shiftKey || event.isComposing) return;
+    event.preventDefault();
+    opts.onAdd(box.value);
+  };
+  box.onfocus = () => opts.onFocus?.(true);
+  box.onblur = () => queueMicrotask(() => {
+    if (box.isConnected) opts.onFocus?.(false);
+  });
+  if (opts.focus) {
+    queueMicrotask(() => {
+      box.focus();
+      box.setSelectionRange(box.value.length, box.value.length);
+    });
+  }
+  return box;
+}
+function lineCount(text2) {
+  return Math.min(6, Math.max(1, text2.split("\n").length));
+}
+function addLines(text2) {
+  return text2.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+}
+
+// src/prepListKeeper.ts
+var failedWords2 = (error) => error === "offline" ? LINE_ANSWER_WORDS.offline : PREP_VIEW_WORDS.listFailed;
+var sameWords = (a, b) => a.trim().toLowerCase() === b.trim().toLowerCase();
+var PrepListKeeper = class {
+  constructor(deps) {
+    this.deps = deps;
+    /** The item whose words are in a box, and what the box holds. */
+    this.editing = null;
+    this.editDraft = "";
+    /** The add box's words, kept across redraws, and whether an add is on its way. */
+    this.draft = "";
+    this.adding = false;
+    /** The add box had the focus: it gets it back after a redraw. */
+    this.addFocused = false;
+    /** Under the list, until the next change: what did not go. */
+    this.note = null;
+    /** The quiet line under the add box after an add on Today ("On the list for Thursday."). */
+    this.said = null;
+    /** Items with a change on their way. */
+    this.busy = /* @__PURE__ */ new Set();
+    /** Myu's offers added from here, by their words: each chip reads as added. */
+    this.offered = /* @__PURE__ */ new Set();
+    this.seq = 0;
+  }
+  /** Was this offer added from here (its words, any case)? */
+  hasOffered(text2) {
+    return [...this.offered].some((t) => sameWords(t, text2));
+  }
+  /** The list's drawing state (`renderPrepItems`). */
+  ui() {
+    return {
+      editing: this.editing,
+      editDraft: this.editDraft,
+      onEditDraft: (text2) => {
+        this.editDraft = text2;
+      },
+      busy: this.busy
+    };
+  }
+  /** What the list's controls do. `move` only where the list is whole. */
+  handlers(opts) {
+    return {
+      tick: (item, done) => void this.tick(item, done),
+      startEdit: (item) => this.startEdit(item),
+      cancelEdit: () => this.cancelEdit(),
+      saveEdit: (item, text2) => void this.saveEdit(item, text2),
+      remove: (item) => void this.remove(item),
+      drop: (item) => void this.drop(item),
+      ...opts.move ? { move: (from, to) => void this.move(from, to) } : {}
+    };
+  }
+  /**
+   * Onto the list: each line an item, shown at once and held until the server has it. The person's words leave the box
+   * as they go (and come back if they did not); one of Myu's offers is marked added. True when it went.
+   */
+  async add(text2, source = "user") {
+    const meeting = this.deps.meeting();
+    const lines = addLines(text2);
+    if (!meeting || lines.length === 0 || source === "user" && this.adding) return false;
+    let position = this.deps.items().reduce((max, i) => Math.max(max, i.position ?? 0), -1);
+    const pending = lines.map((t) => ({
+      item_id: `pending-${++this.seq}`,
+      text: t,
+      done: false,
+      source,
+      carried_from: null,
+      position: ++position,
+      event_id: meeting.event_id,
+      occurrence_key: meeting.occurrence_key ?? null
+    }));
+    const pendingIds = new Set(pending.map((p) => p.item_id));
+    if (source === "user") {
+      this.draft = "";
+      this.adding = true;
+    } else {
+      this.offered.add(text2.trim());
+    }
+    this.note = null;
+    this.said = null;
+    for (const id of pendingIds) this.busy.add(id);
+    this.deps.setItems([...this.deps.items(), ...pending], pending.length);
+    this.deps.onChange();
+    const res = await this.deps.backend().addPrepItems(meeting, lines.join("\n"), source).catch(() => null);
+    for (const id of pendingIds) this.busy.delete(id);
+    if (source === "user") this.adding = false;
+    const rest = this.deps.items().filter((i) => !pendingIds.has(i.item_id));
+    if (!res?.ok) {
+      this.deps.setItems(rest, -pending.length);
+      if (source === "user" && !this.draft.trim()) this.draft = text2;
+      if (source === "myu_offer") this.offered.delete(text2.trim());
+      this.note = failedWords2(res?.error);
+      this.deps.onChange();
+      return false;
+    }
+    const made = Array.isArray(res.data?.items) ? res.data.items : [];
+    this.deps.setItems([...rest, ...made], made.length - pending.length);
+    this.deps.onChange();
+    this.deps.onSaved?.();
+    return true;
+  }
+  async tick(item, done) {
+    await this.change(item, { done }, { done: item.done });
+  }
+  startEdit(item) {
+    if (this.busy.has(item.item_id)) return;
+    this.editing = item.item_id;
+    this.editDraft = item.text;
+    this.note = null;
+    this.deps.onChange();
+  }
+  cancelEdit() {
+    this.editing = null;
+    this.deps.onChange();
+  }
+  async saveEdit(item, text2) {
+    this.editing = null;
+    await this.change(item, { text: text2 }, { text: item.text });
+  }
+  /** × : off the list at once; back in its place if the server did not take it off. */
+  async remove(item) {
+    const id = item.item_id;
+    if (this.busy.has(id)) return;
+    const before = this.deps.items();
+    const at = before.findIndex((i) => i.item_id === id);
+    if (at < 0) return;
+    this.note = null;
+    if (this.editing === id) this.editing = null;
+    this.deps.setItems(before.filter((i) => i.item_id !== id), -1);
+    this.deps.onChange();
+    const res = await this.deps.backend().removePrepItem(id).catch(() => null);
+    if (!res?.ok) {
+      const now = this.deps.items();
+      this.deps.setItems([...now.slice(0, at), before[at], ...now.slice(at)], 1);
+      this.note = failedWords2(res?.error);
+      this.deps.onChange();
+      return;
+    }
+    this.deps.onSaved?.();
+  }
+  /** Drop: after the meeting, the copy carried to the next one comes off its list; this item says nothing more. */
+  async drop(item) {
+    const copy = item.carried_to?.item_id;
+    if (!copy || this.busy.has(item.item_id)) return;
+    this.busy.add(item.item_id);
+    this.note = null;
+    this.deps.onChange();
+    const res = await this.deps.backend().removePrepItem(copy).catch(() => null);
+    this.busy.delete(item.item_id);
+    if (res?.ok) this.patch(item.item_id, { carried_to: null });
+    else this.note = failedWords2(res?.error);
+    this.deps.onChange();
+    if (res?.ok) this.deps.onSaved?.();
+  }
+  /** The item at `from` to `to`: the new order at once, then each item whose place changed is told its new one. */
+  async move(from, to) {
+    const before = this.deps.items();
+    const moved = moveItem(before, from, to);
+    if (moved.every((m, n) => m.item_id === before[n]?.item_id)) return;
+    const was = new Map(before.map((i) => [i.item_id, i.position]));
+    this.note = null;
+    this.deps.setItems(moved, 0);
+    this.deps.onChange();
+    const changed = moved.filter((m) => was.get(m.item_id) !== m.position);
+    const results = await Promise.all(changed.map((m) => this.deps.backend().updatePrepItem(m.item_id, { position: m.position }).catch(() => null)));
+    const failed = results.find((r) => !r?.ok);
+    if (failed !== void 0) {
+      this.note = failedWords2(failed?.error);
+      this.deps.onChange();
+    }
+    this.deps.onSaved?.();
+  }
+  /** A tick or new words: shown at once, held until the server answers, put back if it did not take them. */
+  async change(item, change, undo) {
+    const id = item.item_id;
+    if (this.busy.has(id)) return;
+    this.note = null;
+    this.patch(id, change);
+    this.busy.add(id);
+    this.deps.onChange();
+    const res = await this.deps.backend().updatePrepItem(id, change).catch(() => null);
+    this.busy.delete(id);
+    if (!res?.ok) {
+      this.patch(id, undo);
+      this.note = failedWords2(res?.error);
+      this.deps.onChange();
+      return;
+    }
+    if (res.data?.item) this.patch(id, { text: res.data.item.text, done: res.data.item.done });
+    this.deps.onChange();
+    this.deps.onSaved?.();
+  }
+  patch(id, change) {
+    this.deps.setItems(this.deps.items().map((i) => i.item_id === id ? { ...i, ...change } : i), 0);
+  }
+};
 
 // src/views/TodayView.ts
 function remainingLabel(expiresAt) {
@@ -11513,6 +14122,16 @@ var TodayView = class extends import_obsidian16.ItemView {
     this.openStacks = /* @__PURE__ */ new Set();
     this.forYouOpen = false;
     this.spacesOpen = false;
+    /**
+     * The person's list on Today (2026-10-29): the meetings with it (today's, and the ones later this week with an open
+     * list question or items) and the carried items waiting for a next meeting, from the lines read; each meeting's list
+     * kept by its own keeper (what is typed in its box, a change on its way), which a refresh does not reset.
+     */
+    this.prepMeetings = [];
+    this.waiting = [];
+    this.listKeepers = /* @__PURE__ */ new Map();
+    /** Yesterday's meetings with a record or a page the person acted on (2026-10-30), and the server's one line for each. */
+    this.yesterday = [];
     /** "Open with you today" — the open commitments, as Tasks checkboxes. */
     this.commitments = [];
     /** "what you owe ▸" (terminal parity, 2026-09-26): the commitments between people, `GET /commitments`. */
@@ -11520,6 +14139,12 @@ var TodayView = class extends import_obsidian16.ItemView {
     this.owedOpen = false;
     this.mirror = null;
     this.weekly = null;
+    /**
+     * Your side of the work (2026-11-13): the weekly review's part beside its sections (`your_side` on `GET /review/weekly`), and which
+     * of its counts are open to what they counted. Null when the server sends none: the week reads as before.
+     */
+    this.yourWeek = null;
+    this.yourWeekOpen = /* @__PURE__ */ new Set();
     /**
      * Per-observation feedback state, held on the VIEW rather than in render
      * scope: the 5-minute ambient refresh re-renders everything, and a dismissed
@@ -11535,6 +14160,8 @@ var TodayView = class extends import_obsidian16.ItemView {
     this.staleSince = null;
     this.retryTimer = null;
     this.errorState = null;
+    /** "Who is it?" under Myu's question about who someone is (2026-11-15): the person's people, found as they type. */
+    this.findPeople = peopleFinder(() => this.plugin.backend);
     // ── render ────────────────────────────────────────────────────────────────
     /** The gate's checkbox, kept across re-renders so a tick survives a refresh. */
     this.termsAgreed = false;
@@ -11543,6 +14170,9 @@ var TodayView = class extends import_obsidian16.ItemView {
      * constructor, as the tests do, has none).
      */
     this.dots = [];
+    /** A read of the lines alone is under way, and whether another change came in meanwhile. */
+    this.linesAgain = null;
+    this.linesAgainOwed = false;
     /** "the week" — the server weekly edition, verbatim, only while fresh. */
     /** Sync, always within reach (operator, 2026-08-29): the button lives at the top of Today, whatever else the day holds. */
     this.giveLine = null;
@@ -11653,8 +14283,9 @@ var TodayView = class extends import_obsidian16.ItemView {
     const nextBrief = briefRes.data?.brief ?? null;
     if (nextBrief?.date !== this.brief?.date) this.briefExpanded = false;
     this.brief = nextBrief;
-    const weeklyEdition = weeklyRes?.data?.edition ?? null;
-    this.weekly = weeklyEdition && isWeeklyEditionFresh(weeklyEdition) ? weeklyEdition : null;
+    const week = weekShown(weeklyRes?.data, (period) => isWeeklyPeriodFresh(period));
+    this.weekly = week?.edition ?? null;
+    this.yourWeek = week?.side ?? null;
     const edition = mirrorRes?.data?.edition ?? null;
     this.mirror = edition && Array.isArray(edition.observations) && edition.observations.length > 0 ? edition : null;
     const today = localDate(/* @__PURE__ */ new Date());
@@ -11682,11 +14313,7 @@ var TodayView = class extends import_obsidian16.ItemView {
     ]);
     if (owedRes?.ok) this.owed = owedRes.data?.items ?? [];
     if (spacesRes?.ok) this.spaces = spacesRes.data?.spaces ?? [];
-    if (linesRes?.ok) {
-      this.todayLines = (linesRes.data?.lines ?? []).filter(
-        (l) => !l.state || l.state === "queued" || l.state === "released" || this.lineState().answered.has(l.line_id)
-      );
-    }
+    if (linesRes?.ok) this.takeLines(linesRes.data);
     const debriefs = new Set((this.spaces ?? []).filter(isDebriefSpace).map((sp) => sp.space_id));
     const doors = /* @__PURE__ */ new Map();
     await Promise.all(
@@ -11778,10 +14405,10 @@ var TodayView = class extends import_obsidian16.ItemView {
       text: "Before you use the beta, please agree to the beta participation terms and the privacy policy. Read them, then tick the box."
     });
     this.renderTermsLinks(zone);
-    const label = zone.createEl("label", { cls: "myu-terms-label" });
-    const box = label.createEl("input", { cls: "myu-terms-box", attr: { type: "checkbox", "aria-label": "I agree to the beta participation terms and the privacy policy" } });
+    const label2 = zone.createEl("label", { cls: "myu-terms-label" });
+    const box = label2.createEl("input", { cls: "myu-terms-box", attr: { type: "checkbox", "aria-label": "I agree to the beta participation terms and the privacy policy" } });
     box.checked = this.termsAgreed;
-    label.createSpan({ cls: "myu-terms-sentence", text: "I agree to the beta participation terms and the privacy policy." });
+    label2.createSpan({ cls: "myu-terms-sentence", text: "I agree to the beta participation terms and the privacy policy." });
     const actions = zone.createDiv({ cls: "myu-mirror-actions" });
     const go = actions.createEl("button", { cls: "myu-affordance myu-cta", text: "Continue" });
     go.disabled = !this.termsAgreed;
@@ -11822,8 +14449,8 @@ var TodayView = class extends import_obsidian16.ItemView {
   }
   renderTermsLinks(zone) {
     const links = zone.createDiv({ cls: "myu-terms-links" });
-    for (const link of this.plugin.termsLinkTargets()) {
-      links.createEl("a", { cls: "myu-affordance", text: `Read the ${link.label} \u2197`, href: link.url, attr: { target: "_blank", rel: "noopener" } });
+    for (const link2 of this.plugin.termsLinkTargets()) {
+      links.createEl("a", { cls: "myu-affordance", text: `Read the ${link2.label} \u2197`, href: link2.url, attr: { target: "_blank", rel: "noopener" } });
     }
   }
   /**
@@ -11914,13 +14541,8 @@ var TodayView = class extends import_obsidian16.ItemView {
       const actions = row.createDiv({ cls: "myu-canvas-actions" });
       const eventId = item.actions?.find((a) => a.action_type === "prep")?.target_id || item.meta?.event_id;
       if (eventId) {
-        const prep = actions.createEl("button", { cls: "myu-affordance myu-cta", text: "Prepare" });
-        prep.onclick = () => void this.plugin.openPrep(eventId);
-      }
-      if (item.actions?.some((a) => a.action_type === "capture_after")) {
-        const name = item.entity_references?.[0]?.display_name ?? "them";
-        const cap = actions.createEl("button", { cls: "myu-affordance", text: "Add notes" });
-        cap.onclick = () => void this.plugin.openChat({ text: `After the meeting with ${name}: `, send: false });
+        const open = actions.createEl("button", { cls: "myu-affordance myu-cta", text: PREP_LIST_WORDS.open });
+        open.onclick = () => void this.plugin.openPrep(eventId, { label: item.text ?? "" });
       }
     }
   }
@@ -12067,8 +14689,8 @@ var TodayView = class extends import_obsidian16.ItemView {
       return;
     }
     const approval = unlock.approval;
-    const phraseDoor = (host, label) => {
-      const b = host.createEl("button", { cls: "myu-affordance", text: label });
+    const phraseDoor = (host, label2) => {
+      const b = host.createEl("button", { cls: "myu-affordance", text: label2 });
       b.onclick = () => new ApprovalModal(this.app, unlock, again, "phrase").open();
     };
     if (approval?.status === "pending") {
@@ -12119,10 +14741,10 @@ var TodayView = class extends import_obsidian16.ItemView {
    * which reads as broken (§First-run, regime 3 applied to day one).
    */
   renderMaterializeProgress(root) {
-    const line = this.plugin.materializeProgress;
-    if (!line) return;
+    const line2 = this.plugin.materializeProgress;
+    if (!line2) return;
     const row = root.createDiv({ cls: "myu-cue-row myu-materialize-progress" });
-    row.createSpan({ cls: "myu-quiet", text: line });
+    row.createSpan({ cls: "myu-quiet", text: line2 });
   }
   /**
    * The progress line moved: repaint THAT ROW, nothing else, no fetch. A row
@@ -12131,26 +14753,26 @@ var TodayView = class extends import_obsidian16.ItemView {
    * refresh — six backend calls — 2026-09-03.)
    */
   paintProgress() {
-    const line = this.plugin.materializeProgress;
+    const line2 = this.plugin.materializeProgress;
     const row = this.contentEl.querySelector(".myu-materialize-progress");
-    if (line && row) {
+    if (line2 && row) {
       const span = row.querySelector("span");
-      if (span) span.textContent = line;
+      if (span) span.textContent = line2;
       return;
     }
-    if (!line && row) {
+    if (!line2 && row) {
       row.remove();
       return;
     }
-    if (line && !row && !this.loading && !this.errorState) this.render();
+    if (line2 && !row && !this.loading && !this.errorState) this.render();
   }
   /**
    * The menu's marks on a phone (2026-10-06), where Obsidian has no status bar: what is new in Myu's places
    * ("3 new in Today · 2 in Spaces"), lit, at the top of the pane. Nothing on a computer, nothing when nothing is new.
    */
   renderMenuMarks(root) {
-    const line = this.plugin.menuMarksLine();
-    if (line) root.createDiv({ cls: "myu-menu-new", text: line });
+    const line2 = this.plugin.menuMarksLine();
+    if (line2) root.createDiv({ cls: "myu-menu-new", text: line2 });
   }
   /**
    * The marks moved: repaint THAT LINE, nothing else, no fetch. A line that is not there yet goes in at the top; a
@@ -12158,14 +14780,14 @@ var TodayView = class extends import_obsidian16.ItemView {
    */
   paintMenuMarks() {
     if (this.loading || this.errorState || this.plugin.termsStanding() === "gated") return;
-    const line = this.plugin.menuMarksLine();
+    const line2 = this.plugin.menuMarksLine();
     const row = this.contentEl.querySelector(".myu-menu-new");
-    if (!line) {
+    if (!line2) {
       row?.remove();
       return;
     }
-    if (row) row.textContent = line;
-    else this.contentEl.createDiv({ cls: "myu-menu-new", text: line, prepend: true });
+    if (row) row.textContent = line2;
+    else this.contentEl.createDiv({ cls: "myu-menu-new", text: line2, prepend: true });
   }
   dotPainters() {
     this.dots ?? (this.dots = []);
@@ -12229,10 +14851,10 @@ var TodayView = class extends import_obsidian16.ItemView {
   }
   // ── the rows: a meeting, a person, a company, a space — and Myu's line under it ──
   /** The lines under one meeting's row: the occurrence first, the event otherwise. */
-  linesForMeeting(m) {
+  linesForMeeting(eventId, occurrenceKey) {
     const all = this.todayLines ?? [];
     const isMeeting = (l, withKey) => (l.subjects ?? []).some(
-      (s2) => s2.type === "meeting" && s2.id === m.event_id && (!withKey || !s2.occurrence_key || s2.occurrence_key === String(m.startDate.getTime()))
+      (s2) => s2.type === "meeting" && s2.id === eventId && (!withKey || !s2.occurrence_key || !occurrenceKey || s2.occurrence_key === occurrenceKey)
     );
     const exact = all.filter((l) => isMeeting(l, true));
     return exact.length ? exact : all.filter((l) => isMeeting(l, false));
@@ -12244,7 +14866,10 @@ var TodayView = class extends import_obsidian16.ItemView {
    * One row as the mock draws it: the mark (a dot: lit when something new
    * came in for the row, grey when a question there waits), the time, the
    * title with who, Myu's line under it in the theme's accent (a tell in its
-   * success colour, a waiting line quiet), and the doors on the right.
+   * success colour, a waiting line quiet), and the doors under them. A
+   * meeting's row (2026-10-29) carries "· 2 to cover" and Open ▸ on its title
+   * line, and its list under the line (`under`); the list's own question is
+   * drawn there, not in the line stack (`hide`).
    */
   row(host, r) {
     const row = host.createDiv({ cls: `myu-mrow${r.past ? " myu-mrow-past" : ""}` });
@@ -12255,17 +14880,24 @@ var TodayView = class extends import_obsidian16.ItemView {
     const body = row.createDiv({ cls: "myu-mrow-body" });
     const ttl = body.createDiv({ cls: "myu-ttl", text: r.title });
     if (r.small) ttl.createSpan({ cls: "myu-ttl-small", text: r.small });
+    if (r.count) ttl.createSpan({ cls: "myu-ttl-small myu-ttl-count", text: `\xB7 ${r.count}` });
+    if (r.open) {
+      const open = ttl.createEl("button", { cls: "myu-aff myu-mrow-open", text: PREP_LIST_WORDS.open });
+      open.onclick = r.open;
+    }
+    const hide = r.hide;
+    const drawn = hide ? r.lines.filter((l) => !hide.has(l.line_id)) : r.lines;
     const { ui: lineUi, answered } = this.lineState();
-    const saidHere = r.lines.filter((l) => answered.has(l.line_id));
-    const stack = stackOf(r.lines.filter((l) => !answered.has(l.line_id)));
+    const saidHere = drawn.filter((l) => answered.has(l.line_id));
+    const stack = stackOf(drawn.filter((l) => !answered.has(l.line_id)));
     const say = (l) => {
       if (!isSpaceLine(l)) {
-        renderLineAsk(body, l, lineUi.get(l.line_id) ?? {}, { press: (b) => void this.pressLine(l, b) });
+        renderLineAsk(body, l, lineUi.get(l.line_id) ?? {}, { press: (b) => void this.pressLine(l, b), people: this.findPeople });
         return;
       }
       const cls = l.ask_kind === "tell" ? "myu-done" : l.ask_kind === "wait" ? "myu-quiet" : "myu-line";
-      const line = body.createDiv({ cls, text: (l.text ?? "").trim(), attr: lineIdAttr(l.line_id) });
-      if (l.est && l.ask_kind !== "tell" && l.ask_kind !== "wait") line.createSpan({ cls: "myu-est", text: l.est });
+      const line2 = body.createDiv({ cls, text: (l.text ?? "").trim(), attr: lineIdAttr(l.line_id) });
+      if (l.est && l.ask_kind !== "tell" && l.ask_kind !== "wait") line2.createSpan({ cls: "myu-est", text: l.est });
     };
     saidHere.forEach(say);
     if (stack.top) say(stack.top);
@@ -12279,6 +14911,7 @@ var TodayView = class extends import_obsidian16.ItemView {
       };
       if (open) stack.rest.forEach(say);
     }
+    r.under?.(body);
     if (r.acts.length === 0) return;
     const acts = body.createDiv({ cls: "myu-mrow-acts" });
     for (const a of r.acts) {
@@ -12287,23 +14920,66 @@ var TodayView = class extends import_obsidian16.ItemView {
     }
   }
   /**
-   * One of a question's buttons: the answer (`POST /myu/lines/answer`), the pages it opens (a
-   * calendar consent, the invite's compose), what Myu said back, then the pane again.
+   * Today's read of the lines: the open ones and those answered here (`linesAfterRead`), the meetings with the person's list on them,
+   * and the carried items waiting (a server from before has neither).
    */
-  async pressLine(line, button) {
-    const id = line.line_id;
+  takeLines(data) {
+    const { ui, answered } = this.lineState();
+    const closedHere = new Set([...ui].flatMap(([id, u]) => u.closed ? [id] : []));
+    this.todayLines = linesAfterRead(data?.lines ?? [], this.todayLines ?? [], answered, closedHere);
+    this.prepMeetings = Array.isArray(data?.meetings) ? data.meetings : [];
+    this.waiting = Array.isArray(data?.waiting) ? data.waiting : [];
+    this.yesterday = Array.isArray(data?.yesterday) ? data.yesterday : [];
+  }
+  /**
+   * A line changed on the server (`line_updated`, 2026-11-15): when it is one Today shows, the lines are read again (the lines
+   * alone, not the whole pane), so a question answered elsewhere (under People, in the terminal, by Myu's own tie) leaves without a
+   * reload. Changes that come in during a read make one more read after it.
+   */
+  lineUpdated(lineId) {
+    if (!readsAgainFor(lineId, this.todayLines, this.lineState().answered)) return null;
+    if (this.linesAgain) {
+      this.linesAgainOwed = true;
+      return this.linesAgain;
+    }
+    const read = async () => {
+      const res = await safe(() => this.plugin.backend.getMyuLines("today"));
+      if (res?.ok) {
+        this.takeLines(res.data);
+        this.render();
+      }
+    };
+    this.linesAgain = read().finally(() => {
+      this.linesAgain = null;
+      if (this.linesAgainOwed) {
+        this.linesAgainOwed = false;
+        void this.lineUpdated(lineId);
+      }
+    });
+    return this.linesAgain;
+  }
+  /**
+   * One of a question's buttons: the answer (`POST /myu/lines/answer`), the pages it opens (a
+   * calendar consent, the invite's compose), what Myu said back, then the pane again. An answer that moved things about who someone
+   * is (2026-11-15) says so in a notice with Undo.
+   */
+  async pressLine(line2, button) {
+    const id = line2.line_id;
     const { ui, answered } = this.lineState();
     if (ui.get(id)?.busy) return;
     ui.set(id, { busy: true });
     this.render();
-    const out = await pressLineButton({ answer: (lineId, answer) => this.plugin.backend.answerMyuLine(lineId, answer), apiBase: this.plugin.settings.base_url }, line, button);
+    const out = await pressLineButton({ answer: (lineId, answer) => this.plugin.backend.answerMyuLine(lineId, answer), apiBase: this.plugin.settings.base_url }, line2, button);
     if (out.closed) {
-      ui.delete(id);
+      if (out.ui.closed) ui.set(id, out.ui);
+      else ui.delete(id);
+      this.render();
       await this.refresh();
       return;
     }
+    if (out.undo) this.plugin.offerUndo(out.undo.said, out.undo.moveId);
     for (const url of out.open) window.open(url, "_blank");
-    if (out.conversation) void this.plugin.openConversationRef(out.conversation, line.subjects?.[0]?.label ?? "");
+    if (out.conversation) void this.plugin.openConversationRef(out.conversation, line2.subjects?.[0]?.label ?? "");
     ui.set(id, out.ui);
     if (out.settled) answered.add(id);
     this.render();
@@ -12313,18 +14989,6 @@ var TodayView = class extends import_obsidian16.ItemView {
   who(m) {
     const n = m.attendee_emails?.length ?? 0;
     return n > 1 ? `${n} people` : "";
-  }
-  /** talk ▸ — the chat pane opens about this meeting, Myu speaking first. */
-  talkAboutMeeting(m, phase) {
-    const lines = this.linesForMeeting(m);
-    const line = stackOf(lines).top ?? lines.find((l) => (l.text ?? "").trim());
-    void this.plugin.openChatAbout("meeting", m.event_id, {
-      label: m.summary || "Meeting",
-      occurrenceKey: String(m.startDate.getTime()),
-      phase,
-      line: line?.text,
-      lineObj: line
-    });
   }
   /**
    * The spaces this person belongs to: always here, under their own heading, one row each. Two
@@ -12347,6 +15011,8 @@ var TodayView = class extends import_obsidian16.ItemView {
         title: r.name,
         small: r.small,
         lines: r.lines,
+        // The space waits for a member to be next here (2026-11-17): the server's sentence under the name.
+        ...r.waiting ? { under: (body) => void body.createDiv({ cls: "myu-quiet", text: r.waiting }) } : {},
         // An interview debrief: one door, into its conversation. A team's space: its conversation and its retro.
         acts: r.debrief ? [{ label: DEBRIEF_PANE_WORDS.door, onClick: () => void this.plugin.openChatAbout("space", r.space_id, { label: r.name, line: first?.text, debrief: true }) }] : [
           { label: this.spaceDoors.get(r.space_id) ?? spaceDoorLabel(null), onClick: () => void this.plugin.openChatAbout("space", r.space_id, { label: r.name, line: first?.text }) },
@@ -12399,9 +15065,11 @@ var TodayView = class extends import_obsidian16.ItemView {
     };
   }
   /**
-   * Next, then Earlier — today's meetings as rows with Myu's line under each.
-   * `talk ▸` on every row; `prepare ▸` on the next meeting only. An earlier
-   * meeting's talk is the after-conversation ("how it went").
+   * Next, then later this week, then earlier — the meetings as rows with Myu's
+   * line under each (2026-10-29: the person's list under it, and Open ▸ as the
+   * row's one link: the meeting's page, with its conversation in the chat
+   * pane). An earlier meeting's page is the one after it. Last, the items
+   * carried from a meeting with no next one yet, under their person.
    */
   renderNext(root) {
     const now = Date.now();
@@ -12409,38 +15077,211 @@ var TodayView = class extends import_obsidian16.ItemView {
     const meetings = this.meetings ?? [];
     const upcoming = meetings.filter((m) => m.startDate.getTime() > grace);
     const earlier = meetings.filter((m) => m.startDate.getTime() <= grace).reverse();
+    const calendarRow = (m, past) => ({
+      event_id: m.event_id,
+      occurrence_key: String(m.startDate.getTime()),
+      starts_at: m.startDate.toISOString(),
+      time: prepTimeWords(m.startDate),
+      title: m.summary || "Meeting",
+      small: this.who(m),
+      past
+    });
     const zone = root.createDiv({ cls: "myu-zone" });
     zone.createDiv({ cls: "myu-whisper", text: "next" });
     if (upcoming.length === 0) {
       zone.createEl("p", { cls: "myu-quiet", text: earlier.length > 0 ? "Nothing more today." : "No meetings today." });
     }
-    upcoming.slice(0, 6).forEach((m, index) => {
-      const lines = this.linesForMeeting(m);
+    for (const m of upcoming.slice(0, 6)) this.meetingRow(zone, calendarRow(m, false));
+    this.renderLater(root);
+    if (earlier.length > 0) {
+      const past = root.createDiv({ cls: "myu-zone" });
+      past.createDiv({ cls: "myu-whisper", text: "earlier" });
+      for (const m of earlier.slice(0, 4)) this.meetingRow(past, calendarRow(m, true));
+    }
+    this.renderYesterday(root);
+    this.renderWaiting(root);
+  }
+  /**
+   * "Yesterday" (2026-10-30, BRIEF_WEB_MEETING_POST §2): yesterday's meetings with a record or a page the person acted
+   * on — the time, the title, "· 2 of 3 covered", Open ▸ as the row's only link (the meeting's page, its record) — and
+   * Myu's lines about the meeting under it, as under any meeting's row: "The Gemini notes for Thursday's 1:1 with Reid
+   * came in: …" is one, sent once per record. A `line` on the row is drawn when the server sends one and no such line.
+   */
+  renderYesterday(root) {
+    const rows = (this.yesterday ?? []).filter((y) => y.event_id);
+    if (rows.length === 0) return;
+    const zone = root.createDiv({ cls: "myu-zone myu-yesterday" });
+    zone.createDiv({ cls: "myu-whisper", text: MEETING_POST_WORDS.yesterday });
+    for (const y of rows) {
+      const start = new Date(y.starts_at ?? "");
+      const title = y.title?.trim() || "Meeting";
+      const lines = this.linesForMeeting(y.event_id, y.occurrence_key ?? null);
+      const said = lines.length ? "" : y.line?.trim() ?? "";
       this.row(zone, {
-        key: `meeting:${m.event_id}:${m.startDate.getTime()}`,
-        time: timeLabel(m.startDate),
-        title: m.summary || "Meeting",
-        small: this.who(m),
-        lines,
-        acts: [
-          { label: "talk about this \u25B8", onClick: () => this.talkAboutMeeting(m, "before") },
-          ...index === 0 ? [{ label: "prepare \u25B8", onClick: () => void this.plugin.openPrep(m.event_id) }] : []
-        ]
-      });
-    });
-    if (earlier.length === 0) return;
-    const past = root.createDiv({ cls: "myu-zone" });
-    past.createDiv({ cls: "myu-whisper", text: "earlier" });
-    for (const m of earlier.slice(0, 4)) {
-      const lines = this.linesForMeeting(m);
-      this.row(past, {
-        key: `meeting:${m.event_id}:${m.startDate.getTime()}`,
-        time: timeLabel(m.startDate),
-        title: m.summary || "Meeting",
-        small: this.who(m),
+        key: `yesterday:${y.event_id}:${y.occurrence_key ?? ""}`,
+        time: Number.isNaN(start.getTime()) ? y.day_label?.trim() ?? "" : prepTimeWords(start),
+        title,
+        count: yesterdayCount(y),
         lines,
         past: true,
-        acts: [{ label: "talk about this \u25B8", onClick: () => this.talkAboutMeeting(m, "after") }]
+        open: () => void this.plugin.openPrep(y.event_id, { label: title, occurrenceKey: y.occurrence_key ?? void 0 }),
+        under: said ? (body) => void body.createDiv({ cls: "myu-voice myu-yesterday-line", text: said }) : void 0,
+        acts: []
+      });
+    }
+  }
+  /**
+   * "Later this week": the upcoming meetings the server sends with an open list question or items, by when they are
+   * ("Thu 2:00 pm"), each a meeting's row.
+   */
+  renderLater(root) {
+    const later = (this.prepMeetings ?? []).filter((m) => m.later && m.event_id).sort((a, b) => (Date.parse(a.starts_at ?? "") || 0) - (Date.parse(b.starts_at ?? "") || 0));
+    if (later.length === 0) return;
+    const zone = root.createDiv({ cls: "myu-zone myu-later" });
+    zone.createDiv({ cls: "myu-whisper", text: PREP_LIST_WORDS.laterThisWeek });
+    for (const m of later) {
+      this.meetingRow(zone, {
+        event_id: m.event_id,
+        occurrence_key: m.occurrence_key ?? null,
+        starts_at: m.starts_at ?? null,
+        time: m.day_label?.trim() || dayLabel2(m.starts_at),
+        title: m.title?.trim() || "Meeting"
+      });
+    }
+  }
+  /**
+   * One meeting's row (2026-10-29, BRIEF_WEB_PREP_NOTES §1). Open ▸ is its only link (the meeting's page, and its
+   * conversation in the chat pane); the title carries "· 2 to cover"; under Myu's line the list's first three items
+   * and "+{n} more"; while the list's question is open, Myu's question in its voice and the list's add box.
+   */
+  meetingRow(host, m) {
+    const listed = this.prepMeetingFor(m.event_id, m.occurrence_key);
+    const lines = this.linesForMeeting(m.event_id, listed?.occurrence_key ?? m.occurrence_key);
+    const wantId = listed?.want_line_id ?? null;
+    const want = wantId ? lines.find((l) => l.line_id === wantId) ?? null : null;
+    this.row(host, {
+      key: `meeting:${m.event_id}:${m.occurrence_key ?? ""}`,
+      time: m.time,
+      title: m.title,
+      small: m.small,
+      count: listed ? toCoverWords(listed.items, listed.items_count) : null,
+      lines,
+      hide: wantId ? /* @__PURE__ */ new Set([wantId]) : void 0,
+      past: m.past,
+      open: () => void this.plugin.openPrep(m.event_id, { label: m.title, occurrenceKey: listed?.occurrence_key ?? m.occurrence_key ?? void 0 }),
+      under: listed ? (body) => this.renderRowList(body, listed, want, m.starts_at ?? listed.starts_at ?? null) : void 0,
+      acts: []
+    });
+  }
+  /** The meeting the lines read sends with a list for this occurrence (its event alone when the occurrence is unknown). */
+  prepMeetingFor(eventId, occurrenceKey) {
+    const same = (this.prepMeetings ?? []).filter((m) => m.event_id === eventId);
+    return same.find((m) => !occurrenceKey || !m.occurrence_key || m.occurrence_key === occurrenceKey) ?? null;
+  }
+  /**
+   * A meeting's list under its row: the first three items with live checkboxes (their words edited in place, ×, and a
+   * new order when the row holds the whole list), "+2 more" for the rest (the page holds them), and — while the list's
+   * question is open — Myu's question, then the add box, which stays open; after an add, "On the list for Thursday."
+   * in the question's place.
+   */
+  renderRowList(body, listed, want, startsAt) {
+    const keeper = this.listFor(listed);
+    const { shown: shown2, more } = todayRowItems(listed.items, listed.items_count);
+    if (shown2.length) renderPrepItems(body, shown2, "before", keeper.ui(), keeper.handlers({ move: more === 0 }));
+    if (more > 0) body.createDiv({ cls: "myu-quiet myu-prep-row-more", text: PREP_LIST_WORDS.more(more) });
+    if (listed.want_line_id) {
+      const question = (want?.text ?? "").trim();
+      if (keeper.said) body.createDiv({ cls: "myu-quiet myu-prep-said-line", text: keeper.said });
+      else if (question && want) body.createDiv({ cls: "myu-voice myu-prep-want", text: question, attr: lineIdAttr(want.line_id) });
+      renderPrepAddBox(body, {
+        draft: keeper.draft,
+        busy: keeper.adding,
+        onDraft: (text2) => {
+          keeper.draft = text2;
+        },
+        onAdd: (text2) => void this.addFromRow(keeper, text2, startsAt),
+        focus: keeper.addFocused,
+        onFocus: (focused) => {
+          keeper.addFocused = focused;
+        }
+      });
+    }
+    if (keeper.note) body.createDiv({ cls: "myu-quiet myu-line-note", text: keeper.note });
+  }
+  /** The list's add on a row: the items appear at once, the fixed line says where they went, the box stays open. */
+  async addFromRow(keeper, text2, startsAt) {
+    if (!await keeper.add(text2)) return;
+    const day = prepDayWord(startsAt);
+    keeper.said = day ? PREP_LIST_WORDS.onTheListFor(day) : null;
+    keeper.addFocused = true;
+    this.render();
+  }
+  /** A meeting's list keeper, kept across refreshes: it reads and writes the meeting as the last lines read sent it. */
+  listFor(listed) {
+    const ref = { event_id: listed.event_id, occurrence_key: listed.occurrence_key ?? null };
+    const current = () => (this.prepMeetings ?? []).find((m) => m.event_id === ref.event_id && (m.occurrence_key ?? null) === ref.occurrence_key) ?? null;
+    return this.keeper(`meeting:${ref.event_id}|${ref.occurrence_key ?? ""}`, {
+      meeting: () => ref,
+      items: () => [...current()?.items ?? []],
+      setItems: (items, added) => {
+        const m = current();
+        if (!m) return;
+        const count2 = m.items_count ?? (m.items ?? []).length;
+        m.items = items;
+        m.items_count = Math.max(items.length, count2 + added);
+      },
+      eventId: ref.event_id
+    });
+  }
+  /** One list's keeper, by what it is the list of (a meeting, a person's waiting items): made once, kept across refreshes. */
+  keeper(key, how) {
+    this.listKeepers ?? (this.listKeepers = /* @__PURE__ */ new Map());
+    const known2 = this.listKeepers.get(key);
+    if (known2) return known2;
+    const made = new PrepListKeeper({
+      backend: () => this.plugin.backend,
+      meeting: how.meeting,
+      items: how.items,
+      setItems: how.setItems,
+      onChange: () => this.render(),
+      // The meeting's page, when it shows this meeting, reads again.
+      onSaved: () => this.plugin.prepListChanged?.(how.eventId)
+    });
+    this.listKeepers.set(key, made);
+    return made;
+  }
+  /**
+   * Items carried from a meeting with no next one yet, under their person (2026-10-29, BRIEF_BACKEND_PREP_NOTES §8):
+   * the server's line ("Carried from your 1:1 on 12 Nov"), then the items, ticked, edited or dropped here. They join
+   * the next meeting with that person when the calendar has one.
+   */
+  renderWaiting(root) {
+    const waiting = (this.waiting ?? []).filter((w) => w.relationship_id && (w.items ?? []).length > 0);
+    if (waiting.length === 0) return;
+    const zone = root.createDiv({ cls: "myu-zone myu-waiting" });
+    zone.createDiv({ cls: "myu-whisper", text: PREP_LIST_WORDS.fromLastTime });
+    for (const w of waiting) {
+      const current = () => (this.waiting ?? []).find((x) => x.relationship_id === w.relationship_id) ?? null;
+      const keeper = this.keeper(`waiting:${w.relationship_id}`, {
+        meeting: () => null,
+        items: () => [...current()?.items ?? []],
+        setItems: (items) => {
+          const x = current();
+          if (x) x.items = items;
+        },
+        eventId: null
+      });
+      this.row(zone, {
+        key: `waiting:${w.relationship_id}`,
+        time: "",
+        title: w.name?.trim() || "",
+        lines: [],
+        under: (body) => {
+          if (w.label?.trim()) body.createDiv({ cls: "myu-quiet", text: w.label.trim() });
+          renderPrepItems(body, w.items, "before", keeper.ui(), keeper.handlers({ move: false }));
+          if (keeper.note) body.createDiv({ cls: "myu-quiet myu-line-note", text: keeper.note });
+        },
+        acts: []
       });
     }
   }
@@ -12466,18 +15307,18 @@ var TodayView = class extends import_obsidian16.ItemView {
     const state = this.plugin.settings?.myu_checkbox_state ?? {};
     const zone = root.createDiv({ cls: "myu-zone myu-open-today" });
     zone.createDiv({ cls: "myu-whisper", text: "open items today" });
-    const list2 = zone.createEl("ul", { cls: "myu-tasks" });
+    const list7 = zone.createEl("ul", { cls: "myu-tasks" });
     const sorted = [...open].sort((a, b) => (a.deadline ?? "9999").localeCompare(b.deadline ?? "9999"));
     for (const c of sorted.slice(0, 6)) {
       const checked = !!state[c.commitment_id];
-      const li = list2.createEl("li", { cls: `myu-task${checked ? " myu-task-done" : ""}` });
+      const li = list7.createEl("li", { cls: `myu-task${checked ? " myu-task-done" : ""}` });
       const box = li.createEl("input", { attr: { type: "checkbox", "aria-label": "Mark this done in Myu" } });
       box.checked = checked;
       const body = li.createSpan({ cls: "myu-task-body" });
       if (c.owner) {
         const owner = c.owner;
-        const link = body.createSpan({ cls: "myu-wl", text: owner });
-        link.onclick = () => this.openPerson(owner);
+        const link2 = body.createSpan({ cls: "myu-wl", text: owner });
+        link2.onclick = () => this.openPerson(owner);
         body.createSpan({ text: " " });
       }
       body.createSpan({ text: (c.content ?? "").trim() || "(encrypted \u2014 open in Myu)" });
@@ -12509,7 +15350,7 @@ var TodayView = class extends import_obsidian16.ItemView {
       this.render();
     };
     if (!this.owedOpen) return;
-    const list2 = (title, rows, more) => {
+    const list7 = (title, rows, more) => {
       if (!rows.length) return;
       zone.createDiv({ cls: "myu-whisper", text: title });
       for (const r of rows) {
@@ -12520,8 +15361,8 @@ var TodayView = class extends import_obsidian16.ItemView {
       }
       if (more > 0) zone.createDiv({ cls: "myu-quiet", text: COMMITMENTS_FOLD_WORDS.more(more) });
     };
-    list2(COMMITMENTS_FOLD_WORDS.youOwe, fold.youOwe, fold.moreYouOwe);
-    list2(COMMITMENTS_FOLD_WORDS.owedToYou, fold.owedToYou, fold.moreOwedToYou);
+    list7(COMMITMENTS_FOLD_WORDS.youOwe, fold.youOwe, fold.moreYouOwe);
+    list7(COMMITMENTS_FOLD_WORDS.owedToYou, fold.owedToYou, fold.moreOwedToYou);
   }
   async tickCommitment(c, checked) {
     const s2 = this.plugin.settings;
@@ -12590,8 +15431,8 @@ var TodayView = class extends import_obsidian16.ItemView {
       rate.createSpan({ cls: "myu-whisper", text: this.loopRated === 1 ? "Marked as helpful" : "Marked as not helpful" });
       return;
     }
-    for (const [rating, icon, label] of [[1, "thumbs-up", "Helpful"], [-1, "thumbs-down", "Not helpful"]]) {
-      const b = rate.createEl("button", { cls: "myu-affordance myu-icon-button myu-rating-btn", attr: { "aria-label": `${label} \u2014 rate this` } });
+    for (const [rating, icon, label2] of [[1, "thumbs-up", "Helpful"], [-1, "thumbs-down", "Not helpful"]]) {
+      const b = rate.createEl("button", { cls: "myu-affordance myu-icon-button myu-rating-btn", attr: { "aria-label": `${label2} \u2014 rate this` } });
       (0, import_obsidian16.setIcon)(b, icon);
       b.onclick = () => {
         this.loopRated = rating;
@@ -12642,7 +15483,7 @@ var TodayView = class extends import_obsidian16.ItemView {
     mode.onclick = () => this.plugin.openSettingsAt("Sync when the vault opens");
   }
   renderWeek(root) {
-    if (!this.weekly || this.weekly.sections.length === 0) return;
+    if (!this.weekly || this.weekly.sections.length === 0 && !this.yourWeek) return;
     const zone = root.createDiv({ cls: "myu-zone" });
     zone.createDiv({ cls: "myu-whisper", text: "the week" });
     for (const section of this.weekly.sections) {
@@ -12651,6 +15492,7 @@ var TodayView = class extends import_obsidian16.ItemView {
         zone.createDiv({ cls: "myu-quiet myu-week-item", text: item });
       }
     }
+    if (this.yourWeek) renderYourWeek(zone, this.yourWeek, this.yourWeekOpen);
   }
   /**
    * The mirror (A11, two-layer) — "noticed this month". Last: the day first,
@@ -12677,8 +15519,8 @@ var TodayView = class extends import_obsidian16.ItemView {
       box.createEl("p", { cls: "myu-quiet", text: "Okay." });
       return;
     }
-    const line = box.createDiv({ cls: "myu-voice myu-mirror-voice", text: obs.text });
-    if (obs.forming) line.createSpan({ cls: "myu-mirror-forming", text: "  still forming" });
+    const line2 = box.createDiv({ cls: "myu-voice myu-mirror-voice", text: obs.text });
+    if (obs.forming) line2.createSpan({ cls: "myu-mirror-forming", text: "  still forming" });
     const isMap = obs.layer === "map";
     const actions = box.createDiv({ cls: "myu-mirror-actions" });
     const talk = actions.createEl("button", { cls: "myu-mirror-ctl", text: "Talk about this" });
@@ -12726,8 +15568,8 @@ var TodayView = class extends import_obsidian16.ItemView {
         ["wrong_reading", "Wrong conclusion"],
         ["true_drop_it", "True, but drop it"]
       ];
-      for (const [evt, label] of options) {
-        const btn = refine.createEl("button", { cls: "myu-mirror-ctl", text: label });
+      for (const [evt, label2] of options) {
+        const btn = refine.createEl("button", { cls: "myu-mirror-ctl", text: label2 });
         btn.onclick = () => {
           this.recordMirrorFeedback(obs, evt);
           this.mirrorFeedback.set(obs.observation_id, "done");
@@ -12768,8 +15610,9 @@ function addDays(date, days) {
   next.setDate(next.getDate() + days);
   return next;
 }
-function timeLabel(date) {
-  return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }).toLowerCase().replace(" ", "");
+function dayLabel2(iso) {
+  const d = new Date(iso ?? "");
+  return Number.isNaN(d.getTime()) ? "" : `${d.toLocaleDateString("en-GB", { weekday: "short" })} ${prepTimeWords(d)}`;
 }
 
 // src/views/CardView.ts
@@ -12817,11 +15660,11 @@ var SourceDetailModal = class extends import_obsidian17.Modal {
         row.createSpan({ cls: "myu-row-title", text: m.content });
       }
     }
-    for (const [label, list2] of [["commitments", d.tasks?.map((t) => t.title)], ["events", d.events?.map((e) => e.title)]]) {
-      if (!list2?.length) continue;
+    for (const [label2, list7] of [["commitments", d.tasks?.map((t) => t.title)], ["events", d.events?.map((e) => e.title)]]) {
+      if (!list7?.length) continue;
       const zone = contentEl.createDiv({ cls: "myu-zone" });
-      zone.createDiv({ cls: "myu-whisper", text: label });
-      for (const t of list2) zone.createDiv({ cls: "myu-row" }).createSpan({ cls: "myu-row-title", text: t });
+      zone.createDiv({ cls: "myu-whisper", text: label2 });
+      for (const t of list7) zone.createDiv({ cls: "myu-row" }).createSpan({ cls: "myu-row-title", text: t });
     }
   }
   onClose() {
@@ -12833,7 +15676,7 @@ var SourceDetailModal = class extends import_obsidian17.Modal {
 var import_obsidian18 = require("obsidian");
 
 // src/views/canvasActions.ts
-function str(v) {
+function str8(v) {
   return typeof v === "string" ? v.trim() : "";
 }
 function rec(v) {
@@ -12849,32 +15692,32 @@ function controlsOf(component) {
   switch (component.type) {
     case "prepared_content": {
       for (const a of arr(data.channel_actions)) {
-        if (str(a.label) && str(a.action)) buttons.push({ label: str(a.label), action: str(a.action), params: rec(a.params) ?? void 0 });
+        if (str8(a.label) && str8(a.action)) buttons.push({ label: str8(a.label), action: str8(a.action), params: rec(a.params) ?? void 0 });
       }
       const f = rec(data.input_field);
-      if (f && str(f.action) && str(f.param_name)) {
-        input = { action: str(f.action), params: rec(f.params) ?? void 0, param_name: str(f.param_name), placeholder: str(f.placeholder), submit_label: str(f.submit_label), submitting_label: str(f.submitting_label), validate: str(f.validate), help_text: str(f.help_text) };
+      if (f && str8(f.action) && str8(f.param_name)) {
+        input = { action: str8(f.action), params: rec(f.params) ?? void 0, param_name: str8(f.param_name), placeholder: str8(f.placeholder), submit_label: str8(f.submit_label), submitting_label: str8(f.submitting_label), validate: str8(f.validate), help_text: str8(f.help_text) };
       }
       break;
     }
     case "action_controls":
       for (const a of arr(data.actions)) {
-        if (str(a.label) && str(a.action)) buttons.push({ label: str(a.label), action: str(a.action), params: rec(a.params) ?? void 0, cta: a.priority === "high" || a.style === "primary", interaction: { event_type: "action_clicked", component_type: "action_controls", action_value: str(a.label) || str(a.action), metadata: { action_name: str(a.action) } } });
+        if (str8(a.label) && str8(a.action)) buttons.push({ label: str8(a.label), action: str8(a.action), params: rec(a.params) ?? void 0, cta: a.priority === "high" || a.style === "primary", interaction: { event_type: "action_clicked", component_type: "action_controls", action_value: str8(a.label) || str8(a.action), metadata: { action_name: str8(a.action) } } });
       }
       break;
     case "reflection_prompt":
-      input = { action: "", param_name: "answer", placeholder: str(data.placeholder) || "Your answer\u2026", submit_label: "Answer", submitting_label: "Sending\u2026", interaction: (value) => ({ event_type: "prompt_answered", component_type: "reflection_prompt", action_value: value, metadata: { action_name: "prompt_answered" } }) };
+      input = { action: "", param_name: "answer", placeholder: str8(data.placeholder) || "Your answer\u2026", submit_label: "Answer", submitting_label: "Sending\u2026", interaction: (value) => ({ event_type: "prompt_answered", component_type: "reflection_prompt", action_value: value, metadata: { action_name: "prompt_answered" } }) };
       break;
     case "offer_block": {
-      const moment2 = str(data.moment);
-      const ids = arr(data.options).map((o) => ({ id: str(o.id), label: str(o.label), init: rec(o.init) ?? void 0 })).filter((o) => o.id && o.label);
+      const moment2 = str8(data.moment);
+      const ids = arr(data.options).map((o) => ({ id: str8(o.id), label: str8(o.label), init: rec(o.init) ?? void 0 })).filter((o) => o.id && o.label);
       let ctaGiven = false;
       for (const o of ids) {
         if (o.id === "calendar_ical") continue;
         if (o.id === "archive") continue;
         const cta = moment2 ? !!o.init && !ctaGiven : o.id === "calendar_google";
         if (cta) ctaGiven = true;
-        buttons.push({ label: o.label, action: `offer:${o.id}`, cta, params: { ...o.init ? { init: o.init } : {}, ...moment2 ? { moment: moment2, journal_id: str(data.journal_id) || void 0 } : {}, ...str(data.stopped_ack) ? { stopped_ack: str(data.stopped_ack) } : {} } });
+        buttons.push({ label: o.label, action: `offer:${o.id}`, cta, params: { ...o.init ? { init: o.init } : {}, ...moment2 ? { moment: moment2, journal_id: str8(data.journal_id) || void 0 } : {}, ...str8(data.stopped_ack) ? { stopped_ack: str8(data.stopped_ack) } : {} } });
       }
       if (ids.some((o) => o.id === "calendar_ical")) {
         input = { action: "offer:calendar_ical", param_name: "url", placeholder: "https://calendar.google.com/calendar/ical/\u2026/basic.ics", submit_label: "Add calendar", submitting_label: "Reading\u2026", validate: "url", help_text: "Google Calendar \u2192 Settings \u2192 your calendar \u2192 Secret address in iCal format. Outlook: Shared calendars \u2192 Publish. Myu can only read this address; it can never change your calendar." };
@@ -12882,17 +15725,17 @@ function controlsOf(component) {
       break;
     }
     case "inline_chat":
-      input = { action: "inline_chat", param_name: "message", placeholder: str(data.placeholder) || "Ask a follow-up about this\u2026", submit_label: "Ask", submitting_label: "Asking\u2026" };
+      input = { action: "inline_chat", param_name: "message", placeholder: str8(data.placeholder) || "Ask a follow-up about this\u2026", submit_label: "Ask", submitting_label: "Asking\u2026" };
       break;
     case "decision_frame":
       if (component.variant === "multi_select") break;
       arr(data.options).forEach((o, i) => {
-        if (str(o.label)) buttons.push({ label: str(o.label), action: "select_option", params: { option_index: i, option_label: str(o.label) }, cta: o.recommended === true, interaction: { event_type: "option_selected", component_type: "decision_frame", action_value: str(o.label), metadata: { action_name: "select_option", option_index: i, option_label: str(o.label) } } });
+        if (str8(o.label)) buttons.push({ label: str8(o.label), action: "select_option", params: { option_index: i, option_label: str8(o.label) }, cta: o.recommended === true, interaction: { event_type: "option_selected", component_type: "decision_frame", action_value: str8(o.label), metadata: { action_name: "select_option", option_index: i, option_label: str8(o.label) } } });
       });
       break;
     case "person_disambiguation": {
       for (const c of arr(data.candidates)) {
-        if (str(c.name) && str(c.relationship_id)) buttons.push({ label: `\u2713 ${str(c.name)}`, action: "resolve_person", params: { type: "confirm", relationship_id: str(c.relationship_id), person_name: str(c.name) } });
+        if (str8(c.name) && str8(c.relationship_id)) buttons.push({ label: `\u2713 ${str8(c.name)}`, action: "resolve_person", params: { type: "confirm", relationship_id: str8(c.relationship_id), person_name: str8(c.name) } });
       }
       if (buttons.length) buttons.push({ label: "None of these", action: "resolve_person", params: { type: "reject_all" } });
       break;
@@ -12908,9 +15751,9 @@ function renderComponentActions(parent, component, host) {
   const row = parent.createDiv({ cls: "myu-canvas-actions" });
   const controls = [];
   let status = null;
-  const say = (text) => {
+  const say = (text2) => {
     if (!status) status = row.createSpan({ cls: "myu-status myu-quiet" });
-    status.setText(text);
+    status.setText(text2);
   };
   const press = async (action, params, working, interaction) => {
     for (const b of controls) b.disabled = true;
@@ -12979,7 +15822,7 @@ function linkedInMatchComponent(sug, personName, index, total) {
   const name = sug.person_name || "Unknown";
   const first = index === 0;
   const remaining = total - index;
-  const link = sug.linkedin_url ? `[View profile on LinkedIn](${sug.linkedin_url})
+  const link2 = sug.linkedin_url ? `[View profile on LinkedIn](${sug.linkedin_url})
 
 ` : "";
   const body = first ? `**${name}**
@@ -12988,11 +15831,11 @@ ${sug.profile_headline ? `*${sug.profile_headline}*
 
 > ${name} \u2014 ${sug.profile_headline}
 
-` : ""}${link}Is this the right person?` : `**${name}**
+` : ""}${link2}Is this the right person?` : `**${name}**
 
 ${sug.profile_headline ? `*${sug.profile_headline}*
 
-` : ""}${link}Is this the right person?`;
+` : ""}${link2}Is this the right person?`;
   const title = first ? "LinkedIn Match Found" : `${personName ? `LinkedIn match for ${personName}` : "LinkedIn Match"}${remaining > 1 ? ` \u2014 ${remaining} suggestions remaining` : " \u2014 last suggestion"}`;
   return {
     id: `linkedin_confirm_${sug.card_id}`,
@@ -13071,9 +15914,9 @@ function renderLinkedInMatches(root, suggestions, host) {
 function renderLinkedInMatchesInline(root, suggestions, host) {
   const cards = suggestions.filter((s2) => s2.card_id);
   const slot = root.createDiv({ cls: "myu-linkedin-inline" });
-  const say = (row, text) => {
+  const say = (row, text2) => {
     const status = row.querySelector(".myu-status");
-    (status ?? row.createSpan({ cls: "myu-status myu-quiet" })).setText(text);
+    (status ?? row.createSpan({ cls: "myu-status myu-quiet" })).setText(text2);
   };
   const resolve = async (body) => {
     const res = await host.plugin.backend.resolveLinkedInSuggestion(body).catch(() => null);
@@ -13088,19 +15931,19 @@ function renderLinkedInMatchesInline(root, suggestions, host) {
     const field = row.createEl("input", { cls: "myu-canvas-input" });
     field.type = "text";
     field.placeholder = "https://linkedin.com/in/...";
-    const link = row.createEl("button", { cls: "myu-affordance myu-cta", text: "Link profile" });
-    link.onclick = () => {
+    const link2 = row.createEl("button", { cls: "myu-affordance myu-cta", text: "Link profile" });
+    link2.onclick = () => {
       void (async () => {
         const url = field.value.trim();
         if (!/linkedin\.com\//i.test(url) || !/^https?:\/\//i.test(url)) {
           say(row, "Paste the full LinkedIn profile URL.");
           return;
         }
-        link.disabled = true;
+        link2.disabled = true;
         const res = await resolve({ action: "manual_url", relationship_id: host.relationshipId, linkedin_url: url });
         if (!res.ok) {
           say(row, res.message ?? "");
-          link.disabled = false;
+          link2.disabled = false;
           return;
         }
         notifyStatus("Linked.");
@@ -13129,9 +15972,9 @@ function renderLinkedInMatchesInline(root, suggestions, host) {
       terminal();
       return;
     }
-    const line = slot.createDiv({ cls: "myu-voice" });
-    line.createSpan({ cls: "myu-chat-li-name", text: sug.person_name || "Unknown" });
-    if (sug.profile_headline) line.createSpan({ cls: "myu-quiet", text: ` \u2014 ${sug.profile_headline}` });
+    const line2 = slot.createDiv({ cls: "myu-voice" });
+    line2.createSpan({ cls: "myu-chat-li-name", text: sug.person_name || "Unknown" });
+    if (sug.profile_headline) line2.createSpan({ cls: "myu-quiet", text: ` \u2014 ${sug.profile_headline}` });
     if (cards.length > 1) slot.createDiv({ cls: "myu-whisper", text: `${index + 1} of ${cards.length}` });
     if (sug.linkedin_url) {
       const view = slot.createEl("button", { cls: "myu-affordance myu-link-button", text: "View profile on LinkedIn" });
@@ -13171,8 +16014,8 @@ function renderLinkedInMatchesInline(root, suggestions, host) {
 function renderLinkedInRecovery(root, host) {
   renderAsCanvasCard(root, linkedInTerminalComponent(host.relationshipId, host.personName), host);
 }
-function linkedInAskInText(queue, text) {
-  const haystack = text.toLowerCase();
+function linkedInAskInText(queue, text2) {
+  const haystack = text2.toLowerCase();
   for (const item of queue) {
     if (item.item_type !== "linkedin_disambiguation" || !item.relationship_id || !item.display_name) continue;
     const name = item.display_name.toLowerCase();
@@ -13186,6 +16029,34 @@ function linkedInAskInText(queue, text) {
 
 // src/views/PersonEditModal.ts
 var import_obsidian19 = require("obsidian");
+
+// src/views/personActions.ts
+function mergeCandidates(entities, sourceId) {
+  return entities.filter((e) => e.entity_type === "person" && e.entity_id !== sourceId);
+}
+var PERSON_ACTION_COPY = {
+  /**
+   * "Same person" (2026-11-15), the web's words: `source` moves, `target` is kept. `note`, beside it only when Myu keeps notes in
+   * the vault: the vault's own part (the note of the one who moves goes to the trash).
+   */
+  samePerson: (source, target, opts = {}) => ({
+    title: `${source} and ${target} are the same person?`,
+    body: `Everything kept under ${source} moves to ${target}: what was said, the promises, the mail and the meetings. You can undo it.`,
+    cta: IDENTITY_WORDS.samePerson,
+    ...opts.vaultNotes ? { note: `${source}\u2019s note in the Myu folder goes to the trash.` } : {}
+  }),
+  /** The menu item, the command and the card's edit window that open the picker. */
+  samePersonAs: "Same person as\u2026",
+  self: (name) => ({
+    title: `Is ${name} you?`,
+    // Backend folds the person into the self (memories, threads, names) as of
+    // 2026-08-29. The earlier wording that said it did NOT is gone.
+    body: `Everything Myu knows about ${name} (memories, open items, and the name itself) is added to your own profile, so future mentions of ${name} are recognised as you. ${name} is removed from your people, and their note in the Myu folder goes to the trash.`,
+    cta: "Yes, that\u2019s me"
+  })
+};
+
+// src/views/PersonEditModal.ts
 var PersonEditModal = class extends import_obsidian19.Modal {
   constructor(app, plugin, relationshipId, displayName, memories, onChanged, linkedinUrl = null) {
     super(app);
@@ -13220,7 +16091,7 @@ var PersonEditModal = class extends import_obsidian19.Modal {
       for (const memory of this.memories.slice(0, 12)) this.memoryRow(contentEl, memory);
     }
     new import_obsidian19.Setting(contentEl).setName("This person").setHeading();
-    new import_obsidian19.Setting(contentEl).setName("Merge into\u2026").setDesc("This is a duplicate of someone else Myu knows.").addButton((b) => b.setButtonText("Choose who stays").onClick(() => {
+    new import_obsidian19.Setting(contentEl).setName(PERSON_ACTION_COPY.samePersonAs).setDesc(IDENTITY_WORDS.samePersonHint(this.displayName)).addButton((b) => b.setButtonText(IDENTITY_WORDS.chooseWho).onClick(() => {
       this.close();
       this.plugin.mergePerson({ id: this.relationshipId, name: this.displayName });
     }));
@@ -13263,8 +16134,8 @@ var PersonEditModal = class extends import_obsidian19.Modal {
       (b) => b.setButtonText("Save facts").setCta().onClick(() => void this.saveFacts())
     );
   }
-  textField(host, label, key, placeholder = "") {
-    new import_obsidian19.Setting(host).setName(label).addText(
+  textField(host, label2, key, placeholder = "") {
+    new import_obsidian19.Setting(host).setName(label2).addText(
       (t) => t.setPlaceholder(placeholder).onChange((v) => {
         this.fields[key] = v.trim() === "" ? null : v.trim();
       })
@@ -13393,8 +16264,8 @@ function foldAfterOneLeft(map) {
   if (!map) return null;
   const count2 = Math.max(0, map.count - 1);
   if (count2 === 0) return { count: 0, line: null };
-  const line = map.line ? map.line.replace(String(map.count), String(count2)) : null;
-  return { count: count2, line };
+  const line2 = map.line ? map.line.replace(String(map.count), String(count2)) : null;
+  return { count: count2, line: line2 };
 }
 function withoutRow(rows, relationshipId) {
   return rows.filter((r) => mapRowId(r) !== relationshipId);
@@ -13409,6 +16280,15 @@ function firstNameOf(name) {
 }
 
 // src/views/CardView.ts
+var PAST_READ = 20;
+var PAST_SHOWN = 5;
+function factRow(host, block) {
+  const row = host.createDiv({ cls: "myu-prep-attr myu-card-fact" });
+  row.createSpan({ cls: "myu-prep-attr-label", text: block.label ?? "" });
+  row.createSpan({ cls: "myu-prep-attr-text", text: block.text });
+  if (block.sub) row.createSpan({ cls: "myu-prep-attr-sub", text: block.sub });
+  if (block.right) row.createSpan({ cls: "myu-prep-attr-acts" }).createSpan({ cls: "myu-prep-attr-right", text: block.right });
+}
 var CARD_VIEW_TYPE = "askmyu-card";
 var _CardView = class _CardView extends import_obsidian20.ItemView {
   constructor(leaf, plugin) {
@@ -13431,6 +16311,19 @@ var _CardView = class _CardView extends import_obsidian20.ItemView {
      * next press. Both forgotten when the pane moves to someone else.
      */
     this.mapWord = null;
+    /**
+     * The post (2026-10-30): the past 1:1s with the person on the card (read once per showing), whether all of them show,
+     * and which sections' older rows are open (Between you's "+ 4 older ▸").
+     */
+    this.past = null;
+    this.pastAll = false;
+    this.olderOpen = /* @__PURE__ */ new Set();
+    /**
+     * What has repeated between the two of you (2026-11-13): the server's sentences from the card's read (`noticed`, on the card or at
+     * the read's top level), and which of them are open to their sources.
+     */
+    this.repeated = [];
+    this.repeatedOpen = /* @__PURE__ */ new Set();
     /** The press in flight — tests wait on it. */
     this.busy = Promise.resolve();
   }
@@ -13467,17 +16360,17 @@ var _CardView = class _CardView extends import_obsidian20.ItemView {
     const key = this.plugin.keys.get();
     const memories = [];
     for (const row of rows) {
-      let text = (row.content ?? "").trim();
-      if (!text && typeof row.encrypted_content === "string" && row.encrypted_content && key) {
+      let text2 = (row.content ?? "").trim();
+      if (!text2 && typeof row.encrypted_content === "string" && row.encrypted_content && key) {
         try {
-          text = (await decryptWithKey(row.encrypted_content, key)).trim();
+          text2 = (await decryptWithKey(row.encrypted_content, key)).trim();
         } catch {
           continue;
         }
       }
       const id = row.memory_id;
-      if (!text || !id) continue;
-      memories.push({ memory_id: id, text, date: cardDayWords(row.memory_date) ?? void 0 });
+      if (!text2 || !id) continue;
+      memories.push({ memory_id: id, text: text2, date: cardDayWords(row.memory_date) ?? void 0 });
     }
     new PersonEditModal(this.app, this.plugin, entityId, this.entityName, memories, () => {
       void this.showEntity(this.entityType, entityId, this.entityName);
@@ -13495,6 +16388,11 @@ var _CardView = class _CardView extends import_obsidian20.ItemView {
     this.entityName = fallbackName;
     this.board = null;
     this.boardOpen = false;
+    this.past = null;
+    this.pastAll = false;
+    this.olderOpen.clear();
+    this.repeated = [];
+    this.repeatedOpen.clear();
     this.title = `Myu \u2014 ${fallbackName}`;
     this.state = "loading";
     this.card = null;
@@ -13514,8 +16412,10 @@ var _CardView = class _CardView extends import_obsidian20.ItemView {
     this.suggestions = [];
     this.linkedinKnown = res.data.linkedin_known !== false;
     this.card = res.data.card;
+    this.repeated = entityType === "person" ? repeatedOf(res.data) : [];
     this.state = "idle";
     this.render();
+    if (entityType === "person") void this.loadPast(entityId);
   }
   /** Both LinkedIn doors, shared with the Help Myu tab (linkedinCards.ts). */
   renderLinkedInRecovery(root) {
@@ -13572,9 +16472,9 @@ var _CardView = class _CardView extends import_obsidian20.ItemView {
     if (header?.email_primary) contacts.push([header.email_primary, `mailto:${header.email_primary}`]);
     if (contacts.length > 0) {
       const row = root.createDiv({ cls: "myu-quiet" });
-      contacts.forEach(([label, href], i) => {
+      contacts.forEach(([label2, href], i) => {
         if (i > 0) row.createSpan({ text: " \xB7 " });
-        const a = row.createEl("a", { text: label, href });
+        const a = row.createEl("a", { text: label2, href });
         a.setAttr("target", "_blank");
         a.setAttr("rel", "noopener");
       });
@@ -13600,18 +16500,34 @@ var _CardView = class _CardView extends import_obsidian20.ItemView {
         entity_references: this.card?.entity_id ? [{ entity_type: this.entityType, entity_id: this.card.entity_id, display_name: header?.display_name ?? "" }] : []
       }
     });
+    if (this.entityType === "person") renderRepeated(root, this.repeated, this.repeatedOpen);
     let undrawn = 0;
     for (const section of this.card.sections ?? []) {
-      const blocks = sectionBlocks(section);
+      if (this.entityType === "person" && this.repeated.length && isRepeatedSection(section)) continue;
+      const blocks = sectionBlocks(section, { firstName: prepFirstName(header?.display_name) });
       if (blocks.length === 0) {
         undrawn++;
         continue;
       }
       const zone = root.createDiv({ cls: "myu-zone" });
       if (section.title) zone.createDiv({ cls: "myu-whisper", text: section.title.toLowerCase() });
+      const sectionKey = section.section_id ?? section.section_type ?? "";
       for (const block of blocks) {
         if (block.kind === "narrative") {
           zone.createDiv({ cls: "myu-voice", text: block.text });
+        } else if (block.kind === "older" && !block.children?.length) {
+          zone.createDiv({ cls: "myu-quiet myu-card-older", text: block.text });
+        } else if (block.kind === "older") {
+          const open = this.olderOpen.has(sectionKey);
+          const fold = zone.createEl("button", { cls: "myu-aff myu-fold-aff myu-card-older", text: block.text, attr: { "aria-expanded": String(open) } });
+          fold.onclick = () => {
+            if (open) this.olderOpen.delete(sectionKey);
+            else this.olderOpen.add(sectionKey);
+            this.render();
+          };
+          if (open) for (const child of block.children ?? []) factRow(zone, child);
+        } else if (block.label !== void 0) {
+          factRow(zone, block);
         } else {
           const row = zone.createDiv({ cls: "myu-row" });
           if (block.meta) row.createSpan({ cls: "myu-time", text: block.meta });
@@ -13634,16 +16550,17 @@ var _CardView = class _CardView extends import_obsidian20.ItemView {
         });
       }
     }
+    if (this.entityType === "person" && this.entityId) this.renderPast(root, this.entityId);
     if (this.entityType === "person" && this.entityId) void this.renderRelated(root, this.entityId);
     if (undrawn > 0) {
       const disclosure = root.createDiv({ cls: "myu-zone" });
-      const link = disclosure.createEl("a", {
+      const link2 = disclosure.createEl("a", {
         cls: "myu-quiet",
         text: `${undrawn} ${undrawn === 1 ? "section can\u2019t" : "sections can\u2019t"} be shown here yet \u2014 open on the web`,
         href: `${this.plugin.settings.base_url.replace(/\/api\/?$/, "")}/dashboard`
       });
-      link.setAttr("target", "_blank");
-      link.setAttr("rel", "noopener");
+      link2.setAttr("target", "_blank");
+      link2.setAttr("rel", "noopener");
     }
     this.renderBoard(root);
   }
@@ -13740,12 +16657,12 @@ What do you make of these?`,
     } else if (lead) box.createDiv({ cls: "myu-voice", text: lead });
     const actions = box.createDiv({ cls: "myu-canvas-actions" });
     for (const o of offer.options ?? []) {
-      const label = (o.label ?? "").trim();
-      if (!label) continue;
+      const label2 = (o.label ?? "").trim();
+      if (!label2) continue;
       if (o.init?.provider === "google" || o.init?.provider === "microsoft") {
         const provider = o.init.provider;
         const opts = { scopeSet: o.init.scope_set ?? "history", returnTo: o.init.return_to };
-        const b = actions.createEl("button", { cls: `myu-affordance${o.id === "gmail" ? " myu-cta" : ""}`, text: label });
+        const b = actions.createEl("button", { cls: `myu-affordance${o.id === "gmail" ? " myu-cta" : ""}`, text: label2 });
         b.onclick = async () => {
           b.disabled = true;
           const init = provider === "google" ? await this.plugin.backend.googleOAuthInit(opts).catch(() => null) : await this.plugin.backend.microsoftOAuthInit(opts).catch(() => null);
@@ -13759,10 +16676,10 @@ What do you make of these?`,
           }
         };
       } else if (o.id === "imap") {
-        const b = actions.createEl("button", { cls: "myu-affordance", text: label });
+        const b = actions.createEl("button", { cls: "myu-affordance", text: label2 });
         b.onclick = () => this.plugin.openSettingsAt("Other email (IMAP)");
       } else if (o.id === "not_now") {
-        const b = actions.createEl("button", { cls: "myu-affordance myu-link-button", text: label });
+        const b = actions.createEl("button", { cls: "myu-affordance myu-link-button", text: label2 });
         b.onclick = () => {
           _CardView.mailOfferHidden = true;
           box.remove();
@@ -13782,12 +16699,12 @@ What do you make of these?`,
       if (!entityId) return;
       const res = await this.plugin.backend.getEntityDispatch(this.entityType, entityId).catch(() => null);
       host.empty();
-      const line = res?.data?.dispatch_sentence?.trim();
-      if (!res?.ok || !line) {
+      const line2 = res?.data?.dispatch_sentence?.trim();
+      if (!res?.ok || !line2) {
         host.createDiv({ cls: "myu-quiet", text: "Nothing new to say right now." });
         return;
       }
-      host.createDiv({ cls: "myu-voice", text: line });
+      host.createDiv({ cls: "myu-voice", text: line2 });
       const fp = res.data?.dispatch_receipt?.signal_fingerprint;
       if (typeof fp === "string" && fp) {
         const drop = host.createEl("button", { cls: "myu-affordance myu-link-button", text: "Dismiss" });
@@ -13799,6 +16716,40 @@ What do you make of these?`,
     };
   }
   /** The expanded feed card's related people + memories (feed/related-*). Quiet rows; people open their card. */
+  /** The past 1:1s with this person (`GET /prep/history?relationship_id=`), read once each time the card is shown. */
+  async loadPast(relationshipId) {
+    const res = await this.plugin.backend.getPrepHistory({ relationship_id: relationshipId }, PAST_READ).catch(() => null);
+    if (this.entityId !== relationshipId || !res?.ok) return;
+    this.past = { forId: relationshipId, rows: (res.data?.history ?? []).filter((r) => !!r.event_id), across: res.data?.across?.text?.trim() || null };
+    this.render();
+  }
+  /**
+   * Past 1:1s (2026-10-30, BRIEF_WEB_MEETING_POST §3): one row per meeting, its numbers and what wrote its record
+   * ("Thu 29 Oct · 2 of 3 covered · 2 decisions · 7 actions · notes by Gemini"), Open ▸ to that meeting's page; the
+   * first few, then "+ {n} older ▸"; the across-line under them when the server sends one.
+   */
+  renderPast(root, relationshipId) {
+    const past = this.past?.forId === relationshipId ? this.past : null;
+    if (!past || !past.rows.length) return;
+    const zone = root.createDiv({ cls: "myu-zone myu-card-past" });
+    zone.createDiv({ cls: "myu-whisper", text: MEETING_POST_WORDS.pastOneOnOnes });
+    const shown2 = this.pastAll ? past.rows : past.rows.slice(0, PAST_SHOWN);
+    for (const r of shown2) {
+      const row = zone.createDiv({ cls: "myu-row myu-card-past-row", attr: { "data-event": r.event_id } });
+      row.createSpan({ cls: "myu-row-title", text: pastMeetingWords(r) });
+      const open = row.createEl("button", { cls: "myu-aff", text: PREP_LIST_WORDS.open });
+      open.onclick = () => void this.plugin.openPrep(r.event_id);
+    }
+    const rest = past.rows.length - shown2.length;
+    if (rest > 0) {
+      const more = zone.createEl("button", { cls: "myu-aff myu-fold-aff", text: MEETING_POST_WORDS.older(rest) });
+      more.onclick = () => {
+        this.pastAll = true;
+        this.render();
+      };
+    }
+    if (past.across) zone.createDiv({ cls: "myu-quiet myu-card-across", text: past.across });
+  }
   async renderRelated(root, relationshipId) {
     const [people, memories] = await Promise.all([
       this.plugin.backend.getRelatedPersons(relationshipId).catch(() => null),
@@ -13833,8 +16784,8 @@ What do you make of these?`,
     if (!page) return;
     const note = this.plugin.app.vault.getAbstractFileByPath(page.path);
     if (!(note instanceof import_obsidian20.TFile)) return;
-    const link = root.createEl("button", { cls: "myu-affordance", text: "Open your note" });
-    link.onclick = () => void this.app.workspace.getLeaf(false).openFile(note);
+    const link2 = root.createEl("button", { cls: "myu-affordance", text: "Open your note" });
+    link2.onclick = () => void this.app.workspace.getLeaf(false).openFile(note);
   }
 };
 /**
@@ -13849,231 +16800,11 @@ var CardView = _CardView;
 // src/views/PrepView.ts
 var import_obsidian22 = require("obsidian");
 
-// src/prepCard.ts
-var PREP_WORDS = {
-  parts: {
-    purpose: "What it\u2019s for",
-    since_last: "Since last time",
-    moves: "Your moves",
-    power: "Where power sits",
-    watch: "One thing to watch"
-  },
-  why: "why \u25B8",
-  whyOpen: "why \u25BE",
-  more: "more \u25B8",
-  less: "less \u25B4",
-  stands: "Where things stand",
-  youOwe: "You owe",
-  theyOwe: "They owe",
-  worksBest: "How they like to work",
-  stance: "In your threads",
-  room: "The room",
-  beforeYouGo: "Before you go in",
-  planned: "What\u2019s planned",
-  documents: "Documents",
-  setUpEmail: "The email that set it up",
-  lastNotes: "Last time\u2019s notes",
-  openNotes: "Open the notes \u25B8",
-  notReplied: "Hasn\u2019t replied",
-  notRepliedMany: "Haven\u2019t replied",
-  afterwards: "Afterwards",
-  candidateFacts: "About the candidate",
-  yourTopics: "Your topics",
-  openItem: "open \u25B8",
-  openConversation: "Open the conversation \u25B8",
-  writeHowItWent: "Write how it went \u25B8",
-  answerPlaceholder: "Type your answer",
-  sendAnswer: "Send",
-  partial: "From your calendar only for now. The rest comes when you open it with your key here.",
-  loading: "Getting it ready\u2026",
-  failed: "That didn\u2019t load. Try again in a moment."
-};
-function prepPartLabel(part) {
-  return PREP_WORDS.parts[part] ?? part.replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase());
-}
-function prepEvidenceFor(prep, ids) {
-  const out = [];
-  for (const id of ids ?? []) {
-    const ev = prep.evidence?.[id];
-    if (ev) out.push({ id, ev });
-  }
-  return out;
-}
-function prepPersonHasMore(p) {
-  return !!(p.stands || p.works_best || p.stance || p.last_time || p.you_owe.length || p.they_owe.length);
-}
-function prepPhase(prep, now = Date.now()) {
-  const t = Date.parse(prep.starts_at);
-  return Number.isFinite(t) && now >= t ? "after" : "before";
-}
-function prepDocument(d) {
-  if (typeof d === "string") return { name: d, url: null };
-  return { name: d.title || d.name || d.fileUrl || d.url || "", url: d.fileUrl || d.url || null };
-}
-function prepNotRepliedLabel(names) {
-  return names.length === 1 ? PREP_WORDS.notReplied : PREP_WORDS.notRepliedMany;
-}
-function prepTextLines(prep) {
-  const out = [];
-  const push = (s2) => {
-    const t = s2?.trim();
-    if (t) out.push(t);
-  };
-  for (const t of prep.top ?? []) {
-    push(t.text);
-    for (const it of t.items ?? []) push(it.text);
-  }
-  for (const p of prep.people ?? []) {
-    push(p.to_you);
-    push(p.stands);
-    push(p.stance);
-    for (const o of p.you_owe) push(`You owe ${p.name}: ${o}`);
-    for (const o of p.they_owe) push(`${p.name} owes you: ${o}`);
-  }
-  for (const l of prep.room?.lines ?? []) push(l.text);
-  push(prep.before_you_go?.agenda);
-  push(prep.before_you_go?.last_notes?.summary);
-  for (const f of prep.interview?.candidate_facts ?? []) push(f);
-  push(prep.afterwards);
-  return out;
-}
-function isPrepV2(p) {
-  return !!p && typeof p === "object" && p.version === 2 && Array.isArray(p.top);
-}
-function prepAskMode(ask) {
-  if (ask.select === "many") return "many";
-  return ask.input === "choice" ? "choice" : "text";
-}
-var PREP_VIEW_WORDS = {
-  /** The pane's tab before a card has loaded; with one, the meeting's title follows the dash. */
-  pane: "Myu \u2014 meeting",
-  /** 404: the event is not on this account's calendar. */
-  unknown: "Myu can\u2019t find this meeting on your calendar.",
-  retry: "Try again",
-  /** The label over Myu's own words (its question, the arc's invitation, what it said back). */
-  myu: "myu",
-  /** A typed answer went into the meeting's conversation. */
-  sent: "Sent. Myu\u2019s reply is in the conversation.",
-  /** A meeting's notes, shown in place when the vault has no note for that meeting. */
-  notesLoading: "Opening the notes\u2026",
-  notesEmpty: "Nothing in those notes yet.",
-  notesFailed: "Those notes didn\u2019t open. Try again in a moment."
-};
-function prepWhen(iso) {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  const day = d.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" });
-  const time = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }).toLowerCase().replace(":00", "").replace(/\s/g, "");
-  return `${day}, ${time}`;
-}
-var MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-function prepShortDate(iso) {
-  const d = new Date(iso ?? "");
-  return Number.isNaN(d.getTime()) ? "" : `${d.getDate()} ${MONTHS[d.getMonth()]}`;
-}
-function evidenceOpening(ev) {
-  const open = ev.open;
-  if (!open?.id) return null;
-  switch (open.kind) {
-    case "url":
-    case "linkedin":
-      return /^https?:\/\//i.test(open.id) ? { kind: "link", url: open.id } : null;
-    case "email":
-      return open.url && /^https?:\/\//i.test(open.url) ? { kind: "link", url: open.url } : null;
-    case "journal":
-      return { kind: "journal", id: open.id };
-    case "meeting":
-      return { kind: "meeting", id: open.id };
-    case "space":
-      return { kind: "space", id: open.id };
-    default:
-      return null;
-  }
-}
-function meetingNoteLines(detail) {
-  const text = (v) => typeof v === "string" ? v.trim() : "";
-  const list2 = (v) => Array.isArray(v) ? v.map((i) => typeof i === "string" ? i.trim() : text(i?.text) || text(i?.content)).filter(Boolean) : [];
-  const m = detail?.meeting ?? {};
-  return [text(m.summary) || text(m.debrief), ...list2(detail?.key_points), ...list2(detail?.decisions)].filter(Boolean);
-}
-function prepChatContext(prep, phase = prepPhase(prep)) {
-  const starts = Date.parse(prep.starts_at);
-  return {
-    source: "prep",
-    source_id: prep.event_id,
-    prep_phase: phase,
-    prep_event_id: prep.event_id,
-    prep_meeting_title: prep.title,
-    ...Number.isFinite(starts) ? { prep_meeting_starts_at: starts } : {},
-    prep_claims: prepTextLines(prep),
-    entity_references: prep.people.flatMap((p) => p.relationship_id ? [{ entity_type: "person", entity_id: p.relationship_id, display_name: p.name }] : [])
-  };
-}
-function prepOccurrenceKey(prep) {
-  if (prep.occurrence_key) return String(prep.occurrence_key);
-  const t = Date.parse(prep.starts_at);
-  return Number.isFinite(t) && t > 0 ? String(t) : null;
-}
-var settledNothing = () => ({ said: null, note: null, open: [], conversation: null, closed: false });
-var failedWords = (error) => error === "offline" ? LINE_ANSWER_WORDS.offline : LINE_ANSWER_WORDS.failed;
-function isHoldChoice(choiceId) {
-  return choiceId === "hold_time" || choiceId === "hold";
-}
-function holdPage(effects, arc) {
-  const ready = (effects ?? []).find((e) => e.type === "invite_ready" && typeof e.handoff_url === "string" && /^https?:\/\//i.test(e.handoff_url));
-  if (ready && typeof ready.handoff_url === "string") return ready.handoff_url;
-  return arc?.hold_link && /^https?:\/\//i.test(arc.hold_link) ? arc.hold_link : null;
-}
-function conversationOf(effects) {
-  const e = (effects ?? []).find((x) => x.type === "open_conversation" && typeof x.subject_type === "string" && typeof x.subject_id === "string");
-  if (!e || typeof e.subject_type !== "string" || typeof e.subject_id !== "string") return null;
-  return { subject_type: e.subject_type, subject_id: e.subject_id, ...typeof e.occurrence_key === "string" && e.occurrence_key ? { occurrence_key: e.occurrence_key } : {} };
-}
-async function answerPrepPick(backend, line, answer) {
-  const res = await backend.answerMyuLine(line.line_id, answer).catch(() => null);
-  if (lineClosed(res)) return { ...settledNothing(), closed: true };
-  if (!res?.ok || !res.data) return { ...settledNothing(), note: failedWords(res?.error) };
-  const said = readbackText(res.data);
-  if (res.data.line_open) return { ...settledNothing(), note: said };
-  return { ...settledNothing(), said: said ?? "" };
-}
-async function sendPrepAnswer(backend, prep, text, pasted = []) {
-  const content = text.trim();
-  if (!content && pasted.length === 0) return settledNothing();
-  const occurrenceKey = prepOccurrenceKey(prep) ?? void 0;
-  const read = await backend.getSubjectConversation("meeting", prep.event_id, { occurrenceKey }).catch(() => null);
-  const conversationId = read?.ok ? read.data?.conversation_id : void 0;
-  if (!conversationId) return { ...settledNothing(), note: failedWords(read?.error) };
-  const res = await backend.addSubjectTurn(conversationId, content, pasted).catch(() => null);
-  if (!res?.ok) return { ...settledNothing(), note: failedWords(res?.error) };
-  if (pastedTextLost(pasted.length, res.data)) return { ...settledNothing(), note: PASTE_WORDS.lost, pastedLost: true };
-  return { ...settledNothing(), said: PREP_VIEW_WORDS.sent };
-}
-async function answerPrepLine(backend, prep, line, choiceId) {
-  const onArc = !!prep.arc && prep.arc.line_id === line.line_id;
-  const hold = onArc && isHoldChoice(choiceId);
-  const res = await backend.answerMyuLine(line.line_id, { choice_id: choiceId }).catch(() => null);
-  if (lineClosed(res)) return { ...settledNothing(), closed: true };
-  if (!res?.ok || !res.data) {
-    const page2 = hold ? holdPage(null, prep.arc) : null;
-    return { ...settledNothing(), note: failedWords(res?.error), open: page2 ? [page2] : [] };
-  }
-  const effects = res.data.effects ?? [];
-  const page = hold ? holdPage(effects, prep.arc) : null;
-  const occurrenceKey = prepOccurrenceKey(prep);
-  const nowRef = { subject_type: "meeting", subject_id: prep.event_id, ...occurrenceKey ? { occurrence_key: occurrenceKey } : {} };
-  const conversation = conversationOf(effects) ?? (onArc && choiceId === "now" ? nowRef : null);
-  const said = readbackText(res.data);
-  const open = page ? [page] : [];
-  if (res.data.line_open) return { ...settledNothing(), note: said, open, conversation };
-  return { ...settledNothing(), said: said ?? "", open, conversation };
-}
-
 // src/views/pastedChips.ts
 function attachPasteListeners(input, host) {
   let draggingHere = false;
-  const take = (e, text, source) => {
-    if (!text || !shouldChip(text) || host.isTyping?.()) return;
+  const take = (e, text2, source) => {
+    if (!text2 || !shouldChip(text2) || host.isTyping?.()) return;
     e.preventDefault();
     const value = input.value;
     const start = Math.min(input.selectionStart ?? value.length, value.length);
@@ -14082,7 +16813,7 @@ function attachPasteListeners(input, host) {
       if (end > start) input.value = value.slice(0, start) + value.slice(end);
       input.setSelectionRange(start, start);
     }
-    host.addPasted(text, source, start);
+    host.addPasted(text2, source, start);
   };
   const box = input;
   box.addEventListener("paste", (e) => take(e, e.clipboardData?.getData("text/plain") ?? "", "paste"));
@@ -14188,6 +16919,20 @@ var PastedTextModal = class extends import_obsidian21.Modal {
 
 // src/views/PrepView.ts
 var PREP_VIEW_TYPE = "askmyu-prep";
+var BRIEF_PARTS = /* @__PURE__ */ new Set(["purpose", "moves"]);
+var READING_GIVE_UP_MS = READING_LONG_MS * 6;
+var REPORT_WAIT_MS = READING_LONG_MS * 3;
+var RECORD_POLL_MS = 6e4;
+var W2 = PREP_LIST_WORDS;
+var P = MEETING_POST_WORDS;
+function isSliced(p) {
+  return p.line !== void 0 || p.line_kind !== void 0 || Array.isArray(p.changed) || Array.isArray(p.open);
+}
+function webUrl(url) {
+  const u = (url ?? "").trim();
+  return /^https?:\/\//i.test(u) ? u : null;
+}
+var failedWords3 = (error) => error === "offline" ? LINE_ANSWER_WORDS.offline : PREP_VIEW_WORDS.listFailed;
 var PrepView = class extends import_obsidian22.ItemView {
   constructor(leaf, plugin) {
     super(leaf);
@@ -14197,9 +16942,10 @@ var PrepView = class extends import_obsidian22.ItemView {
     this.state = "idle";
     /** Guards a slow read for an earlier meeting from painting over the one now asked for. */
     this.readSeq = 0;
-    /** Which "why ▸" lists are open, by line key; which people show their "more". */
+    /** Which "why ▸" lists are open, by line key. */
     this.openWhy = /* @__PURE__ */ new Set();
-    this.openPeople = /* @__PURE__ */ new Set();
+    /** People opened or folded by hand, by place; the rest follow the server's `open_default`. */
+    this.peopleOpen = /* @__PURE__ */ new Map();
     /** A meeting's notes shown in place: one at a time, under the door that asked. */
     this.notes = null;
     /** The question before: the typed words, and whether a line is being answered. */
@@ -14226,6 +16972,42 @@ var PrepView = class extends import_obsidian22.ItemView {
     this.said = null;
     /** Lines answered here: not drawn again, even from a card read before the answer landed. */
     this.answered = /* @__PURE__ */ new Set();
+    /** The person's list for this meeting (2026-10-29): every change shows at once and goes through the list's doors. */
+    this.list = this.newList(null);
+    /** In the meeting: "+ add" opened the add box for the thing that just came up. */
+    this.addOpen = false;
+    /** Myu's prep in the meeting and after: folded to one line until the person opens it. */
+    this.prepOpen = false;
+    /** The meeting's notes as typed (the box's words while the page shows this meeting), and their save. */
+    this.notesDraft = null;
+    this.notesTimer = null;
+    this.notesFailed = false;
+    this.notesFocused = false;
+    this.notesStatusEl = null;
+    /** When Myu began reading this meeting (for "Taking longer than usual"), and the read that follows. */
+    this.readingSince = null;
+    this.rereadTimer = null;
+    /** Done was pressed at: the page reads again until Myu's report is there, for a while. */
+    this.doneAt = null;
+    this.doneBusy = false;
+    this.doneNote = null;
+    /** The past 1:1s, once asked for. */
+    this.history = null;
+    /** After: action items and reminders being answered, and what did not go. */
+    this.afterBusy = /* @__PURE__ */ new Set();
+    this.afterNote = null;
+    /** Suggestions taken for another meeting's list (after this one): on their way or added, by their words; what did not go. */
+    this.offeredElsewhere = /* @__PURE__ */ new Map();
+    this.suggestNote = null;
+    /**
+     * The post (2026-10-30): each fold open or shut, as the person left it (also remembered in the vault's local storage,
+     * `foldMemoryKey`); a person's own rows under Owed by others; a to-do dropped and what did not go.
+     */
+    this.folds = /* @__PURE__ */ new Map();
+    this.owedOpen = /* @__PURE__ */ new Set();
+    this.yoursNote = null;
+    /** They may ask about (2026-11-13): which items are open to their sources. */
+    this.mayAskOpen = /* @__PURE__ */ new Set();
   }
   getViewType() {
     return PREP_VIEW_TYPE;
@@ -14243,16 +17025,20 @@ var PrepView = class extends import_obsidian22.ItemView {
     this.render();
   }
   async onClose() {
+    void this.flushNotes();
+    this.clearReread();
     this.plugin.linesSeen?.unwatch(this.contentEl);
     this.contentEl.empty();
   }
-  /** Show a meeting's card: everything opened or typed for the one before starts fresh. */
+  /** Show a meeting's page: everything opened or typed for the one before starts fresh (its notes are saved first). */
   async showMeeting(eventId) {
+    void this.flushNotes();
+    this.clearReread();
     this.eventId = eventId;
     this.state = "loading";
     this.prep = null;
     this.openWhy.clear();
-    this.openPeople.clear();
+    this.peopleOpen.clear();
     this.notes = null;
     this.notesUnder.clear();
     this.answered.clear();
@@ -14262,10 +17048,45 @@ var PrepView = class extends import_obsidian22.ItemView {
     this.busy = false;
     this.said = null;
     this.pickFor = null;
+    this.list = this.newList(eventId);
+    this.addOpen = false;
+    this.prepOpen = false;
+    this.notesDraft = null;
+    this.notesFailed = false;
+    this.notesFocused = false;
+    this.readingSince = null;
+    this.doneAt = null;
+    this.doneBusy = false;
+    this.doneNote = null;
+    this.history = null;
+    this.afterBusy.clear();
+    this.afterNote = null;
+    this.offeredElsewhere.clear();
+    this.suggestNote = null;
+    this.folds.clear();
+    this.owedOpen.clear();
+    this.yoursNote = null;
+    this.mayAskOpen.clear();
     this.render();
     await this.readCard();
+    if (this.eventId === eventId && this.prep && prepStateOf(this.prep) === "before" && import_obsidian22.Platform.isDesktopApp) {
+      this.list.addFocused = true;
+      this.render();
+    }
   }
-  /** Read the card. `quiet`: the one on screen stays while it reads (after an answer). */
+  /**
+   * A line changed on the server: while Myu is still reading this meeting, or after it while its record has not come in,
+   * the page reads again now.
+   */
+  lineUpdated() {
+    const prep = this.prep;
+    if (prep && (prep.reading || prep.after?.reading || prepStateOf(prep) === "after" && !postHasRecord(prep.after))) void this.readCard(true);
+  }
+  /** The list changed elsewhere (a Today row, an offer in the chat pane): this meeting's page reads again. */
+  listChanged(eventId) {
+    if (this.prep && (!eventId || eventId === this.eventId)) void this.readCard(true);
+  }
+  /** Read the card. `quiet`: the one on screen stays while it reads (after an answer, while Myu reads). */
   async readCard(quiet = false) {
     const eventId = this.eventId;
     if (!eventId) return;
@@ -14280,11 +17101,70 @@ var PrepView = class extends import_obsidian22.ItemView {
     if (isPrepV2(prep)) {
       this.prep = prep;
       this.state = "idle";
+      this.followReading(prep);
     } else if (!quiet || !this.prep) {
       this.prep = null;
       this.state = res?.status === 404 ? "unknown" : "failed";
     }
     this.render();
+  }
+  /**
+   * While Myu reads the meeting the page reads again every few seconds (and at once on the meeting's line update),
+   * for a while; after Done, until Myu's report is there. Then it stays still.
+   */
+  followReading(prep) {
+    this.clearReread();
+    const now = Date.now();
+    if (prep.reading && !prep.reading_failed || prepStateOf(prep) === "after" && prep.after?.reading) {
+      this.readingSince ?? (this.readingSince = now);
+      if (now - this.readingSince < READING_GIVE_UP_MS) this.reread(READING_POLL_MS);
+      return;
+    }
+    this.readingSince = null;
+    const after = prep.after;
+    const waitingForReport = prepStateOf(prep) === "after" && !after?.report && !after?.report_failed;
+    if (this.doneAt !== null && waitingForReport && now - this.doneAt < REPORT_WAIT_MS) {
+      this.reread(READING_POLL_MS);
+      return;
+    }
+    if (prepStateOf(prep) === "after" && !postHasRecord(after)) this.reread(RECORD_POLL_MS);
+  }
+  reread(ms) {
+    this.rereadTimer = window.setTimeout(() => {
+      this.rereadTimer = null;
+      void this.readCard(true);
+    }, ms);
+  }
+  clearReread() {
+    if (this.rereadTimer !== null) window.clearTimeout(this.rereadTimer);
+    this.rereadTimer = null;
+  }
+  /** This meeting as the list's doors name it. */
+  meetingRef() {
+    const prep = this.prep;
+    return prep ? { event_id: prep.event_id, occurrence_key: prepOccurrenceKey(prep) } : null;
+  }
+  /**
+   * The list's keeper for one meeting: its items are that meeting's card's, in their order. A change still on its way
+   * when another meeting is opened lands nowhere on the page (the next read of that meeting shows it).
+   */
+  newList(eventId) {
+    const mine = () => this.prep && this.prep.event_id === eventId ? this.prep : null;
+    return new PrepListKeeper({
+      backend: () => this.plugin.backend,
+      meeting: () => mine() ? this.meetingRef() : null,
+      items: () => [...mine()?.items ?? []].sort((a, b) => (a.position ?? 0) - (b.position ?? 0)),
+      setItems: (items) => {
+        const prep = mine();
+        if (!prep) return;
+        this.prep = { ...prep, items, covered: { done: items.filter((i) => i.done).length, total: items.length } };
+      },
+      onChange: () => {
+        if (this.eventId === eventId) this.render();
+      },
+      // Today's row for this meeting reads again.
+      onSaved: () => this.plugin.requestTodayRefresh()
+    });
   }
   // ── what the buttons do ───────────────────────────────────────────────────
   /** The question before, typed: into the meeting's own conversation. Then the card reads again. */
@@ -14322,8 +17202,8 @@ var PrepView = class extends import_obsidian22.ItemView {
     }
     if (this.sendEl) this.sendEl.disabled = this.busy || !!pastedBlocksProblem(this.pasted);
   }
-  addPasted(text, source, at) {
-    const out = chipAdded(this.pasted, text, source, at);
+  addPasted(text2, source, at) {
+    const out = chipAdded(this.pasted, text2, source, at);
     this.pasted = out.chips;
     this.undo = out.undo;
     if (this.inputEl) this.draft = this.inputEl.value;
@@ -14375,45 +17255,45 @@ var PrepView = class extends import_obsidian22.ItemView {
     }).open();
   }
   /** One of a line's own choices (the question's Skip, the arc's Hold time / Now / Skip). */
-  async choose(line, choiceId) {
+  async choose(line2, choiceId) {
     const prep = this.prep;
     if (!prep || this.busy) return;
     this.busy = true;
-    this.notesUnder.delete(line.line_id);
+    this.notesUnder.delete(line2.line_id);
     this.render();
-    const out = await answerPrepLine(this.plugin.backend, prep, line, choiceId);
+    const out = await answerPrepLine(this.plugin.backend, prep, line2, choiceId);
     for (const url of out.open) window.open(url, "_blank");
     if (out.conversation) void this.plugin.openConversationRef(out.conversation, prep.title);
     if (this.eventId !== prep.event_id) return;
     this.busy = false;
     if (out.note) {
-      this.notesUnder.set(line.line_id, out.note);
+      this.notesUnder.set(line2.line_id, out.note);
       this.render();
       return;
     }
-    await this.afterAnswer(line, out);
+    await this.afterAnswer(line2, out);
   }
   /** A pick inside the card: a typed name, or the picks sent together. The card reads again after. */
-  async answerPick(line, answer) {
+  async answerPick(line2, answer) {
     const prep = this.prep;
     if (!prep || this.busy || !answer) return;
     this.busy = true;
-    this.notesUnder.delete(line.line_id);
+    this.notesUnder.delete(line2.line_id);
     this.render();
-    const out = await answerPrepPick(this.plugin.backend, line, answer);
+    const out = await answerPrepPick(this.plugin.backend, line2, answer);
     if (this.eventId !== prep.event_id) return;
     this.busy = false;
     if (out.note) {
-      this.notesUnder.set(line.line_id, out.note);
+      this.notesUnder.set(line2.line_id, out.note);
       this.render();
       return;
     }
-    await this.afterAnswer(line, out);
+    await this.afterAnswer(line2, out);
   }
   /** A settled line leaves the card (what Myu said back stays in its place); the card and Today read again. */
-  async afterAnswer(line, out) {
+  async afterAnswer(line2, out) {
     if (!out.closed) {
-      this.answered.add(line.line_id);
+      this.answered.add(line2.line_id);
       this.said = out.said?.trim() || null;
     }
     this.plugin.requestTodayRefresh();
@@ -14454,6 +17334,109 @@ var PrepView = class extends import_obsidian22.ItemView {
     this.notes = res?.ok ? { ...asked, state: "shown", lines: meetingNoteLines(res.data) } : { ...asked, state: "failed" };
     this.render();
   }
+  // ── the meeting and after (2026-10-29) ─────────────────────────────────────
+  /** The notes as typed: saved a moment after the last key (last write wins), never on each one. */
+  scheduleNotesSave() {
+    if (this.notesTimer !== null) window.clearTimeout(this.notesTimer);
+    this.notesTimer = window.setTimeout(() => {
+      this.notesTimer = null;
+      void this.saveNotes();
+    }, NOTES_SAVE_MS);
+  }
+  /** A save that is waiting goes now (another meeting is opened, the pane closes, Done). */
+  async flushNotes() {
+    if (this.notesTimer === null) return;
+    window.clearTimeout(this.notesTimer);
+    this.notesTimer = null;
+    await this.saveNotes();
+  }
+  async saveNotes() {
+    const ref = this.meetingRef();
+    const text2 = this.notesDraft;
+    if (!ref || text2 === null) return;
+    const res = await this.plugin.backend.savePrepNotes(ref, text2).catch(() => null);
+    if (this.eventId !== ref.event_id) return;
+    const failed = !res?.ok;
+    if (!failed && this.prep) this.prep = { ...this.prep, notes: res.data?.notes ?? { text: text2 } };
+    if (failed === this.notesFailed) return;
+    this.notesFailed = failed;
+    this.notesStatusEl?.setText(failed ? PREP_VIEW_WORDS.notesNotSaved : W2.savedAsYouType);
+  }
+  /** Done, the person's: the notes are saved, what had no tick carries, and the page reads again for Myu's report. */
+  async done() {
+    const ref = this.meetingRef();
+    if (!ref || this.doneBusy) return;
+    this.doneBusy = true;
+    this.doneNote = null;
+    this.render();
+    await this.flushNotes();
+    const res = await this.plugin.backend.prepDone(ref).catch(() => null);
+    if (this.eventId !== ref.event_id) return;
+    this.doneBusy = false;
+    if (!res?.ok) {
+      this.doneNote = failedWords3(res?.error);
+      this.render();
+      return;
+    }
+    this.doneAt = Date.now();
+    this.plugin.requestTodayRefresh();
+    await this.readCard(true);
+  }
+  /** An action item Myu read in the notes, removed before it is kept. */
+  async removeAction(id) {
+    const ref = this.meetingRef();
+    if (!ref || this.afterBusy.has(id)) return;
+    this.afterBusy.add(id);
+    this.afterNote = null;
+    this.render();
+    const res = await this.plugin.backend.removePrepAction(ref, id).catch(() => null);
+    if (this.eventId !== ref.event_id) return;
+    this.afterBusy.delete(id);
+    if (res?.ok && this.prep?.after) {
+      this.prep = { ...this.prep, after: { ...this.prep.after, action_items: (this.prep.after.action_items ?? []).filter((a) => a.id !== id) } };
+    } else if (!res?.ok) {
+      this.afterNote = failedWords3(res?.error);
+    }
+    this.render();
+  }
+  /** The reminder Myu offered: Yes ▸ takes it (a line on the morning you next meet), × lets it go. */
+  async answerReminder(id, yes) {
+    const ref = this.meetingRef();
+    if (!ref || this.afterBusy.has(id)) return;
+    this.afterBusy.add(id);
+    this.afterNote = null;
+    this.render();
+    const res = await this.plugin.backend.answerPrepReminder(ref, id, yes).catch(() => null);
+    if (this.eventId !== ref.event_id) return;
+    this.afterBusy.delete(id);
+    if (res?.ok && this.prep?.after) {
+      const reminders = (this.prep.after.reminders ?? []).map((r) => r.id === id ? { ...r, status: yes ? "accepted" : "declined" } : r);
+      this.prep = { ...this.prep, after: { ...this.prep.after, reminders } };
+    } else if (!res?.ok) {
+      this.afterNote = failedWords3(res?.error);
+    }
+    this.render();
+  }
+  /**
+   * "Past 1:1s with Reid ▸" (a 1:1, by the person) or "Earlier Roadmap sync ▸" (a recurring meeting, by its series): the
+   * past meetings under the link (pressed again, they fold away).
+   */
+  async toggleHistory(of) {
+    if (this.history && this.history.state !== "loading") {
+      this.history = null;
+      this.render();
+      return;
+    }
+    const eventId = this.eventId;
+    const asked = { state: "loading", rows: [] };
+    this.history = asked;
+    this.render();
+    const res = await this.plugin.backend.getPrepHistory(of).catch(() => null);
+    if (this.eventId !== eventId || this.history !== asked) return;
+    const rows = (res?.data?.history ?? []).filter((r) => r.event_id && r.event_id !== eventId);
+    this.history = res?.ok ? { state: "shown", rows, across: res.data?.across?.text?.trim() || null } : { state: "failed", rows: [] };
+    this.render();
+  }
   // ── render ────────────────────────────────────────────────────────────────
   render() {
     const root = this.contentEl;
@@ -14461,6 +17444,7 @@ var PrepView = class extends import_obsidian22.ItemView {
     this.inputEl = null;
     this.pastedRowEl = null;
     this.sendEl = null;
+    this.notesStatusEl = null;
     if (this.state === "loading") {
       root.createEl("p", { cls: "myu-quiet", text: PREP_WORDS.loading });
       return;
@@ -14477,29 +17461,444 @@ var PrepView = class extends import_obsidian22.ItemView {
       return;
     }
     const prep = this.prep;
-    const head = root.createDiv({ cls: "myu-prep-head" });
-    head.createDiv({ cls: "myu-card-title", text: prep.title });
-    const when = prepWhen(prep.starts_at);
-    if (when) head.createDiv({ cls: "myu-quiet myu-prep-meeting", text: when });
+    const state = prepStateOf(prep);
+    this.renderHead(root, prep, state);
     if (prep.partial) root.createEl("p", { cls: "myu-quiet myu-prep-partial", text: PREP_WORDS.partial });
     if (this.said) {
       const said = root.createDiv({ cls: "myu-prep-said" });
       said.createDiv({ cls: "myu-whisper", text: PREP_VIEW_WORDS.myu });
       said.createDiv({ cls: "myu-voice", text: this.said });
     }
-    if (prep.ask && !this.answered.has(prep.ask.line_id)) this.renderAsk(root, prep.ask);
-    if (prep.arc && !this.answered.has(prep.arc.line_id)) this.renderArc(root, prep.arc);
-    this.renderTop(root, prep);
-    if (prep.interview) this.renderInterview(root, prep.interview);
-    this.renderPeople(root, prep);
-    this.renderRoom(root, prep);
-    this.renderBefore(root, prep);
-    if (prep.afterwards?.trim()) {
-      const zone = root.createDiv({ cls: "myu-zone myu-prep-afterwards" });
-      zone.createDiv({ cls: "myu-whisper", text: PREP_WORDS.afterwards });
-      zone.createDiv({ cls: "myu-prep-text", text: prep.afterwards });
+    if (state === "before") {
+      const drawn = this.renderBrief(root, prep);
+      this.renderList(root, prep, state);
+      if (prep.ask && !this.answered.has(prep.ask.line_id) && !prepAskIsList(prep.ask)) this.renderAsk(root, prep.ask);
+      if (prep.arc && !this.answered.has(prep.arc.line_id)) this.renderArc(root, prep.arc);
+      this.renderDossier(root, prep, drawn);
+      return;
     }
-    this.renderDoors(root, prep);
+    if (state === "now") {
+      this.renderList(root, prep, state);
+      this.renderNotesBox(root, prep);
+      root.createDiv({ cls: "myu-quiet myu-prep-quiet-line", text: W2.quiet });
+      this.renderFold(root, prep);
+      this.renderDone(root);
+      return;
+    }
+    this.renderSources(root, prep);
+    this.renderReport(root, prep);
+    if (postHasRecord(prep.after)) {
+      this.renderYours(root, prep);
+      this.renderPostFolds(root, prep);
+    } else {
+      this.renderList(root, prep, state);
+      this.renderNotesBox(root, prep);
+      this.renderFromNotes(root, prep);
+    }
+    this.renderFold(root, prep);
+  }
+  /** The title (NOW beside it in the meeting), the when, "Your private notes for this meeting.", Join the call ▸. */
+  renderHead(root, prep, state) {
+    const head = root.createDiv({ cls: "myu-prep-head" });
+    const title = head.createDiv({ cls: "myu-card-title", text: prep.title });
+    if (state === "now") title.createSpan({ cls: "myu-prep-now", text: W2.now });
+    const when = prepWhenWords(prep.starts_at);
+    if (when) head.createDiv({ cls: "myu-quiet myu-prep-meeting", text: when });
+    head.createDiv({ cls: "myu-quiet myu-prep-private", text: W2.privateNotes });
+    const join = state === "now" ? webUrl(prep.join_url) : null;
+    if (!join) return;
+    const call = head.createEl("button", { cls: "myu-affordance myu-prep-join", text: W2.join });
+    call.onclick = () => window.open(join, "_blank");
+  }
+  /**
+   * Myu's brief in its voice: the paragraphs, then the question on its own line. While Myu reads, its place says so
+   * (two quiet placeholder lines under the words); after about twenty seconds, that it is taking longer; when it could
+   * not, "Try again ▸" reads the meeting again. A card from before the brief draws its top parts in its place.
+   * Returns what it drew there.
+   */
+  renderBrief(root, prep) {
+    const stage = prepReadingStage(prep, this.readingSince === null ? 0 : Date.now() - this.readingSince);
+    const paragraphs = (prep.brief?.paragraphs ?? []).map((p) => p.trim()).filter(Boolean);
+    const question = prep.brief?.question?.trim() ?? "";
+    if (!stage && !paragraphs.length) {
+      if (!prep.top.length) return null;
+      this.renderTop(root, prep, prep.top.map((t, i) => [t, i]));
+      return "top";
+    }
+    const zone = root.createDiv({ cls: "myu-zone myu-prep-brief" });
+    zone.createDiv({ cls: "myu-whisper", text: PREP_VIEW_WORDS.myu });
+    for (const p of paragraphs) zone.createEl("p", { cls: "myu-voice myu-prep-brief-p", text: p });
+    if (stage === "failed") {
+      const again = zone.createEl("button", { cls: "myu-aff myu-prep-reading", text: W2.readingFailed });
+      again.onclick = () => {
+        this.readingSince = null;
+        void this.readCard(true);
+      };
+    } else if (stage) {
+      zone.createEl("p", { cls: "myu-voice myu-prep-reading", text: stage === "long" ? W2.readingLong : W2.reading });
+      if (stage === "reading" && !paragraphs.length) {
+        zone.createDiv({ cls: "myu-prep-placeholder" });
+        zone.createDiv({ cls: "myu-prep-placeholder myu-prep-placeholder-short" });
+      }
+    }
+    if (question && (paragraphs.length || stage !== "failed")) zone.createEl("p", { cls: "myu-voice myu-prep-question", text: question });
+    return paragraphs.length ? "brief" : "stage";
+  }
+  /**
+   * The list: in the meeting and after, its label with the count ("2 of 3", "2 of 3 covered") and, in the meeting,
+   * "+ add" for the thing that just came up; the items; the add box (before the meeting, or opened by "+ add"); what
+   * did not go; before the meeting, Myu's suggestions under it.
+   */
+  renderList(root, prep, state) {
+    const zone = root.createDiv({ cls: "myu-zone myu-prep-cover", attr: { "data-state": state } });
+    if (state !== "before") {
+      const label2 = zone.createDiv({ cls: "myu-whisper myu-prep-cover-label", text: W2.listLabel });
+      const count2 = prepCoveredLabel(prep);
+      if (count2) label2.createSpan({ cls: "myu-prep-count", text: count2 });
+      if (state === "now" && !this.addOpen) {
+        const add2 = label2.createEl("button", { cls: "myu-aff myu-prep-add-link", text: W2.addLink });
+        add2.onclick = () => {
+          this.addOpen = true;
+          this.list.addFocused = true;
+          this.render();
+        };
+      }
+    }
+    const list7 = this.list;
+    const items = [...prep.items ?? []].sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+    if (items.length) renderPrepItems(zone, items, state, list7.ui(), list7.handlers({ move: state !== "after" }));
+    if (state === "before" || state === "now" && this.addOpen) {
+      renderPrepAddBox(zone, {
+        draft: list7.draft,
+        busy: list7.adding,
+        onDraft: (text2) => {
+          list7.draft = text2;
+        },
+        onAdd: (text2) => void list7.add(text2),
+        focus: list7.addFocused,
+        onFocus: (focused) => {
+          list7.addFocused = focused;
+        }
+      });
+    }
+    if (list7.note) zone.createDiv({ cls: "myu-quiet myu-line-note", text: list7.note });
+    if (state === "before") this.renderSuggestions(zone, prep.brief?.suggestions, items);
+  }
+  /**
+   * Myu's suggestions as "+ {text}": one press puts it where `prepSuggestionTarget` says, as Myu's offer — this
+   * meeting's list before and during it; after it, the next meeting's, or the person's or the series' next one — and
+   * then it reads as on your list.
+   */
+  renderSuggestions(host, suggestions, items) {
+    const shown2 = (suggestions ?? []).filter((s2) => !!s2.text?.trim());
+    if (!shown2.length) return;
+    const row = host.createDiv({ cls: "myu-prep-offers" });
+    for (const s2 of shown2) {
+      const text2 = s2.text.trim();
+      const elsewhere = this.offeredElsewhere.get(text2);
+      const added = elsewhere === "added" || this.list.hasOffered(text2) || items.some((i) => i.text.trim().toLowerCase() === text2.toLowerCase());
+      const chip = row.createEl("button", { cls: "myu-aff myu-prep-offer", text: added ? `${text2} \xB7 ${W2.onYourList}` : W2.plus(text2), attr: { "data-added": String(added) } });
+      chip.disabled = added || elsewhere === "busy";
+      chip.onclick = () => void this.takeSuggestion(s2);
+    }
+    if (this.suggestNote) host.createDiv({ cls: "myu-quiet myu-line-note", text: this.suggestNote });
+  }
+  /** A suggestion taken: onto this meeting's list (shown at once), or where its target says, which is said on the chip. */
+  async takeSuggestion(s2) {
+    const ref = this.meetingRef();
+    const text2 = s2.text.trim();
+    if (!ref || !text2 || this.offeredElsewhere.has(text2)) return;
+    const target = prepSuggestionTarget(ref, s2);
+    if (target.event_id === ref.event_id && (target.occurrence_key ?? null) === (ref.occurrence_key ?? null)) {
+      await this.list.add(text2, "myu_offer");
+      return;
+    }
+    this.offeredElsewhere.set(text2, "busy");
+    this.suggestNote = null;
+    this.render();
+    const res = await this.plugin.backend.addPrepItems(target, text2, "myu_offer").catch(() => null);
+    if (this.eventId !== ref.event_id) return;
+    if (res?.ok) {
+      this.offeredElsewhere.set(text2, "added");
+      this.plugin.requestTodayRefresh();
+    } else {
+      this.offeredElsewhere.delete(text2);
+      this.suggestNote = failedWords3(res?.error);
+    }
+    this.render();
+  }
+  /**
+   * What the page knows beyond the list: the top parts the brief did not cover, the interview kind, the room, the
+   * people, before you go in.
+   */
+  renderDossier(root, prep, drawn) {
+    renderMayAsk(root, mayAskOf(prep), this.mayAskOpen);
+    if (drawn !== "top") {
+      const parts = prep.top.map((t, i) => [t, i]).filter(([t]) => drawn !== "brief" || !BRIEF_PARTS.has(t.part));
+      this.renderTop(root, prep, parts);
+    }
+    if (prep.interview) this.renderInterview(root, prep.interview);
+    this.renderRoom(root, prep);
+    this.renderPeople(root, prep);
+    this.renderBefore(root, prep);
+  }
+  /** In the meeting and after: Myu's prep folded to one line; open, the brief and the rest of the page. */
+  renderFold(root, prep) {
+    const zone = root.createDiv({ cls: "myu-zone myu-prep-fold" });
+    const head = zone.createDiv({ cls: "myu-whisper", text: W2.myuPrep });
+    const toggle = head.createEl("button", { cls: "myu-aff myu-prep-fold-toggle", text: this.prepOpen ? W2.hide : W2.show, attr: { "aria-expanded": String(this.prepOpen) } });
+    toggle.onclick = () => {
+      this.prepOpen = !this.prepOpen;
+      this.render();
+    };
+    if (!this.prepOpen) return;
+    this.renderDossier(zone, prep, this.renderBrief(zone, prep));
+  }
+  /** The notes in the meeting (and after it): what's said and decided, saved as typed. The label says when a save did not go. */
+  renderNotesBox(root, prep) {
+    const zone = root.createDiv({ cls: "myu-zone myu-prep-notes-zone" });
+    const label2 = zone.createDiv({ cls: "myu-whisper", text: W2.notesLabel });
+    this.notesStatusEl = label2.createSpan({ cls: "myu-prep-count", text: this.notesFailed ? PREP_VIEW_WORDS.notesNotSaved : W2.savedAsYouType });
+    this.notesBox(zone, prep);
+  }
+  /** The notes' box itself: the words as typed (or as saved), each key saving a moment later. */
+  notesBox(host, prep) {
+    const box = host.createEl("textarea", { cls: "myu-prep-notes-box", attr: { rows: "6", placeholder: W2.notesPlaceholder, "aria-label": W2.notesLabel } });
+    box.value = this.notesDraft ?? prep.notes?.text ?? prep.after?.notes?.text ?? "";
+    box.oninput = () => {
+      this.notesDraft = box.value;
+      this.scheduleNotesSave();
+    };
+    box.onfocus = () => {
+      this.notesFocused = true;
+    };
+    box.onblur = () => queueMicrotask(() => {
+      if (box.isConnected) this.notesFocused = false;
+    });
+    if (this.notesFocused) {
+      queueMicrotask(() => {
+        box.focus();
+        box.setSelectionRange(box.value.length, box.value.length);
+      });
+    }
+  }
+  /** Done ▸, the one thing in the actions row. */
+  renderDone(root) {
+    const foot = root.createDiv({ cls: "myu-prep-foot" });
+    const done = foot.createEl("button", { cls: "myu-affordance myu-cta myu-prep-done", text: W2.done });
+    done.disabled = this.doneBusy;
+    done.onclick = () => void this.done();
+    if (this.doneNote) foot.createDiv({ cls: "myu-quiet myu-line-note", text: this.doneNote });
+  }
+  /**
+   * After: Myu's report in its voice (the question on its own line, when it asks one), its suggestions as "+ {text}";
+   * with nothing at all written, the server's line for that, in the plain face.
+   */
+  renderReport(root, prep) {
+    const report = prep.after?.report;
+    const paragraphs = (report?.paragraphs ?? []).map((p) => p.trim()).filter(Boolean);
+    const question = report?.question?.trim() ?? "";
+    const nothing = prep.after?.nothing?.trim() ?? "";
+    if (!paragraphs.length && !question && prep.after?.reading) {
+      const waited = this.readingSince === null ? 0 : Date.now() - this.readingSince;
+      const zone2 = root.createDiv({ cls: "myu-zone myu-prep-brief myu-prep-report" });
+      zone2.createDiv({ cls: "myu-whisper", text: PREP_VIEW_WORDS.myu });
+      zone2.createEl("p", { cls: "myu-voice myu-prep-reading", text: waited >= READING_LONG_MS ? W2.readingLong : W2.reading });
+      zone2.createDiv({ cls: "myu-prep-placeholder" });
+      zone2.createDiv({ cls: "myu-prep-placeholder myu-prep-placeholder-short" });
+      return;
+    }
+    if (!paragraphs.length && !question) {
+      if (nothing) root.createDiv({ cls: "myu-zone myu-prep-nothing" }).createEl("p", { cls: "myu-prep-text", text: nothing });
+      return;
+    }
+    const zone = root.createDiv({ cls: "myu-zone myu-prep-brief myu-prep-report" });
+    zone.createDiv({ cls: "myu-whisper", text: PREP_VIEW_WORDS.myu });
+    for (const p of paragraphs) zone.createEl("p", { cls: "myu-voice myu-prep-brief-p", text: p });
+    if (question) zone.createEl("p", { cls: "myu-voice myu-prep-question", text: question });
+    this.renderSuggestions(zone, report?.suggestions, prep.items ?? []);
+  }
+  /** What wrote the record, one line each ("Notes by Gemini · 30 Oct"), with "Open the notes ▸" to the source itself. */
+  renderSources(root, prep) {
+    const lines = sourceLines(prep.after);
+    if (!lines.length) return;
+    const zone = root.createDiv({ cls: "myu-zone myu-post-sources" });
+    lines.forEach((l, i) => {
+      const row = zone.createDiv({ cls: "myu-post-source" });
+      row.createSpan({ cls: "myu-post-source-name", text: l.text });
+      const id = l.meeting_id;
+      if (!id) return;
+      const where = `source:${i}`;
+      const open = row.createEl("button", { cls: "myu-aff myu-prep-open-notes", text: P.openNotes });
+      open.onclick = () => void this.openMeetingNotes(id, where);
+      this.renderNotes(zone, where);
+    });
+  }
+  /**
+   * Yours, always open: "Yours · 3 to do · 2 of 3 covered"; one row per thing you owe from the record (its words, its
+   * source under it, its day and × on the right: × drops it from the ledger); then the list's items with what became of
+   * them (ticked, came up in the notes, or didn't come up and where it went).
+   */
+  renderYours(root, prep) {
+    const after = prep.after;
+    const items = [...prep.items ?? []].sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+    const zone = root.createDiv({ cls: "myu-zone myu-post-yours" });
+    zone.createDiv({ cls: "myu-whisper myu-post-yours-label", text: yoursLabel(after, items) });
+    for (const t of after?.yours?.todo ?? []) {
+      const r = todoRow(t);
+      if (!r.text) continue;
+      const row = attr(zone, P.toDo, r.text, r.sub, r.right);
+      const id = t.commitment_id;
+      if (!id) continue;
+      row.setAttr("data-commitment", id);
+      const x = actsOf(row).createEl("button", { cls: "myu-aff myu-prep-li-x", text: "\xD7", attr: { "aria-label": W2.remove } });
+      x.disabled = this.afterBusy.has(id);
+      x.onclick = () => void this.dropTodo(id);
+    }
+    if (this.yoursNote) zone.createDiv({ cls: "myu-quiet myu-line-note", text: this.yoursNote });
+    if (!items.length) return;
+    const list7 = this.list;
+    renderPrepItems(zone, items, "after", list7.ui(), list7.handlers({ move: false }), (item) => {
+      const st = postItemState(item);
+      return st.text ? { text: st.text, drop: st.drop, good: st.kind === "notes" } : null;
+    });
+    if (list7.note) zone.createDiv({ cls: "myu-quiet myu-line-note", text: list7.note });
+  }
+  /** × on one of yours: dropped from the ledger (`POST /commitments/update`); gone from Yours when it went. */
+  async dropTodo(id) {
+    const prep = this.prep;
+    if (!prep || this.afterBusy.has(id)) return;
+    this.afterBusy.add(id);
+    this.yoursNote = null;
+    this.render();
+    const res = await this.plugin.backend.updateCommitment(id, { status: "dropped" }).catch(() => null);
+    if (this.eventId !== prep.event_id) return;
+    this.afterBusy.delete(id);
+    const now = this.prep;
+    if (res?.ok && now?.after?.yours) {
+      this.prep = { ...now, after: { ...now.after, yours: { ...now.after.yours, todo: (now.after.yours.todo ?? []).filter((t) => t.commitment_id !== id) } } };
+    } else if (!res?.ok) {
+      this.yoursNote = failedWords3(res?.error);
+    }
+    this.render();
+  }
+  /** A fold's open or shut: as the person left it on this page, else as remembered in the vault, else shut. */
+  foldOpen(key) {
+    const eventId = this.eventId ?? "";
+    const known2 = this.folds.get(key);
+    if (known2 !== void 0) return known2;
+    try {
+      const kept = this.app?.loadLocalStorage?.(foldMemoryKey(eventId, key));
+      return kept === true;
+    } catch {
+      return false;
+    }
+  }
+  setFold(key, open) {
+    this.folds.set(key, open);
+    try {
+      this.app?.saveLocalStorage?.(foldMemoryKey(this.eventId ?? "", key), open ? true : null);
+    } catch {
+    }
+    this.render();
+  }
+  /**
+   * The folded sections, each one line with its count and more ▾ / less ▴, shut until opened: Decided; what others owe
+   * ({First} owes for a 1:1; Owed by others for a group, one row per person, each opening to their items); Came up;
+   * The room (a group); Your notes (editable, as before).
+   */
+  renderPostFolds(root, prep) {
+    const after = { ...prep.after ?? {}, notes: prep.after?.notes ?? prep.notes ?? null };
+    if (this.notesDraft !== null) after.notes = { text: this.notesDraft };
+    const first = prep.kind === "one_on_one" ? prepFirstName(prep.people[0]?.name) : null;
+    for (const f of postFolds(after, { kind: prep.kind, firstName: first })) {
+      const open = this.foldOpen(f.key);
+      const zone = root.createDiv({ cls: "myu-zone myu-post-fold", attr: { "data-fold": f.key } });
+      const head = zone.createDiv({ cls: "myu-whisper myu-post-fold-head", text: f.label });
+      head.createSpan({ cls: "myu-prep-count", text: f.count });
+      const toggle = head.createEl("button", { cls: "myu-aff myu-prep-fold-toggle", text: open ? P.less : P.more, attr: { "aria-expanded": String(open) } });
+      toggle.onclick = () => this.setFold(f.key, !open);
+      if (!open) continue;
+      this.renderFoldBody(zone, f.key, after, prep);
+    }
+  }
+  renderFoldBody(zone, key, after, prep) {
+    switch (key) {
+      case "decided":
+        for (const d of after.decided ?? []) if (d.text?.trim()) line(zone, d.text.trim(), d.source?.trim() || null, d.at ? postDate(d.at) : null);
+        return;
+      case "owed": {
+        const owed = after.owed ?? [];
+        if (prep.kind === "one_on_one" && owed.length <= 1) {
+          for (const i of owed.flatMap((o) => o.items ?? [])) owedItem(zone, i);
+          return;
+        }
+        for (const o of owed) {
+          const r = owedRow(o);
+          const row = attr(zone, r.name, r.count, r.gist);
+          row.setAttr("data-owner", o.owner);
+          const open = this.owedOpen.has(o.owner);
+          const more = actsOf(row).createEl("button", { cls: "myu-aff myu-prep-more", text: open ? P.less : P.more, attr: { "aria-expanded": String(open) } });
+          more.onclick = () => {
+            if (open) this.owedOpen.delete(o.owner);
+            else this.owedOpen.add(o.owner);
+            this.render();
+          };
+          if (!open) continue;
+          const inner = zone.createDiv({ cls: "myu-post-owed-items" });
+          for (const i of o.items ?? []) owedItem(inner, i);
+        }
+        return;
+      }
+      case "came_up":
+        for (const c of after.came_up ?? []) if (c.topic?.trim()) line(zone, c.topic.trim(), null, typeof c.share === "number" ? `${c.share}%` : null);
+        return;
+      case "room":
+        for (const p of after.room?.people ?? []) {
+          const sub = [typeof p.turns === "number" ? P.turns(p.turns) : null, typeof p.talk_time === "number" ? P.talkTime(p.talk_time) : null].filter(Boolean).join(" \xB7 ");
+          line(zone, p.name, sub || null, null);
+        }
+        return;
+      case "notes":
+        this.notesStatusEl = zone.createDiv({ cls: "myu-quiet myu-prep-notes-status", text: this.notesFailed ? PREP_VIEW_WORDS.notesNotSaved : W2.savedAsYouType });
+        this.notesBox(zone, prep);
+        return;
+    }
+  }
+  /**
+   * "From your notes · Myu's reading": one row per action item (who, the words, when, × while it is not kept yet), and
+   * the reminder Myu offered as one more row (Yes ▸ takes it, × lets it go).
+   */
+  renderFromNotes(root, prep) {
+    const actions = (prep.after?.action_items ?? []).filter((a) => a.text?.trim() && a.status !== "removed");
+    const reminders = (prep.after?.reminders ?? []).filter((r) => r.text?.trim() && r.status !== "declined");
+    if (!actions.length && !reminders.length) return;
+    const zone = root.createDiv({ cls: "myu-zone myu-prep-from-notes" });
+    const label2 = zone.createDiv({ cls: "myu-whisper", text: W2.fromNotes });
+    label2.createSpan({ cls: "myu-prep-count", text: W2.myuReading });
+    for (const a of actions) {
+      const who = a.owner === "you" ? PREP_VIEW_WORDS.you : a.owner_name?.trim() || "";
+      const row = attr(zone, who, a.text.trim(), a.when?.trim() || null);
+      row.setAttr("data-action", a.id);
+      if (a.status && a.status !== "pending") continue;
+      const acts = row.createSpan({ cls: "myu-prep-attr-acts" });
+      const x = acts.createEl("button", { cls: "myu-aff myu-prep-li-x", text: "\xD7", attr: { "aria-label": W2.remove } });
+      x.disabled = this.afterBusy.has(a.id);
+      x.onclick = () => void this.removeAction(a.id);
+    }
+    for (const r of reminders) {
+      const row = attr(zone, PREP_VIEW_WORDS.remindYou, r.text.trim());
+      row.setAttr("data-reminder", r.id);
+      if (r.status && r.status !== "offered") continue;
+      const acts = row.createSpan({ cls: "myu-prep-attr-acts" });
+      const yes = acts.createEl("button", { cls: "myu-aff", text: W2.yes });
+      yes.disabled = this.afterBusy.has(r.id);
+      yes.onclick = () => void this.answerReminder(r.id, true);
+      const x = acts.createEl("button", { cls: "myu-aff myu-prep-li-x", text: "\xD7", attr: { "aria-label": W2.remove } });
+      x.disabled = this.afterBusy.has(r.id);
+      x.onclick = () => void this.answerReminder(r.id, false);
+    }
+    if (this.afterNote) zone.createDiv({ cls: "myu-quiet myu-line-note", text: this.afterNote });
   }
   /**
    * The question inside the card. The question before: Myu's question, a box and Send, and its own choices as quiet
@@ -14538,7 +17937,7 @@ var PrepView = class extends import_obsidian22.ItemView {
         this.undoPaste();
       }
     };
-    attachPasteListeners(input, { addPasted: (text, source, at) => this.addPasted(text, source, at) });
+    attachPasteListeners(input, { addPasted: (text2, source, at) => this.addPasted(text2, source, at) });
     const send = row.createEl("button", { cls: "myu-affordance", text: PREP_WORDS.sendAnswer });
     send.disabled = this.busy;
     send.onclick = () => void this.sendAnswer(ask);
@@ -14556,8 +17955,8 @@ var PrepView = class extends import_obsidian22.ItemView {
     const many = prepAskMode(ask) === "many";
     const parts = pickManyParts(ask);
     const acts = zone.createDiv({ cls: "myu-mrow-acts myu-line-choices" });
-    const button = (label, cls, attr2, onClick, off = false) => {
-      const b = acts.createEl("button", { cls, text: label, attr: attr2 });
+    const button = (label2, cls, attr2, onClick, off = false) => {
+      const b = acts.createEl("button", { cls, text: label2, attr: attr2 });
       b.disabled = this.busy || off;
       b.onclick = onClick;
       return b;
@@ -14615,31 +18014,42 @@ var PrepView = class extends import_obsidian22.ItemView {
     this.renderChoices(zone, arc);
   }
   /** A line's choices as the server sent them; Skip is the quiet way out. What did not go is said under them. */
-  renderChoices(zone, line) {
-    if (line.choices.length > 0) {
+  renderChoices(zone, line2) {
+    if (line2.choices.length > 0) {
       const acts = zone.createDiv({ cls: "myu-mrow-acts myu-line-choices" });
-      for (const c of line.choices) {
+      for (const c of line2.choices) {
         const b = acts.createEl("button", { cls: c.id === "skip" ? "myu-aff myu-line-quiet" : "myu-aff", text: c.label, attr: { "data-choice": c.id } });
         b.disabled = this.busy;
-        b.onclick = () => void this.choose(line, c.id);
+        b.onclick = () => void this.choose(line2, c.id);
       }
     }
-    const note = this.notesUnder.get(line.line_id);
+    const note = this.notesUnder.get(line2.line_id);
     if (note) zone.createDiv({ cls: "myu-quiet myu-line-note", text: note });
   }
-  /** The top: 3 to 5 parts in the server's order, always open; a part's items are a list. */
-  renderTop(root, prep) {
-    if (!prep.top.length) return;
+  /** Top parts in the server's order, always open, Myu's sentence in its voice; a part's items are a list. */
+  renderTop(root, prep, parts) {
+    if (!parts.length) return;
     const zone = root.createDiv({ cls: "myu-zone myu-prep-top" });
-    prep.top.forEach((t, i) => {
+    for (const [t, i] of parts) {
       const part = zone.createDiv({ cls: "myu-prep-part", attr: { "data-part": t.part } });
-      part.createDiv({ cls: "myu-whisper", text: prepPartLabel(t.part) });
-      if (t.text.trim()) this.why(prep, part.createDiv({ cls: "myu-prep-text", text: t.text }), `top:${i}`, t.evidence_ids);
+      const label2 = part.createDiv({ cls: "myu-whisper", text: prepPartLabel(t.part) });
+      if (t.part === "since_last" && t.rows?.length) {
+        const from = sinceLastMeeting(t.meeting);
+        if (from) label2.createSpan({ cls: "myu-prep-count", text: from });
+        const first = prep.kind === "one_on_one" ? prepFirstName(prep.people[0]?.name) : "";
+        t.rows.forEach((r, j) => {
+          const row = sinceLastRow(r, first);
+          if (!row.text) return;
+          attr(part, row.label, row.text, row.sub, row.done ? `\u2713 ${row.right ?? ""}`.trim() : row.right).setAttr("data-row", `${r.kind}:${j}`);
+        });
+        continue;
+      }
+      if (t.text.trim()) this.why(prep, part.createDiv({ cls: "myu-prep-text myu-voice", text: t.text }), `top:${i}`, t.evidence_ids);
       const items = t.items ?? [];
-      if (!items.length) return;
-      const list2 = part.createEl("ul", { cls: "myu-prep-items" });
-      items.forEach((it, j) => this.why(prep, list2.createEl("li", { text: it.text }), `top:${i}:${j}`, it.evidence_ids));
-    });
+      if (!items.length) continue;
+      const list7 = part.createEl("ul", { cls: "myu-prep-items" });
+      items.forEach((it, j) => this.why(prep, list7.createEl("li", { text: it.text }), `top:${i}:${j}`, it.evidence_ids));
+    }
   }
   /** The interview: the candidate's facts, your topics with their questions, the scorecard note. */
   renderInterview(root, iv) {
@@ -14662,31 +18072,79 @@ var PrepView = class extends import_obsidian22.ItemView {
     }
     if (iv.scorecard_note) zone.createEl("p", { cls: "myu-quiet", text: iv.scorecard_note });
   }
-  /** One block per person: the name and who they are to you; "more ▸" opens the rest. A thin person is its line only. */
+  /** The room: its one line for a group meeting (who decides, who brings what); a card from before it, its lines. */
+  renderRoom(root, prep) {
+    const room = prep.room;
+    const summary = room?.summary?.trim() ?? "";
+    if (!room || !summary && !room.team && !room.lines.length) return;
+    const zone = root.createDiv({ cls: "myu-zone myu-prep-room" });
+    zone.createDiv({ cls: "myu-whisper", text: `${PREP_WORDS.room}${room.team ? ` \xB7 ${room.team.name}` : ""}` });
+    if (summary) {
+      zone.createDiv({ cls: "myu-prep-text myu-prep-room-summary", text: summary });
+      return;
+    }
+    room.lines.forEach((l, i) => this.why(prep, zone.createDiv({ cls: "myu-prep-text", text: l.text }), `room:${i}`, l.evidence_ids));
+  }
+  /**
+   * One row per person: the name, then the one line that is useful for this meeting (or the name alone), "3 open" when
+   * more is open than the line says, and more ▾ / less ▴ for the rows (what changed, what is owed each way, the open
+   * threads, how they like to work), each with its source under it, then Full card ▸. Open at first when the server
+   * says so; a thin person is the line alone. A card from before the line reads as it did ("more ▸").
+   */
   renderPeople(root, prep) {
     if (!prep.people.length) return;
     const zone = root.createDiv({ cls: "myu-zone myu-prep-people" });
     prep.people.forEach((p, i) => {
-      const block = zone.createDiv({ cls: "myu-prep-person", attr: { "data-thin": String(p.thin) } });
-      const line = block.createDiv({ cls: "myu-prep-person-line" });
-      line.createSpan({ cls: "myu-prep-name", text: p.name });
-      if (p.to_you) {
-        line.createSpan({ cls: "myu-quiet", text: " \xB7 " });
-        line.createSpan({ cls: "myu-prep-to-you", text: p.to_you });
+      if (!isSliced(p)) {
+        this.renderPersonBlock(zone, prep, p, i);
+        return;
       }
-      this.why(prep, line, `person:${i}`, p.evidence_ids);
-      if (p.thin || !prepPersonHasMore(p)) return;
-      const open = this.openPeople.has(i);
-      const more = block.createEl("button", { cls: "myu-aff myu-prep-more", text: open ? PREP_WORDS.less : PREP_WORDS.more, attr: { "aria-expanded": String(open) } });
-      more.onclick = () => {
-        if (open) this.openPeople.delete(i);
-        else this.openPeople.add(i);
+      const block = zone.createDiv({ cls: "myu-prep-person", attr: { "data-thin": String(p.thin), "data-kind": p.line_kind ?? "" } });
+      const head = block.createDiv({ cls: "myu-prep-person-line" });
+      head.createSpan({ cls: "myu-prep-person-name", text: p.name });
+      const line2 = prepPersonLine(p);
+      if (line2) head.createSpan({ cls: "myu-prep-person-says", text: line2 });
+      const strip = prepPersonStrip(p);
+      if (strip) head.createSpan({ cls: "myu-prep-strip", text: strip });
+      const rows = prepPersonRows(p);
+      if (!rows.length) return;
+      const open = this.peopleOpen.get(i) ?? !!p.open_default;
+      const toggle = head.createEl("button", { cls: "myu-aff myu-prep-more", text: open ? W2.personLess : W2.personMore, attr: { "aria-expanded": String(open) } });
+      toggle.onclick = () => {
+        this.peopleOpen.set(i, !open);
         this.render();
       };
-      if (open) this.renderPersonMore(block, p);
+      if (!open) return;
+      const facts = block.createDiv({ cls: "myu-prep-detail myu-prep-facts" });
+      let last = "";
+      for (const r of rows) {
+        attr(facts, r.label === last ? "" : r.label, r.text, r.sub).setAttr("data-row", r.key);
+        last = r.label;
+      }
+      const id = p.relationship_id;
+      if (!id) return;
+      const full = block.createEl("button", { cls: "myu-aff myu-prep-full", text: W2.fullCard });
+      full.onclick = () => void this.plugin.openCard("person", id, p.name);
     });
   }
-  renderPersonMore(block, p) {
+  /** A card from before the line: the name and who they are to you; "more ▸" opens the rest. A thin person is its line. */
+  renderPersonBlock(zone, prep, p, i) {
+    const block = zone.createDiv({ cls: "myu-prep-person", attr: { "data-thin": String(p.thin) } });
+    const line2 = block.createDiv({ cls: "myu-prep-person-line" });
+    line2.createSpan({ cls: "myu-prep-name", text: p.name });
+    if (p.to_you) {
+      line2.createSpan({ cls: "myu-quiet", text: " \xB7 " });
+      line2.createSpan({ cls: "myu-prep-to-you", text: p.to_you });
+    }
+    this.why(prep, line2, `person:${i}`, p.evidence_ids);
+    if (p.thin || !prepPersonHasMore(p)) return;
+    const open = this.peopleOpen.get(i) ?? false;
+    const more = block.createEl("button", { cls: "myu-aff myu-prep-more", text: open ? PREP_WORDS.less : PREP_WORDS.more, attr: { "aria-expanded": String(open) } });
+    more.onclick = () => {
+      this.peopleOpen.set(i, !open);
+      this.render();
+    };
+    if (!open) return;
     const detail = block.createDiv({ cls: "myu-prep-detail" });
     if (p.stands) attr(detail, PREP_WORDS.stands, p.stands);
     if (p.you_owe.length) attr(detail, PREP_WORDS.youOwe, p.you_owe.join("; "));
@@ -14695,82 +18153,96 @@ var PrepView = class extends import_obsidian22.ItemView {
     if (p.stance) attr(detail, PREP_WORDS.stance, p.stance);
     if (p.last_time) detail.createDiv({ cls: "myu-quiet", text: p.last_time });
   }
-  /** The room: team or not, and its lines. */
-  renderRoom(root, prep) {
-    const room = prep.room;
-    if (!room || !room.team && !room.lines.length) return;
-    const zone = root.createDiv({ cls: "myu-zone myu-prep-room" });
-    zone.createDiv({ cls: "myu-whisper", text: `${PREP_WORDS.room}${room.team ? ` \xB7 ${room.team.name}` : ""}` });
-    room.lines.forEach((l, i) => this.why(prep, zone.createDiv({ cls: "myu-prep-text", text: l.text }), `room:${i}`, l.evidence_ids));
-  }
-  /** Before you go in: what's planned, documents, the email that set it up, last time's notes, who hasn't replied. */
+  /**
+   * Before you go in, as rows: last time (its notes, "Open the notes ▸"), what's planned, documents, the email that set
+   * it up, who hasn't replied, and the history of a 1:1 ("Past 1:1s with Reid ▸", each past meeting its own page).
+   */
   renderBefore(root, prep) {
     const b = prep.before_you_go;
-    if (!b || !(b.agenda || b.documents.length || b.set_up_email || b.last_notes || b.not_replied.length)) return;
+    const history = prepHistoryLink(prep);
+    const any = !!b && !!(b.agenda || b.documents.length || b.set_up_email || b.last_notes || b.not_replied.length);
+    if (!any && !history) return;
     const zone = root.createDiv({ cls: "myu-zone myu-prep-before" });
     zone.createDiv({ cls: "myu-whisper", text: PREP_WORDS.beforeYouGo });
-    if (b.agenda) attr(zone, PREP_WORDS.planned, b.agenda);
-    if (b.documents.length) {
-      const docs = attr(zone, PREP_WORDS.documents, "");
-      b.documents.forEach((d, i) => {
-        const doc = prepDocument(d);
-        if (i > 0) docs.createSpan({ text: ", " });
-        if (doc.url && /^https?:\/\//i.test(doc.url)) docs.createEl("a", { cls: "myu-prep-link", text: doc.name, href: doc.url, attr: { target: "_blank", rel: "noopener" } });
-        else docs.createSpan({ text: doc.name });
-      });
-    }
-    if (b.set_up_email) {
-      const e = b.set_up_email;
-      const date = prepShortDate(e.at);
-      attr(zone, PREP_WORDS.setUpEmail, `${e.subject} \xB7 ${e.from}${date ? ` \xB7 ${date}` : ""}`);
-    }
-    if (b.last_notes) {
+    const L = W2.labels;
+    if (b?.last_notes) {
       const meetingId = b.last_notes.meeting_id;
-      const row = attr(zone, PREP_WORDS.lastNotes, b.last_notes.summary);
+      const row2 = attr(zone, L.lastTime, b.last_notes.summary);
       if (meetingId) {
-        const open = row.createEl("button", { cls: "myu-aff myu-prep-open-notes", text: PREP_WORDS.openNotes });
+        const open = row2.createEl("button", { cls: "myu-aff myu-prep-open-notes", text: PREP_WORDS.openNotes });
         open.onclick = () => void this.openMeetingNotes(meetingId, "last_notes");
         this.renderNotes(zone, "last_notes");
       }
     }
-    if (b.not_replied.length) attr(zone, prepNotRepliedLabel(b.not_replied), b.not_replied.join(", "));
+    if (b?.agenda) attr(zone, L.planned, b.agenda);
+    if (b?.documents.length) {
+      const docs = attr(zone, L.documents, "");
+      const text2 = docs.createSpan({ cls: "myu-prep-attr-text" });
+      b.documents.forEach((d, i) => {
+        const doc = prepDocument(d);
+        if (i > 0) text2.createSpan({ text: ", " });
+        if (doc.url && /^https?:\/\//i.test(doc.url)) text2.createEl("a", { cls: "myu-prep-link", text: doc.name, href: doc.url, attr: { target: "_blank", rel: "noopener" } });
+        else text2.createSpan({ text: doc.name });
+      });
+    }
+    if (b?.set_up_email) {
+      const e = b.set_up_email;
+      attr(zone, L.setUpEmail, `${e.subject} \xB7 ${e.from}`, prepShortDate(e.at) || null);
+    }
+    if (b?.not_replied.length) attr(zone, prepNotRepliedLabel(b.not_replied), b.not_replied.join(", "));
+    if (!history) return;
+    const row = attr(zone, L.history, "");
+    const link2 = row.createEl("button", { cls: "myu-aff myu-prep-history-link", text: history.label, attr: { "aria-expanded": String(!!this.history) } });
+    link2.onclick = () => void this.toggleHistory(history.relationship_id ? { relationship_id: history.relationship_id } : { event_series: history.event_series });
+    this.renderHistory(zone);
   }
-  /** The meeting's own conversation; after it, writing how it went (the capture, with this card as its context). */
-  renderDoors(root, prep) {
-    const foot = root.createDiv({ cls: "myu-prep-foot" });
-    const talk = foot.createEl("button", { cls: "myu-affordance", text: PREP_WORDS.openConversation });
-    talk.onclick = () => void this.plugin.openMeetingConversation(prep.event_id, prep.title, prepOccurrenceKey(prep) ?? void 0);
-    if (prepPhase(prep) !== "after") return;
-    const after = foot.createEl("button", { cls: "myu-affordance", text: PREP_WORDS.writeHowItWent });
-    after.onclick = () => void this.plugin.openChat({ text: "", send: false, context: prepChatContext(prep, "after") });
+  /** The past 1:1s under their link: each a press away from its own page. */
+  renderHistory(host) {
+    const h = this.history;
+    if (!h) return;
+    const box = host.createDiv({ cls: "myu-prep-notes myu-prep-history" });
+    if (h.state === "loading") {
+      box.createDiv({ cls: "myu-quiet", text: PREP_VIEW_WORDS.historyLoading });
+      return;
+    }
+    if (h.state === "failed" || !h.rows.length) {
+      box.createDiv({ cls: "myu-quiet", text: h.state === "failed" ? PREP_VIEW_WORDS.historyFailed : PREP_VIEW_WORDS.historyEmpty });
+      return;
+    }
+    for (const r of h.rows) {
+      const words = (r.source !== void 0 || r.covered !== void 0 ? pastMeetingWords(r) : prepHistoryRowWords(r)) || r.title?.trim() || "";
+      const open = box.createEl("button", { cls: "myu-aff myu-prep-ref myu-prep-history-row", text: words, attr: { "data-event": r.event_id } });
+      open.onclick = () => void this.showMeeting(r.event_id);
+    }
+    if (h.across) box.createDiv({ cls: "myu-quiet myu-prep-across", text: h.across });
   }
   /**
    * A line's quiet "why ▸" (only when it has evidence that resolves) and, open, its evidence: each
    * item's label; one that opens something is a button, the rest are text.
    */
-  why(prep, line, key, ids) {
+  why(prep, line2, key, ids) {
     const evidence = prepEvidenceFor(prep, ids);
     if (!evidence.length) return;
     const open = this.openWhy.has(key);
-    const b = line.createEl("button", { cls: "myu-aff myu-prep-why", text: open ? PREP_WORDS.whyOpen : PREP_WORDS.why, attr: { "aria-expanded": String(open) } });
+    const b = line2.createEl("button", { cls: "myu-aff myu-prep-why", text: open ? PREP_WORDS.whyOpen : PREP_WORDS.why, attr: { "aria-expanded": String(open) } });
     b.onclick = () => {
       if (open) this.openWhy.delete(key);
       else this.openWhy.add(key);
       this.render();
     };
     if (!open) return;
-    const list2 = line.createDiv({ cls: "myu-prep-evidence" });
+    const list7 = line2.createDiv({ cls: "myu-prep-evidence" });
     for (const { id, ev } of evidence) {
       const how = evidenceOpening(ev);
       if (!how) {
-        list2.createDiv({ cls: "myu-quiet myu-prep-ref", text: ev.label, attr: { "data-evidence": id } });
+        list7.createDiv({ cls: "myu-quiet myu-prep-ref", text: ev.label, attr: { "data-evidence": id } });
         continue;
       }
-      const item = list2.createEl("button", { cls: "myu-aff myu-prep-ref", text: ev.label, attr: { "data-evidence": id, "data-open": how.kind } });
+      const item = list7.createEl("button", { cls: "myu-aff myu-prep-ref", text: ev.label, attr: { "data-evidence": id, "data-open": how.kind } });
       item.createSpan({ cls: "myu-prep-open", text: ` ${PREP_WORDS.openItem}` });
       const where = `${key}/${id}`;
       item.onclick = () => this.openEvidence(how, prep, where);
-      if (how.kind === "meeting") this.renderNotes(list2, where);
+      if (how.kind === "meeting") this.renderNotes(list7, where);
     }
   }
   /** A meeting's notes shown in place, under the door that asked for them (the vault had no note of it). */
@@ -14793,15 +18265,30 @@ var PrepView = class extends import_obsidian22.ItemView {
     const [first, ...rest] = notes.lines;
     box.createDiv({ cls: "myu-prep-text", text: first });
     if (!rest.length) return;
-    const list2 = box.createEl("ul", { cls: "myu-prep-items" });
-    for (const l of rest) list2.createEl("li", { text: l });
+    const list7 = box.createEl("ul", { cls: "myu-prep-items" });
+    for (const l of rest) list7.createEl("li", { text: l });
   }
 };
-function attr(host, label, text) {
+function attr(host, label2, text2, sub = null, right = null) {
   const row = host.createDiv({ cls: "myu-prep-attr" });
-  row.createSpan({ cls: "myu-prep-attr-label", text: label });
-  if (text) row.createSpan({ cls: "myu-prep-attr-text", text });
+  row.createSpan({ cls: "myu-prep-attr-label", text: label2 });
+  if (text2) row.createSpan({ cls: "myu-prep-attr-text", text: text2 });
+  if (sub) row.createSpan({ cls: "myu-prep-attr-sub", text: sub });
+  if (right) actsOf(row).createSpan({ cls: "myu-prep-attr-right", text: right });
   return row;
+}
+function actsOf(row) {
+  return row.querySelector(".myu-prep-attr-acts") ?? row.createSpan({ cls: "myu-prep-attr-acts" });
+}
+function line(host, text2, sub, right) {
+  const row = host.createDiv({ cls: "myu-post-row" });
+  row.createSpan({ cls: "myu-prep-attr-text", text: text2 });
+  if (right) row.createSpan({ cls: "myu-prep-attr-right", text: right });
+  if (sub) row.createSpan({ cls: "myu-prep-attr-sub", text: sub });
+  return row;
+}
+function owedItem(host, i) {
+  if (i.text?.trim()) line(host, i.text.trim(), i.source?.trim() || null, i.when ? postDay(i.when) : null);
 }
 
 // src/views/LookupModal.ts
@@ -14892,8 +18379,8 @@ var MapFoldModal = class extends import_obsidian23.Modal {
     this.line = after?.line ?? null;
     notifyStatus(MAP_FOLD_WORDS.kept(mapRowFirst(row)));
     this.render();
-    const list2 = await this.plugin.backend.listEntities("person").catch(() => null);
-    this.takeMap(list2?.data?.map);
+    const list7 = await this.plugin.backend.listEntities("person").catch(() => null);
+    this.takeMap(list7?.data?.map);
     this.render();
   }
   /** A row opens the person's card and nothing else changes: they stay on the map, the row and the count stay. */
@@ -14908,10 +18395,10 @@ var MapFoldModal = class extends import_obsidian23.Modal {
     c.empty();
     const settledEmpty = !this.loading && !this.failed && this.rows.length === 0;
     if (!settledEmpty) c.createDiv({ cls: "myu-map-intro myu-quiet", text: MAP_FOLD_WORDS.intro });
-    const list2 = c.createDiv({ cls: "myu-map-list" });
+    const list7 = c.createDiv({ cls: "myu-map-list" });
     for (const row of this.rows) {
       const name = mapRowName(row);
-      const item = list2.createDiv({ cls: "myu-map-item" });
+      const item = list7.createDiv({ cls: "myu-map-item" });
       const open = item.createEl("button", { cls: "myu-row-tappable myu-map-row", attr: { "aria-label": `Open ${name}` } });
       open.createDiv({ cls: "myu-row-title", text: name });
       const meta = mapRowMeta(row);
@@ -14977,10 +18464,10 @@ var LookupModal = class _LookupModal extends import_obsidian24.FuzzySuggestModal
   renderFoot() {
     this.foot?.remove();
     this.foot = null;
-    const line = foldLine(this.map);
-    if (!line) return;
+    const line2 = foldLine(this.map);
+    if (!line2) return;
     this.foot = this.modalEl.createDiv({ cls: "myu-map-foot" });
-    const open = this.foot.createEl("button", { cls: "myu-map-foot-line", text: line });
+    const open = this.foot.createEl("button", { cls: "myu-map-foot-line", text: line2 });
     open.onclick = () => this.openFold();
   }
   /** The fold in place of this list; closing it comes back here, to a list read again. */
@@ -15121,8 +18608,8 @@ var BackfillModal = class extends import_obsidian26.Modal {
     const chosen = this.inRange();
     const folders = new Set(this.files.map((f) => f.path.split("/").slice(0, -1).join("/") || "/"));
     contentEl.createEl("p", { cls: "myu-prose", text: describeScope(this.files.length, folders.size, this.oldest) });
-    const line = this.people === null ? "Looking at your links\u2026" : surveyLine(this.people);
-    if (line) contentEl.createEl("p", { cls: "myu-prose myu-quiet", text: line });
+    const line2 = this.people === null ? "Looking at your links\u2026" : surveyLine(this.people);
+    if (line2) contentEl.createEl("p", { cls: "myu-prose myu-quiet", text: line2 });
     new import_obsidian26.Setting(contentEl).setName("How far back").setDesc(`${chosen.length} ${chosen.length === 1 ? "note" : "notes"} \xB7 ${backfillEstimate(chosen.length)}. Each note keeps its own date. Every note is encrypted on this device before it is sent.`).addDropdown((d) => d.addOption("90d", "Last 90 days").addOption("1y", "Last year").addOption("all", "Everything").setValue(this.range).onChange((v) => {
       this.range = v;
       this.render();
@@ -15292,8 +18779,16 @@ function isWafRefusal(status, data) {
   const d = data;
   return !("err" in d) && !("error" in d);
 }
+var ANSWER_429_DOORS = /* @__PURE__ */ new Set(["/auth/address-held"]);
+function isAnswer429(path) {
+  return ANSWER_429_DOORS.has(RequestBudget.keyOf(path));
+}
 function isEncryptionBlocked(status, data) {
-  return status === 403 && !!data && typeof data === "object" && data.err === "enc";
+  if (status !== 403 && status !== 409 && status !== 423) return false;
+  const d = data && typeof data === "object" ? data : null;
+  if (!d) return false;
+  if (status === 403 && d.err === "enc") return true;
+  return [d.err, d.error, d.code].some((v) => v === "no_working_copy" || v === "key_needed");
 }
 var Transport = class {
   constructor(opts) {
@@ -15404,8 +18899,9 @@ var Transport = class {
    * everything.
    */
   noteRefusal(path, res, data) {
-    if (res.status === 429) this.budget.pause(path, retryAfterMs(res.headers, data));
-    else if (isWafRefusal(res.status, data)) this.budget.pauseAll();
+    if (res.status === 429) {
+      if (!isAnswer429(path)) this.budget.pause(path, retryAfterMs(res.headers, data));
+    } else if (isWafRefusal(res.status, data)) this.budget.pauseAll();
   }
   /** Authenticated POST. Every backend call in the plugin goes through here. */
   async post(path, body = {}, opts = {}) {
@@ -15547,6 +19043,30 @@ var _MockApi = class _MockApi {
      */
     this.feedbackServerBeforeFiles = false;
     this.feedbackRefusal = null;
+    /** Yesterday's meetings with a record or a page the person acted on (2026-10-30); a test sets them. */
+    this.dayYesterday = [];
+    /** The across-line on a history, by relationship or series id (2026-10-30); a test sets it. */
+    this.prepAcross = {};
+    // ── the person's list for a meeting, its notes, and after (2026-10-29) ──────────────────────────
+    // A small stand-in for `/prep/items/*`, `/prep/notes/save`, `/prep/done`, `/prep/action/remove`,
+    // `/prep/reminder/answer` and `/prep/history`, as the backend built them (IMPL_PREP_NOTES_20261029).
+    /** Today's meetings with a list (a test sets them); their items come from the list as it stands. */
+    this.dayMeetings = [];
+    /** Carried items waiting for a next meeting, under their person (a test sets them). */
+    this.dayWaiting = [];
+    /** Each meeting's list, by event id: seeded from a card or a Today meeting the first time it is touched. */
+    this.prepLists = {};
+    /** Every call to the list's doors, in order: which door and what it was sent. */
+    this.prepCalls = [];
+    /** The notes as last saved, by event id. */
+    this.prepNotes = {};
+    /** The past meetings, by relationship id (a 1:1) or by series id (a recurring meeting). */
+    this.prepHistory = {};
+    /** Items added for a person's or a series' next meeting, waiting for it (`rel:<id>`, `series:<id>`). */
+    this.prepWaiting = {};
+    /** A test sets it: every list door answers 500. */
+    this.prepDoorsFail = false;
+    this.itemSeq = 0;
     /**
      * The menu's marks (2026-10-06): a demo day — something new on Today and in a space, questions waiting on Today, a
      * person and the space. `null` stands for a server without the door (404); a test sets either.
@@ -15657,6 +19177,8 @@ var _MockApi = class _MockApi {
     this.subjectTurns = [];
     /** Every button pressed on the meeting's conversation or the mock card's arc: which line, which choice. */
     this.meetingAnswered = [];
+    /** What Myu offers for the list under its next replies in the meeting's conversation (2026-10-29); a test sets them. */
+    this.meetingOffers = [];
     /** One meeting's conversation: its turns, the ask that is up, and whether the arc was answered. */
     this.meetingMode = {
       event_id: null,
@@ -15672,6 +19194,31 @@ var _MockApi = class _MockApi {
      * (a card, a meeting, a journal day) so paging itself is exercised.
      */
     this.mockChangedAt = 17e11;
+    /**
+     * The address a password sign-up leaves to confirm (2026-11-17), as `/account/create` answers it: 'sent' (the link
+     * went, with the server's sentence), 'not_sent' (no sentence), or null for an older server that says nothing.
+     */
+    this.signupConfirmation = "sent";
+    /** P9 — signup succeeds and mints a mock session, like the real flat shape. */
+    /** While set, a password sign-up is refused for its address (409 `address_in_use`), as the server does when an account holds it. */
+    this.addressInUse = false;
+    // ── an address held by a password account nobody confirmed (2026-11-17) ──
+    // As the server does it (HeldAddress): the link's redeem asks first (409, the link not used); five wrong passwords end
+    // the question (429, the held token gone); an ended token is 410; either answer lets the same link through.
+    /** While set, the link's redeem is asked about first. `stays`: still held after an answer (the question comes back). */
+    this.heldAddress = null;
+    /** The live held token and its wrong tries; null when there is no question (or it ended). */
+    this.heldToken = null;
+    this.heldTries = 0;
+    /** Every link redeemed, in order: the redo after the question is one more. */
+    this.magicRedeems = [];
+    /** Every answer to the question, as sent. */
+    this.heldAnswers = [];
+    /** The account's own address is confirmed (`/account/get`); null leaves the field out, as an older server does. */
+    this.accountEmailConfirmed = false;
+    /** Every `/account/emails/resend`, as sent; `resendFails` answers 503 "not_sent", as the server does when the mail cannot go. */
+    this.resends = [];
+    this.resendFails = false;
     /** The mock's magic email: request "sends" a token, validate accepts it once. */
     this.pendingMagicToken = null;
     /** A meeting's notes a test puts in place, by meeting id (the card's "Open the notes ▸"); empty otherwise. */
@@ -15690,6 +19237,14 @@ var _MockApi = class _MockApi {
     ];
     /** The saved zone, as the server keeps it (null until a client sends one; the brief then uses America/New_York). */
     this.savedTimeZone = null;
+    /** "Same person" (2026-11-15): what was asked, in order, and what the server answers (the default says how many moved, with an undo). */
+    this.samePersonCalls = [];
+    this.samePersonReply = null;
+    /** Undo (2026-11-15): the move ids asked to be put back, in order. */
+    this.undoCalls = [];
+    this.undoReply = null;
+    /** The server's 409 for an undo, when a test sets it: `already_undone`, or `changed_since` (then nothing changes). */
+    this.undoRefusal = null;
     // ── P10: onboarding twins. State lives in-memory; the classifier is a word
     // counter (>= 8 words reads as a real answer) so both branches are drivable.
     this.mockAccountState = {
@@ -15958,7 +19513,12 @@ var _MockApi = class _MockApi {
           section_type: "commitments_between",
           title: "Commitments between you",
           is_new: true,
-          data: { items: [{ commitment_id: "c1", what: "Review the migration plan", owner: "them", status: "open", how_myu_knows: "You said so in the sync." }] }
+          data: {
+            items: [{ commitment_id: "c1", what: "Review the migration plan", owner: "them", status: "open", how_myu_knows: "You said so in the sync." }],
+            // 2026-10-30: the one ledger's rows, newest first, the older ones folded.
+            rows: [{ kind: "they_owe", text: "Review the migration plan", when: "2026-11-02T00:00:00Z", source: "from the Gemini notes", meeting: { event_id: "mock-event-1", title: "1:1", at: "2026-10-29T14:00:00Z" }, commitment_id: "c1" }],
+            older: { count: 1, note: "past, from January to March", rows: [{ kind: "you_owe", text: "The Q1 numbers", when: "2026-02-01", source: "your entry" }] }
+          }
         },
         {
           section_type: "partner_readings",
@@ -15978,10 +19538,137 @@ var _MockApi = class _MockApi {
     }
     return ok({ card });
   }
-  async getMyuLines(_scope) {
+  async getMyuLines(scope) {
     const offline = this.guard();
     if (offline) return offline;
-    return ok({ success: true, day: (/* @__PURE__ */ new Date()).toISOString().slice(0, 10), budget: { released: 0, limit: 3 }, lines: this.dayLines.map((l) => ({ ...l })) });
+    const lines = this.dayLines.map((l) => ({ ...l }));
+    if (scope !== "today") return ok({ success: true, day: (/* @__PURE__ */ new Date()).toISOString().slice(0, 10), budget: { released: 0, limit: 3 }, lines });
+    const meetings = this.dayMeetings.map((m) => {
+      const list7 = this.prepList(m.event_id).slice().sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+      return { ...m, items: list7.slice(0, 3).map((i) => ({ ...i })), items_count: list7.length };
+    });
+    const waiting = this.dayWaiting.map((w) => ({ ...w, items: w.items.map((i) => ({ ...i })) })).filter((w) => w.items.length > 0);
+    const yesterday = this.dayYesterday.map((y) => ({ ...y }));
+    return ok({ success: true, day: (/* @__PURE__ */ new Date()).toISOString().slice(0, 10), budget: { released: 0, limit: 3 }, lines, meetings, waiting, yesterday });
+  }
+  /** `POST /commitments/update`: recorded with the list's doors; a dropped one leaves the test card's Yours. */
+  async updateCommitment(commitmentId, change) {
+    const refused = this.prepDoor("commitment", { commitment_id: commitmentId, ...change });
+    if (refused) return refused;
+    for (const raw of Object.values(this.meetingPreps)) {
+      const yours = raw?.after?.yours;
+      if (yours?.todo && change.status === "dropped") yours.todo = yours.todo.filter((t) => t.commitment_id !== commitmentId);
+    }
+    return ok({ success: true });
+  }
+  /** A meeting's list, seeded from the card a test put in place, else from Today's meeting, else empty. */
+  prepList(eventId) {
+    if (!this.prepLists[eventId]) {
+      const card = this.meetingPreps[eventId];
+      const today = this.dayMeetings.find((m) => m.event_id === eventId);
+      this.prepLists[eventId] = (card?.items ?? today?.items ?? []).map((i) => ({ ...i }));
+    }
+    return this.prepLists[eventId];
+  }
+  /** Where an item is: its meeting's list, or a person's waiting list. */
+  findItem(itemId) {
+    for (const list7 of [...Object.values(this.prepLists), ...this.dayWaiting.map((w) => w.items)]) {
+      const item = list7.find((i) => i.item_id === itemId);
+      if (item) return { list: list7, item };
+    }
+    return null;
+  }
+  prepDoor(door, body) {
+    const offline = this.guard();
+    if (offline) return offline;
+    this.prepCalls.push({ door, body });
+    return this.prepDoorsFail ? fail(500, "internal_error") : null;
+  }
+  async addPrepItems(target, text2, source = "user") {
+    var _a;
+    const refused = this.prepDoor("add", { ...target, text: text2, source });
+    if (refused) return refused;
+    if (!target.event_id) {
+      const words = text2.trim();
+      const key = target.relationship_id ? `rel:${target.relationship_id}` : `series:${target.series_id ?? ""}`;
+      if (!words || key.endsWith(":")) return fail(400, "missing_target");
+      const waiting = { item_id: `mock-item-${++this.itemSeq}`, text: words, done: false, source, carried_from: null, position: 0, event_id: null, occurrence_key: null };
+      ((_a = this.prepWaiting)[key] ?? (_a[key] = [])).push(waiting);
+      return ok({ success: true, items: [{ ...waiting }] });
+    }
+    const meeting = { event_id: target.event_id, occurrence_key: target.occurrence_key ?? null };
+    const list7 = this.prepList(meeting.event_id);
+    let position = list7.reduce((max, i) => Math.max(max, i.position ?? 0), -1);
+    const items = text2.split(/\r?\n/).map((l) => l.trim()).filter(Boolean).map((t) => ({
+      item_id: `mock-item-${++this.itemSeq}`,
+      text: t,
+      done: false,
+      source,
+      carried_from: null,
+      position: ++position,
+      event_id: meeting.event_id,
+      occurrence_key: meeting.occurrence_key ?? null
+    }));
+    if (!items.length) return fail(400, "empty_text");
+    list7.push(...items);
+    return ok({ success: true, items: items.map((i) => ({ ...i })) });
+  }
+  async updatePrepItem(itemId, change) {
+    const refused = this.prepDoor("update", { item_id: itemId, ...change });
+    if (refused) return refused;
+    const found = this.findItem(itemId);
+    if (!found) return fail(404, "not_found");
+    if (typeof change.text === "string") found.item.text = change.text.trim();
+    if (typeof change.done === "boolean") found.item.done = change.done;
+    if (typeof change.position === "number") found.item.position = change.position;
+    return ok({ success: true, item: { ...found.item } });
+  }
+  async removePrepItem(itemId) {
+    const refused = this.prepDoor("remove", { item_id: itemId });
+    if (refused) return refused;
+    const found = this.findItem(itemId);
+    if (!found) return fail(404, "not_found");
+    found.list.splice(found.list.indexOf(found.item), 1);
+    return ok({ success: true });
+  }
+  async savePrepNotes(meeting, text2) {
+    const refused = this.prepDoor("notes", { ...meeting, text: text2 });
+    if (refused) return refused;
+    const notes = { text: text2, updated_at: Date.now() };
+    this.prepNotes[meeting.event_id] = notes;
+    const card = this.meetingPreps[meeting.event_id];
+    return ok({ success: true, notes, state: card?.state ?? "now" });
+  }
+  async prepDone(meeting) {
+    const refused = this.prepDoor("done", { ...meeting });
+    if (refused) return refused;
+    const card = this.meetingPreps[meeting.event_id];
+    if (card) card.state = "after";
+    return ok({ success: true, state: "after" });
+  }
+  async removePrepAction(meeting, actionId) {
+    const refused = this.prepDoor("action_remove", { ...meeting, action_id: actionId });
+    if (refused) return refused;
+    const card = this.meetingPreps[meeting.event_id];
+    if (card?.after?.action_items) card.after.action_items = card.after.action_items.filter((a) => a.id !== actionId);
+    return ok({ success: true });
+  }
+  async answerPrepReminder(meeting, reminderId, yes) {
+    const refused = this.prepDoor("reminder", { ...meeting, reminder_id: reminderId, yes });
+    if (refused) return refused;
+    const card = this.meetingPreps[meeting.event_id];
+    const reminder = card?.after?.reminders?.find((r) => r.id === reminderId && r.status === "offered");
+    if (!reminder) return fail(404, "not_found");
+    reminder.status = yes ? "accepted" : "declined";
+    return ok({ success: true });
+  }
+  async getPrepHistory(of, limit = 10) {
+    const offline = this.guard();
+    if (offline) return offline;
+    this.prepCalls.push({ door: "history", body: { ...of, limit } });
+    const key = of.relationship_id ?? of.event_series ?? "";
+    const across = this.prepAcross[key];
+    return ok({ success: true, history: (this.prepHistory[key] ?? []).slice(0, limit).map((r) => ({ ...r })), ...across ? { across: { text: across, material: null } } : {} });
   }
   async getMenuMarks() {
     if (this.state.offline) throw new Error("menu marks: offline");
@@ -16023,13 +19710,13 @@ var _MockApi = class _MockApi {
     if (this.spacesFail) return fail(404, "not found");
     return ok({ spaces: this.spaces });
   }
-  spaceAsk(spaceId, text, choices) {
+  spaceAsk(spaceId, text2, choices) {
     const sm = this.spaceMode;
     const at = (/* @__PURE__ */ new Date()).toISOString();
-    const line = {
+    const line2 = {
       line_id: `mock-line-${++sm.n}`,
       subjects: [{ type: "space", id: spaceId, label: "Door team" }],
-      text,
+      text: text2,
       needs_you: true,
       ask_kind: "choice",
       choices,
@@ -16039,12 +19726,12 @@ var _MockApi = class _MockApi {
       provenance: { source: "retro", detail: "prep" },
       created_at: at
     };
-    sm.turns.push({ turn_id: `mock-turn-${++sm.n}`, from: "myu", at, text, choices, line_id: line.line_id });
-    sm.open = line;
-    return line;
+    sm.turns.push({ turn_id: `mock-turn-${++sm.n}`, from: "myu", at, text: text2, choices, line_id: line2.line_id });
+    sm.open = line2;
+    return line2;
   }
-  spaceSay(from, text, extra = {}) {
-    this.spaceMode.turns.push({ turn_id: `mock-turn-${++this.spaceMode.n}`, from, at: (/* @__PURE__ */ new Date()).toISOString(), text, ...extra });
+  spaceSay(from, text2, extra = {}) {
+    this.spaceMode.turns.push({ turn_id: `mock-turn-${++this.spaceMode.n}`, from, at: (/* @__PURE__ */ new Date()).toISOString(), text: text2, ...extra });
   }
   /** Mark the ask that is up as answered (a button's id, or "typed" when the person typed past it). */
   spaceSettle(choiceId) {
@@ -16060,14 +19747,14 @@ var _MockApi = class _MockApi {
   debriefFirst() {
     return (this.debriefSpace.name ?? "the candidate").split(/\s+/)[0] ?? "the candidate";
   }
-  debriefAsk(type, step, text, choices, input) {
+  debriefAsk(type, step, text2, choices, input) {
     const dm = this.debriefMode;
     const spaceId = this.debriefSpace.space_id;
     const at = (/* @__PURE__ */ new Date()).toISOString();
-    const line = {
+    const line2 = {
       line_id: `mock-debrief-line-${++dm.n}`,
       subjects: [{ type: "space", id: spaceId, label: this.debriefSpace.name ?? "" }],
-      text,
+      text: text2,
       needs_you: true,
       ask_kind: "choice",
       choices,
@@ -16077,14 +19764,14 @@ var _MockApi = class _MockApi {
       provenance: { source: "debrief", detail: type },
       created_at: at
     };
-    dm.turns.push({ turn_id: `mock-debrief-turn-${++dm.n}`, from: "myu", at, text, choices, line_id: line.line_id });
-    dm.open = line;
+    dm.turns.push({ turn_id: `mock-debrief-turn-${++dm.n}`, from: "myu", at, text: text2, choices, line_id: line2.line_id });
+    dm.open = line2;
     dm.payload = { type, step, input };
     dm.step = step;
-    return line;
+    return line2;
   }
-  debriefSay(from, text, extra = {}) {
-    this.debriefMode.turns.push({ turn_id: `mock-debrief-turn-${++this.debriefMode.n}`, from, at: (/* @__PURE__ */ new Date()).toISOString(), text, ...extra });
+  debriefSay(from, text2, extra = {}) {
+    this.debriefMode.turns.push({ turn_id: `mock-debrief-turn-${++this.debriefMode.n}`, from, at: (/* @__PURE__ */ new Date()).toISOString(), text: text2, ...extra });
   }
   debriefSettle(choiceId) {
     const dm = this.debriefMode;
@@ -16146,24 +19833,24 @@ A no: ${t.no}`, [{ id: "dcu", label: "Didn't come up" }], true);
   debriefTyped(content) {
     const dm = this.debriefMode;
     this.debriefSay("you", content);
-    const said = (text) => {
-      this.debriefSay("myu", text);
-      return ok({ role: "assistant", content: text, space_mode: { intent: "debrief", confidence: 0.9, handled: "answered" }, effects: [] });
+    const said = (text2) => {
+      this.debriefSay("myu", text2);
+      return ok({ role: "assistant", content: text2, space_mode: { intent: "debrief", confidence: 0.9, handled: "answered" }, effects: [] });
     };
     const next = (answer) => {
       dm.answers.push({ step: dm.step, answer });
       this.debriefSettle("typed");
       this.debriefNext();
-      const line = dm.open;
-      return ok({ role: "assistant", content: line?.text ?? "", space_mode: { intent: "debrief", confidence: 0.9, handled: line ? "confirm" : "answered", line_id: line?.line_id }, effects: [] });
+      const line2 = dm.open;
+      return ok({ role: "assistant", content: line2?.text ?? "", space_mode: { intent: "debrief", confidence: 0.9, handled: line2 ? "confirm" : "answered", line_id: line2?.line_id }, effects: [] });
     };
     const step = dm.step;
     if (step.startsWith("saw:") && dm.payload?.input) {
       const topic = step.slice(4);
       dm.answers.push({ step, answer: content });
       this.debriefSettle("typed");
-      const line = this.debriefAsk("debrief_ask", `rate:${topic}`, `${topic}: yes or no?`, _MockApi.RATINGS, false);
-      return ok({ role: "assistant", content: line.text, space_mode: { intent: "debrief", confidence: 0.9, handled: "confirm", line_id: line.line_id }, effects: [] });
+      const line2 = this.debriefAsk("debrief_ask", `rate:${topic}`, `${topic}: yes or no?`, _MockApi.RATINGS, false);
+      return ok({ role: "assistant", content: line2.text, space_mode: { intent: "debrief", confidence: 0.9, handled: "confirm", line_id: line2.line_id }, effects: [] });
     }
     if (step.startsWith("rate:") || step === "call") {
       const rating = _MockApi.RATINGS.find((r) => r.label.toLowerCase() === content.trim().toLowerCase());
@@ -16253,9 +19940,9 @@ A no: ${t.no}`, [{ id: "dcu", label: "Didn't come up" }], true);
     if (sm.agent) return { status: 403, ok: false, data: { success: false, error: "scope_required", scope_required: "content" }, error: "scope_required" };
     if (this.isDebriefId(spaceId)) return this.debriefTyped(content);
     this.spaceSay("you", content, blocks ? { pasted_blocks: blocks } : {});
-    const answered = (intent, text, handled = "answered", effects = []) => {
-      this.spaceSay("myu", text);
-      return ok({ role: "assistant", content: text, space_mode: { intent, confidence: 0.9, handled }, effects });
+    const answered = (intent, text2, handled = "answered", effects = []) => {
+      this.spaceSay("myu", text2);
+      return ok({ role: "assistant", content: text2, space_mode: { intent, confidence: 0.9, handled }, effects });
     };
     if (/what do you think of|what do you make of/i.test(content)) {
       return answered("about_person", "I don't see anyone else's private notes; I can tell you what the team shared.");
@@ -16265,24 +19952,24 @@ A no: ${t.no}`, [{ id: "dcu", label: "Didn't come up" }], true);
       return answered("results", "Nothing has been decided here yet.");
     }
     if (/bigger|my whole career/i.test(content)) {
-      const line2 = this.spaceAsk(spaceId, "That's bigger than this retro. Want to take it to your journal?", [{ id: "journal", label: "Take it there" }, { id: "leave", label: "Not now" }]);
-      return ok({ role: "assistant", content: line2.text, space_mode: { intent: "bigger", confidence: 0.9, handled: "confirm", line_id: line2.line_id }, effects: [] });
+      const line3 = this.spaceAsk(spaceId, "That's bigger than this retro. Want to take it to your journal?", [{ id: "journal", label: "Take it there" }, { id: "leave", label: "Not now" }]);
+      return ok({ role: "assistant", content: line3.text, space_mode: { intent: "bigger", confidence: 0.9, handled: "confirm", line_id: line3.line_id }, effects: [] });
     }
     if (/take (that|it) back/i.test(content)) {
       if (sm.open) this.spaceSettle("typed");
       const last = sm.own[sm.own.length - 1] ?? "";
-      const line2 = this.spaceAsk(spaceId, `Take this back? "${last}"`, [{ id: "take_back", label: "Take it back" }, { id: "leave", label: "Leave it" }]);
-      return ok({ role: "assistant", content: line2.text, space_mode: { intent: "take_back", confidence: 0.95, handled: "confirm", line_id: line2.line_id }, effects: [] });
+      const line3 = this.spaceAsk(spaceId, `Take this back? "${last}"`, [{ id: "take_back", label: "Take it back" }, { id: "leave", label: "Leave it" }]);
+      return ok({ role: "assistant", content: line3.text, space_mode: { intent: "take_back", confidence: 0.95, handled: "confirm", line_id: line3.line_id }, effects: [] });
     }
     if (sm.open) this.spaceSettle("typed");
     sm.own.push(content);
     sm.step = "words";
-    const line = this.spaceAsk(spaceId, "Got it. How should this go to the team?", [
+    const line2 = this.spaceAsk(spaceId, "Got it. How should this go to the team?", [
       { id: "named", label: "With my name" },
       { id: "question", label: "As a question, no name" },
       { id: "private", label: "Keep it private" }
     ]);
-    return ok({ role: "assistant", content: line.text, space_mode: { intent: "bring_up", confidence: 0.9, handled: "confirm", line_id: line.line_id }, effects: [] });
+    return ok({ role: "assistant", content: line2.text, space_mode: { intent: "bring_up", confidence: 0.9, handled: "confirm", line_id: line2.line_id }, effects: [] });
   }
   async answerMyuLine(lineId, answer) {
     const offline = this.guard();
@@ -16383,7 +20070,7 @@ Once the questions are up, a no-name question can't be taken back.`, [
       prep_id: "mock-prep-1",
       just_me: false,
       step: sm.step,
-      own_items: sm.own.map((text, i) => ({ item_id: `own-${i}`, text, how: "named", shared: sm.step === "shared" })),
+      own_items: sm.own.map((text2, i) => ({ item_id: `own-${i}`, text: text2, how: "named", shared: sm.step === "shared" })),
       suggestions: [],
       can_take_back: true,
       items: [],
@@ -16476,14 +20163,14 @@ Once the questions are up, a no-name question can't be taken back.`, [
     });
   }
   /** Open an ask in the meeting's conversation (the mock's own seeding, or a test's). */
-  meetingAsk(eventId, text, choices, detail) {
+  meetingAsk(eventId, text2, choices, detail) {
     const mm = this.meetingMode;
     mm.event_id = eventId;
     const at = (/* @__PURE__ */ new Date()).toISOString();
-    const line = {
+    const line2 = {
       line_id: `mock-meeting-line-${++mm.n}`,
       subjects: [{ type: "meeting", id: eventId, label: "Marcus / 1:1" }],
-      text,
+      text: text2,
       needs_you: true,
       ask_kind: "choice",
       choices,
@@ -16492,12 +20179,12 @@ Once the questions are up, a no-name question can't be taken back.`, [
       provenance: { source: "calendar", detail },
       created_at: at
     };
-    mm.turns.push({ turn_id: `mock-meeting-turn-${++mm.n}`, from: "myu", at, text, choices, line_id: line.line_id });
-    mm.open = line;
-    return line;
+    mm.turns.push({ turn_id: `mock-meeting-turn-${++mm.n}`, from: "myu", at, text: text2, choices, line_id: line2.line_id });
+    mm.open = line2;
+    return line2;
   }
-  meetingSay(from, text, extra = {}) {
-    this.meetingMode.turns.push({ turn_id: `mock-meeting-turn-${++this.meetingMode.n}`, from, at: (/* @__PURE__ */ new Date()).toISOString(), text, ...extra });
+  meetingSay(from, text2, extra = {}) {
+    this.meetingMode.turns.push({ turn_id: `mock-meeting-turn-${++this.meetingMode.n}`, from, at: (/* @__PURE__ */ new Date()).toISOString(), text: text2, ...extra });
   }
   meetingSettle(choiceId) {
     const mm = this.meetingMode;
@@ -16531,9 +20218,10 @@ Once the questions are up, a no-name question can't be taken back.`, [
     this.meetingSay("you", content);
     const answered = this.meetingSettle("typed");
     const eventId = this.meetingMode.event_id ?? "";
-    const reply = (text) => {
-      this.meetingSay("myu", text);
-      return ok({ role: "assistant", content: text });
+    const offers = this.meetingOffers.slice(0, 3).map((text2) => ({ text: text2 }));
+    const reply = (text2) => {
+      this.meetingSay("myu", text2);
+      return ok({ role: "assistant", content: text2, ...offers.length ? { list_offers: offers } : {} });
     };
     if (answered?.provenance?.detail === "unsaid") {
       const r = reply("Kept with this meeting. Only you can see it.");
@@ -16564,9 +20252,9 @@ Once the questions are up, a no-name question can't be taken back.`, [
     this.meetingAnswered.push({ line_id: lineId, choice_id: choice });
     const detail = open.provenance?.detail;
     this.meetingSettle(choice);
-    const said = (text) => {
-      if (text) this.meetingSay("myu", text, { readback: true, line_id: lineId });
-      return ok({ success: true, line: { ...open, state: "answered" }, readback: { text } });
+    const said = (text2) => {
+      if (text2) this.meetingSay("myu", text2, { readback: true, line_id: lineId });
+      return ok({ success: true, line: { ...open, state: "answered" }, readback: { text: text2 } });
     };
     if (detail === "converge" && choice === "yes") {
       const r = said("Okay. Only the topic goes, never your words or your name.");
@@ -16610,11 +20298,29 @@ Once the questions are up, a no-name question can't be taken back.`, [
           they_owe: [],
           stance: "In 4 of 6 emails Marcus wrote as the one deciding.",
           last_time: "You last met Sep 25.",
-          evidence_ids: ["email:e1"]
+          evidence_ids: ["email:e1"],
+          line: "You owe him the headcount numbers, due Friday.",
+          line_kind: "open",
+          changed: [],
+          open: [{ kind: "you_owe", text: "The headcount numbers", when: "due Friday" }],
+          open_default: true,
+          open_count: 1
         },
-        { relationship_id: null, name: "Reid Park", thin: true, to_you: "Nothing in your notes about Reid yet.", stands: null, works_best: null, you_owe: [], they_owe: [], stance: null, last_time: null, evidence_ids: [] }
+        { relationship_id: null, name: "Reid Park", thin: true, to_you: "Nothing in your notes about Reid yet.", stands: null, works_best: null, you_owe: [], they_owe: [], stance: null, last_time: null, evidence_ids: [], line: "First meeting with you.", line_kind: "who", changed: [], open: [], open_default: false, open_count: 0 }
       ],
-      room: { team: null, lines: [] },
+      room: { team: null, lines: [], summary: null },
+      // The prep as Myu's brief (2026-10-29): Myu's words first, the person's list under its question.
+      brief: {
+        paragraphs: ["Thursday with Marcus is about the headcount proposal. He asked for the numbers by Friday.", "You owe him the numbers. I\u2019d raise the reorg only if he does."],
+        question: "What do you want to cover?",
+        suggestions: [{ text: "the headcount numbers", evidence_ids: ["email:e1"] }]
+      },
+      items: this.prepList(eventId).map((i) => ({ ...i })),
+      reading: false,
+      reading_failed: false,
+      state: "before",
+      join_url: null,
+      notes: this.prepNotes[eventId] ?? null,
       before_you_go: {
         agenda: null,
         documents: [{ title: "Headcount plan", url: "https://docs.google.com/document/d/mock" }],
@@ -16638,7 +20344,12 @@ Once the questions are up, a no-name question can't be taken back.`, [
     const offline = this.guard();
     if (offline) return offline;
     this.prepReads.push(eventId);
-    if (eventId in this.meetingPreps) return ok({ prep: this.meetingPreps[eventId] });
+    if (eventId in this.meetingPreps) {
+      const card = this.meetingPreps[eventId];
+      if (!card || card.version !== 2) return ok({ prep: card });
+      const notes = this.prepNotes[eventId] ?? card.notes ?? null;
+      return ok({ prep: { ...card, items: this.prepList(eventId).map((i) => ({ ...i })), notes } });
+    }
     if (eventId === "mock-event-unknown") return fail(404, "not_found");
     this.meetingSeed(eventId);
     return ok({ prep: this.mockPrepCard(eventId) });
@@ -17107,11 +20818,75 @@ Once the questions are up, a no-name question can't be taken back.`, [
       ]
     });
   }
-  /** P9 — signup succeeds and mints a mock session, like the real flat shape. */
-  async createAccount(_email, _name, _password) {
+  async createAccount(email, _name, _password) {
     const offline = this.guard();
     if (offline) return offline;
-    return ok({ autoken: `mock-session-${randomBase64(6)}`, account_id: "mock-account" });
+    if (this.addressInUse) {
+      return { status: 409, ok: false, data: { success: false, error: "address_in_use", message: "This address can't be used to make an account with a password. Sign in by mail instead." }, error: "address_in_use" };
+    }
+    const session = { autoken: `mock-session-${randomBase64(6)}`, account_id: "mock-account" };
+    if (!this.signupConfirmation) return ok(session);
+    const sent = this.signupConfirmation === "sent";
+    return ok({
+      ...session,
+      email,
+      email_confirmed: false,
+      email_confirmation: this.signupConfirmation,
+      ...sent ? { email_message: `We sent a link to ${email}. Open it to confirm your address.` } : {}
+    });
+  }
+  heldAsk(email) {
+    this.heldToken = `mock-held-${randomBase64(6)}`;
+    this.heldTries = 0;
+    return {
+      success: false,
+      error: "address_held",
+      held_token: this.heldToken,
+      email,
+      message: "An account was made at this address with a password and never confirmed. If it's yours, enter that password to open it (that confirms it). If it isn't, start your own.",
+      choices: [
+        { id: "password", label: "Enter its password" },
+        { id: "start_own", label: "Start my own account" }
+      ]
+    };
+  }
+  async answerAddressHeld(body) {
+    const offline = this.guard();
+    if (offline) return offline;
+    this.heldAnswers.push(body);
+    const refuse = (status, error, message, extra = {}) => ({
+      status,
+      ok: false,
+      data: { success: false, error, message, ...extra },
+      error
+    });
+    const held = this.heldAddress;
+    if (!held || !this.heldToken || body.held_token !== this.heldToken) return refuse(410, "expired", "This took too long. Sign in again from the start.");
+    const answered = (choice) => {
+      this.heldToken = null;
+      if (!held.stays) this.heldAddress = null;
+      return ok({ success: true, choice, again_url: `http://localhost/api/auth/magic-link/validate?token=${encodeURIComponent(this.pendingMagicToken ?? "")}` });
+    };
+    if (body.choice === "start_own") return answered("start_own");
+    if (body.choice !== "password") return refuse(400, "choice_unknown", "");
+    if (!body.password) return refuse(400, "password_required", "");
+    if (body.password === held.password) return answered("password");
+    this.heldTries += 1;
+    if (this.heldTries >= 5) {
+      this.heldToken = null;
+      return refuse(429, "too_many_attempts", "Too many tries. Sign in again from the start.");
+    }
+    return refuse(401, "wrong_password", "That password doesn't open it. Try again, or start your own account.", { tries_left: 5 - this.heldTries });
+  }
+  async getAccount() {
+    const offline = this.guard();
+    if (offline) return offline;
+    const own = this.mockEmails.find((e) => e.is_primary === true);
+    return ok({
+      account_id: "mock-account",
+      email: typeof own?.email === "string" ? own.email : null,
+      ...this.accountEmailConfirmed === null ? {} : { email_confirmed: this.accountEmailConfirmed }
+    });
   }
   async createPluginToken(_label) {
     const offline = this.guard();
@@ -17124,11 +20899,20 @@ Once the questions are up, a no-name question can't be taken back.`, [
     this.pendingMagicToken = `mock-magic-${randomBase64(6)}`;
     return ok({ expires_in_minutes: 15 });
   }
+  /** A link token the mock has "mailed", as `requestMagicLink` does (tests start a sign-in from it). */
+  mailMagicLink() {
+    this.pendingMagicToken = `mock-magic-${randomBase64(6)}`;
+    return this.pendingMagicToken;
+  }
   async validateMagicLink(token) {
     const offline = this.guard();
     if (offline) return offline;
+    this.magicRedeems.push(token);
     if (!this.pendingMagicToken || token !== this.pendingMagicToken) {
       return fail(404, "token_not_found");
+    }
+    if (this.heldAddress) {
+      return { status: 409, ok: false, data: this.heldAsk(this.heldAddress.email), error: "address_held" };
     }
     this.pendingMagicToken = null;
     return ok({
@@ -17291,8 +21075,12 @@ Once the questions are up, a no-name question can't be taken back.`, [
     this.mockEmails.push({ email, verified: false, is_primary: false });
     return ok({});
   }
-  async resendAccountEmail(_email) {
-    return ok({});
+  async resendAccountEmail(email) {
+    this.resends.push(email);
+    const own = this.mockEmails.find((e) => e.is_primary === true)?.email === email && this.accountEmailConfirmed === false;
+    if (!own) return ok({});
+    if (this.resendFails) return { status: 503, ok: false, data: { success: false, email_confirmation: "not_sent" }, error: "http_503" };
+    return ok({ success: true, email_confirmation: "sent", email_message: `We sent a link to ${email}. Open it to confirm your address.` });
   }
   async removeAccountEmail(email) {
     this.mockEmails = this.mockEmails.filter((e) => e.email !== email);
@@ -17315,8 +21103,18 @@ Once the questions are up, a no-name question can't be taken back.`, [
   async editRelationshipMemory(_memoryId, _action, _correction) {
     return ok({});
   }
-  async mergeRelationships() {
-    return this.guard() ?? ok({ success: true });
+  async samePerson(sourceId, targetId) {
+    const offline = this.guard();
+    if (offline) return offline;
+    this.samePersonCalls.push({ source_id: sourceId, target_id: targetId });
+    return ok(this.samePersonReply ?? { success: true, op: "merge", moved: 5, move_id: "mv-1", said: "Now one person. 5 things moved to Marcus Webb." });
+  }
+  async undoPersonChange(moveId) {
+    const offline = this.guard();
+    if (offline) return offline;
+    this.undoCalls.push(moveId);
+    if (this.undoRefusal) return fail(409, this.undoRefusal);
+    return ok(this.undoReply ?? { success: true, moved_back: 5, kind: "merge" });
   }
   async markRelationshipAsSelf() {
     return this.guard() ?? ok({ success: true });
@@ -17454,10 +21252,22 @@ var UnlockMachine = class {
     /** The one re-mint / re-escrow in flight — every 401 / 403-enc of a burst joins it. */
     this.remint = null;
     this.reescrow = null;
+    /**
+     * The server refused this device's key as not the account's (409 `key_not_yours`, 2026-11-18): it is lent no more, dropped here, and the
+     * device waits for approval as one never approved. A new key (approval or the recovery phrase) ends it.
+     */
+    this.refused = false;
+    /** "Not now" from the lending door (18 Nov): how many in a row, and until when the next lending waits. */
+    this.notNowTries = 0;
+    this.notNowUntil = 0;
     this.transferKeys = null;
     this.pollTimer = null;
     this.approvalState = null;
     this.approvalObservers = /* @__PURE__ */ new Set();
+    /** The server's sentence when the last sign-up was refused for its address. */
+    this.signupRefused = null;
+    /** The sentence the last sign-up left about its address; null when there is nothing to say. */
+    this.signupSaid = null;
     /** Device id captured between the door and the ceremony. */
     this.pendingGenesisDeviceId = null;
     // ── the password for new devices (2026-10-26) ─────────────────────────────
@@ -17484,6 +21294,7 @@ var UnlockMachine = class {
     for (const fn of this.approvalObservers) fn();
   }
   setState(next, detail) {
+    if (next === "unlocked") this.refused = false;
     this.state = next;
     this.deps.onState(next, detail);
   }
@@ -17547,11 +21358,29 @@ var UnlockMachine = class {
    * (named in the signup modal, because it's true).
    */
   async signup(email, name, password, deviceId, termsVersion) {
+    this.signupRefused = null;
     const created = await this.deps.api.createAccount(email, name, password, termsVersion);
     if (!created.ok || !created.data?.autoken || !created.data.account_id) {
-      return created.status === 401 ? "email_not_allowed" : "error";
+      if (created.status === 401) return "email_not_allowed";
+      const inUse = addressInUseOf(created.status, created.error, created.data);
+      if (inUse) {
+        this.signupRefused = inUse;
+        return "address_in_use";
+      }
+      return "error";
     }
+    this.signupSaid = signupConfirmationWords(signupConfirmationOf(created.data, email));
     return this.bootstrapFreshSession(created.data.autoken, created.data.account_id, deviceId, false);
+  }
+  /** Why the last sign-up was refused for its address (the server's sentence), or null. */
+  signupRefusal() {
+    return this.signupRefused;
+  }
+  /** Take the sign-up's sentence: it is said once, so taking it clears it. */
+  takeSignupWords() {
+    const said = this.signupSaid;
+    this.signupSaid = null;
+    return said;
   }
   /**
    * P9 passwordless — redeem an emailed magic-link token (arrives through the
@@ -17560,6 +21389,8 @@ var UnlockMachine = class {
    */
   async completeMagicLink(token, deviceId) {
     const res = await this.deps.api.validateMagicLink(token);
+    const held = addressHeldOf(res.status, res.data);
+    if (held) return { held };
     if (!res.ok || !res.data?.auth_token || !res.data.account_id) {
       const serverAnswered = res.status > 0 && res.status < 500;
       return serverAnswered ? "invalid" : "error";
@@ -17658,6 +21489,14 @@ var UnlockMachine = class {
   async revokedRemotely() {
     await this.forget("remote_logout");
   }
+  /**
+   * The rule (18 Nov): a key this device keeps is never deleted without being set aside first, except by the person's own Disconnect.
+   * The stored copy goes into `refused_keys` with its time and why; returns the list to save.
+   */
+  asideWith(why, wrapped = this.deps.load().wrapped_mdek) {
+    const kept = this.deps.load().refused_keys ?? [];
+    return wrapped ? [...kept, { at: (/* @__PURE__ */ new Date()).toISOString(), device_id: this.deps.load().device_id, wrapped_mdek: wrapped, why }] : kept;
+  }
   async forget(reason) {
     this.stopPolling();
     this.transferKeys = null;
@@ -17665,7 +21504,7 @@ var UnlockMachine = class {
     this.pendingGenesisDeviceId = null;
     this.deps.keys.clear();
     this.deps.onSession(null);
-    await this.deps.save({ token: null, session_token: null, wrapped_mdek: null, account_id: null });
+    await this.deps.save({ token: null, session_token: null, wrapped_mdek: null, account_id: null, refused_keys: reason === "disconnected_by_user" ? [] : this.asideWith(reason) });
     this.setState("disconnected", reason);
   }
   // ── the split-custody re-unlock (the common path) ─────────────────────────
@@ -17683,7 +21522,7 @@ var UnlockMachine = class {
     const res = await this.deps.api.fetchDeviceKEK(auth.device_id);
     if (!res.ok || !res.data?.device_kek) {
       if (res.status === 404 || res.error === "kek_not_found") {
-        await this.deps.save({ wrapped_mdek: null });
+        await this.deps.save({ wrapped_mdek: null, refused_keys: this.asideWith("device_revoked") });
         this.setState("blocked", "device_revoked");
       } else if (res.status === 403 || res.error === "token_revoked") {
         this.setState("blocked", "token_revoked");
@@ -17696,10 +21535,11 @@ var UnlockMachine = class {
       const kek = await importKEK(res.data.device_kek);
       const mdek = await unwrapMDEK(auth.wrapped_mdek, kek);
       this.deps.keys.set(mdek);
-      await this.escrowToSession(auth.device_id);
+      await this.escrowToSession(auth.device_id, auth.wrapped_mdek);
+      if (this.refused) return;
       this.setState("unlocked");
     } catch {
-      await this.deps.save({ wrapped_mdek: null });
+      await this.deps.save({ wrapped_mdek: null, refused_keys: this.asideWith("key_mismatch") });
       this.setState("blocked", "key_mismatch");
     }
   }
@@ -17823,7 +21663,9 @@ var UnlockMachine = class {
       const recoveryKEK = await deriveKEKFromPhrase(phrase);
       const wrapped = await wrapMDEK(mdek, recoveryKEK);
       const res = await this.deps.api.setupRecovery(wrapped);
-      return res.ok ? "ok" : "error";
+      if (res.ok) return "ok";
+      const said = doorAnswerWords(res.status, res.data ?? { error: res.error });
+      return said ? { said } : "error";
     } catch {
       return "error";
     }
@@ -17841,6 +21683,7 @@ var UnlockMachine = class {
       const blob = await encryptMDEKForTransfer(mdek, requesterPublicKey);
       const res = await this.deps.api.approveDeviceTransfer(requestId, verificationCode, blob);
       if (res.ok) return "ok";
+      if (doorAnswerOf(res.status, res.data ?? { error: res.error }) === "not_now") return "not_now";
       return res.error === "invalid_verification_code" || res.status === 400 ? "bad_code" : "error";
     } catch {
       return "error";
@@ -17920,6 +21763,7 @@ var UnlockMachine = class {
   async adoptMDEK(mdek) {
     const auth = this.deps.load();
     if (!auth.device_id) return false;
+    this.refused = false;
     const kek = await generateKEK();
     const wrapped = await wrapMDEK(mdek, kek);
     this.deps.keys.set(mdek);
@@ -17928,7 +21772,8 @@ var UnlockMachine = class {
       this.deps.keys.clear();
       return false;
     }
-    await this.escrowToSession(auth.device_id);
+    await this.escrowToSession(auth.device_id, wrapped);
+    if (this.refused) return false;
     await this.deps.save({ wrapped_mdek: wrapped });
     if (!this.deps.load().token) {
       const minted = await this.deps.api.createPluginToken(this.deps.deviceName);
@@ -17954,13 +21799,36 @@ var UnlockMachine = class {
    * closed here costs a user some server-side freshness; failing open would
    * hand over a key they declined to give.
    */
-  async escrowToSession(deviceId) {
+  async escrowToSession(deviceId, wrapped = this.deps.load().wrapped_mdek) {
+    if (this.refused) return false;
     try {
       const res = await this.deps.api.escrowMDEK(await this.deps.keys.exportForEscrow(), deviceId);
+      if (!res.ok && res.status === 409 && (res.error === "key_not_yours" || res.data?.error === "key_not_yours")) {
+        await this.refuseThisKey(deviceId, wrapped);
+        return false;
+      }
+      if (!res.ok && doorAnswerOf(res.status, res.data ?? { error: res.error }) === "not_now") {
+        this.notNowTries += 1;
+        this.notNowUntil = Date.now() + notNowPauseMs(this.notNowTries);
+        return false;
+      }
+      if (res.ok) {
+        this.notNowTries = 0;
+        this.notNowUntil = 0;
+      }
       return res.ok;
     } catch {
       return false;
     }
+  }
+  /** A refused key: not lent again, gone from memory and from what this device keeps, and the device waits for approval. */
+  async refuseThisKey(deviceId, wrapped) {
+    this.refused = true;
+    this.deps.keys.clear();
+    const kept = this.deps.load().refused_keys ?? [];
+    const asideNow = wrapped ? [...kept, { at: (/* @__PURE__ */ new Date()).toISOString(), device_id: deviceId, wrapped_mdek: wrapped, why: "refused" }] : kept;
+    await this.deps.save({ wrapped_mdek: null, refused_keys: asideNow });
+    this.setState("blocked", "not_this_account");
   }
   /** Transport saw a 401 — the session died mid-flight. */
   /** Belt-and-braces: an UNLOCKED machine without a durable plugin token
@@ -18010,6 +21878,7 @@ var UnlockMachine = class {
    * request is worth sending again.
    */
   onEncryptionBlocked() {
+    if (Date.now() < this.notNowUntil) return Promise.resolve(false);
     if (!this.reescrow) {
       this.reescrow = (async () => {
         const auth = this.deps.load();
@@ -18067,8 +21936,8 @@ function isMyuGenerated(fm) {
 }
 function isWebClipping(fm) {
   const tags = fm?.tags;
-  const list2 = Array.isArray(tags) ? tags : typeof tags === "string" ? tags.split(/[\s,]+/) : [];
-  if (list2.some((t) => typeof t === "string" && t.trim().replace(/^#/, "").toLowerCase() === "clippings")) return true;
+  const list7 = Array.isArray(tags) ? tags : typeof tags === "string" ? tags.split(/[\s,]+/) : [];
+  if (list7.some((t) => typeof t === "string" && t.trim().replace(/^#/, "").toLowerCase() === "clippings")) return true;
   const source = fm?.source;
   const first = Array.isArray(source) ? source.find((s2) => typeof s2 === "string") : source;
   return typeof first === "string" && /^https?:\/\//i.test(first.trim());
@@ -18837,7 +22706,7 @@ function mergeCanvas(existingJson, fresh) {
   }
   return { nodes: merged, edges: Array.isArray(existing.edges) ? existing.edges : [] };
 }
-function buildCanvas(spec, resolvePersonPath, webUrl, chartAssetPath) {
+function buildCanvas(spec, resolvePersonPath, webUrl2, chartAssetPath) {
   const nodes = [];
   const linkedPages = [];
   const positioned = /* @__PURE__ */ new Map();
@@ -18868,7 +22737,7 @@ function buildCanvas(spec, resolvePersonPath, webUrl, chartAssetPath) {
     return placed;
   };
   for (const component of flowOrder) {
-    const node = toNode(component, resolvePersonPath, webUrl, chartAssetPath);
+    const node = toNode(component, resolvePersonPath, webUrl2, chartAssetPath);
     if (node.type === "file" && node.file) linkedPages.push(node.file);
     positioned.set(component.id, place(node));
   }
@@ -18892,7 +22761,7 @@ function buildCanvas(spec, resolvePersonPath, webUrl, chartAssetPath) {
   }
   return { canvas: { nodes, edges: [] }, linkedPages };
 }
-function toNode(component, resolvePersonPath, webUrl, chartAssetPath) {
+function toNode(component, resolvePersonPath, webUrl2, chartAssetPath) {
   const data = component.data ?? {};
   if (component.type === "chart") {
     const assetPath = chartAssetPath?.(component.id) ?? null;
@@ -18908,18 +22777,19 @@ function toNode(component, resolvePersonPath, webUrl, chartAssetPath) {
     }
     return { id: component.id, type: "text", text: name || "Person", width: COLUMN_WIDTH, height: 80 };
   }
-  const text = typeof data.text === "string" && data.text || typeof data.content === "string" && data.content || typeof data.summary === "string" && data.summary || null;
-  if (text) {
-    return { id: component.id, type: "text", text, width: COLUMN_WIDTH, height: estimateHeight(text) };
+  const text2 = typeof data.text === "string" && data.text || typeof data.content === "string" && data.content || typeof data.summary === "string" && data.summary || null;
+  if (text2) {
+    return { id: component.id, type: "text", text: text2, width: COLUMN_WIDTH, height: estimateHeight(text2) };
   }
   const generic = componentMarkdown(component, 3).trim();
   if (generic) {
     return { id: component.id, type: "text", text: generic, width: COLUMN_WIDTH, height: estimateHeight(generic) };
   }
-  const label = component.label ?? component.type.replace(/_/g, " ");
-  return { id: component.id, type: "text", text: `**${label}**`, width: COLUMN_WIDTH, height: 60 };
+  const label2 = component.label ?? component.type.replace(/_/g, " ");
+  return { id: component.id, type: "text", text: `**${label2}**`, width: COLUMN_WIDTH, height: 60 };
 }
-function chartToSvg(title, config, snapshotDate) {
+function chartToSvg(title, config, snapshotDate, source) {
+  if (config && (config.type === "heatmap" || config.type === "box_plot")) return shapedChartSvg(title, config, snapshotDate, source);
   if (!config || !Array.isArray(config.data) || config.data.length === 0) return null;
   const kind = config.type;
   if (kind !== "bar" && kind !== "line" && kind !== "area") return null;
@@ -18927,21 +22797,22 @@ function chartToSvg(title, config, snapshotDate) {
   const xKey = config.x_key ?? "";
   const values = config.data.map((row) => Number(row[yKey]));
   if (values.some((v) => !Number.isFinite(v))) return null;
-  const W = 360;
+  const W3 = 360;
   const H = 220;
+  const sourceLines2 = svgSourceLines(chartSourceCaption(source));
   const PAD = { top: 34, right: 12, bottom: 26, left: 12 };
-  const plotW = W - PAD.left - PAD.right;
+  const plotW = W3 - PAD.left - PAD.right;
   const plotH = H - PAD.top - PAD.bottom;
   const max = Math.max(...values, 0);
   const min = Math.min(...values, 0);
   const span = max - min || 1;
   const yFor = (v) => PAD.top + plotH - (v - min) / span * plotH;
-  const color = typeof config.color === "string" && /^#[0-9a-fA-F]{3,8}$/.test(config.color) ? config.color : "var(--color-accent, #b8860b)";
+  const color = "var(--color-accent, #b8860b)";
   const parts = [
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" font-family="sans-serif">`,
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W3} ${H + sourceLines2.length * 13}" font-family="sans-serif">`,
     `<text x="${PAD.left}" y="18" font-size="13" fill="currentColor">${escapeXml(title)}</text>`,
-    `<text x="${W - PAD.right}" y="18" font-size="9" fill="currentColor" opacity="0.55" text-anchor="end">snapshot \xB7 ${escapeXml(snapshotDate)}</text>`,
-    `<line x1="${PAD.left}" y1="${yFor(Math.max(min, 0))}" x2="${W - PAD.right}" y2="${yFor(Math.max(min, 0))}" stroke="currentColor" opacity="0.25"/>`
+    `<text x="${W3 - PAD.right}" y="18" font-size="9" fill="currentColor" opacity="0.55" text-anchor="end">snapshot \xB7 ${escapeXml(snapshotDate)}</text>`,
+    `<line x1="${PAD.left}" y1="${yFor(Math.max(min, 0))}" x2="${W3 - PAD.right}" y2="${yFor(Math.max(min, 0))}" stroke="currentColor" opacity="0.25"/>`
   ];
   if (kind === "bar") {
     const step = plotW / values.length;
@@ -18967,16 +22838,102 @@ function chartToSvg(title, config, snapshotDate) {
     const firstLabel = String(config.data[0][xKey] ?? "");
     const lastLabel = String(config.data[config.data.length - 1][xKey] ?? "");
     parts.push(`<text x="${PAD.left}" y="${H - 8}" font-size="9" fill="currentColor" opacity="0.6">${escapeXml(firstLabel)}</text>`);
-    parts.push(`<text x="${W - PAD.right}" y="${H - 8}" font-size="9" fill="currentColor" opacity="0.6" text-anchor="end">${escapeXml(lastLabel)}</text>`);
+    parts.push(`<text x="${W3 - PAD.right}" y="${H - 8}" font-size="9" fill="currentColor" opacity="0.6" text-anchor="end">${escapeXml(lastLabel)}</text>`);
   }
+  sourceLines2.forEach((line2, i) => {
+    parts.push(`<text x="${PAD.left}" y="${H + 8 + i * 13}" font-size="9" font-style="italic" fill="currentColor" opacity="0.55">${escapeXml(line2)}</text>`);
+  });
   parts.push("</svg>");
   return parts.join("\n");
 }
-function escapeXml(text) {
-  return text.replace(/[<>&"']/g, (ch) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;", "'": "&apos;" })[ch]);
+function shapedChartSvg(title, raw, snapshotDate, source) {
+  const desc = readChart(raw);
+  if (!desc) return null;
+  const W3 = 360;
+  const top = 34;
+  const accent = "var(--color-accent, #b8860b)";
+  const cool = "var(--color-blue, #4a7bd0)";
+  const sourceLines2 = svgSourceLines(chartSourceCaption(source));
+  const body = [];
+  let H;
+  if (desc.type === "heatmap") {
+    const g = heatmapGrid(desc);
+    const labelW = Math.min(90, 8 + Math.max(4, ...g.rows.map((r) => r.length)) * 5.5);
+    const pitch = Math.max(6, Math.min(22, Math.floor((W3 - labelW - 12) / Math.max(1, g.columns.length))));
+    const cell2 = pitch - 2;
+    g.rows.forEach((r, i) => {
+      const y = top + i * pitch;
+      body.push(`<text x="${(labelW - 4).toFixed(1)}" y="${(y + cell2 / 2 + 3).toFixed(1)}" font-size="9" fill="currentColor" opacity="0.7" text-anchor="end">${escapeXml(r)}</text>`);
+      g.columns.forEach((c, j) => {
+        const x = labelW + j * pitch;
+        const v = g.value(r, c);
+        if (v === void 0 || v === null) {
+          body.push(`<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${cell2}" height="${cell2}" rx="2" fill="none" stroke="currentColor" opacity="0.2"/>`);
+          return;
+        }
+        const sh = heatmapShade(v, g.min, g.max, !!desc.diverging);
+        body.push(`<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${cell2}" height="${cell2}" rx="2" fill="${sh.side === "low" ? cool : accent}" fill-opacity="${(0.08 + 0.87 * sh.strength).toFixed(2)}"/>`);
+      });
+    });
+    const below = top + g.rows.length * pitch + 10;
+    if (g.columns.length) {
+      body.push(`<text x="${labelW}" y="${below}" font-size="9" fill="currentColor" opacity="0.6">${escapeXml(g.columns[0])}</text>`);
+      if (g.columns.length > 1) body.push(`<text x="${(labelW + (g.columns.length - 1) * pitch + cell2).toFixed(1)}" y="${below}" font-size="9" fill="currentColor" opacity="0.6" text-anchor="end">${escapeXml(g.columns[g.columns.length - 1])}</text>`);
+    }
+    H = below + 8;
+  } else {
+    const groups = desc.groups ?? [];
+    const [lo, hi] = boxPlotDomain(groups);
+    const span = hi - lo || 1;
+    const plotH = 140;
+    const left = 30;
+    const colW = Math.min(64, (W3 - left - 12) / Math.max(1, groups.length));
+    const yOf = (v) => top + (1 - (v - lo) / span) * plotH;
+    for (const t of [lo, hi]) body.push(`<text x="${left - 4}" y="${(yOf(t) + 3).toFixed(1)}" font-size="9" fill="currentColor" opacity="0.6" text-anchor="end">${escapeXml(chartValue(t))}</text>`);
+    groups.forEach((g, i) => {
+      const cx = left + i * colW + colW / 2;
+      body.push(
+        `<line x1="${cx.toFixed(1)}" x2="${cx.toFixed(1)}" y1="${yOf(g.max).toFixed(1)}" y2="${yOf(g.min).toFixed(1)}" stroke="${accent}"/>`,
+        `<rect x="${(cx - 12).toFixed(1)}" y="${yOf(g.q3).toFixed(1)}" width="24" height="${Math.max(1, yOf(g.q1) - yOf(g.q3)).toFixed(1)}" fill="${accent}" fill-opacity="0.2" stroke="${accent}"/>`,
+        `<line x1="${(cx - 12).toFixed(1)}" x2="${(cx + 12).toFixed(1)}" y1="${yOf(g.median).toFixed(1)}" y2="${yOf(g.median).toFixed(1)}" stroke="currentColor" stroke-width="2"/>`,
+        ...(g.outliers ?? []).map((o) => `<circle cx="${cx.toFixed(1)}" cy="${yOf(o).toFixed(1)}" r="2.5" fill="none" stroke="${accent}"/>`),
+        `<text x="${cx.toFixed(1)}" y="${top + plotH + 14}" font-size="9" fill="currentColor" opacity="0.7" text-anchor="middle">${escapeXml(g.label.length > 10 ? `${g.label.slice(0, 9)}\u2026` : g.label)}</text>`
+      );
+    });
+    H = top + plotH + 22;
+  }
+  const parts = [
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W3} ${H + sourceLines2.length * 13}" font-family="sans-serif">`,
+    `<text x="12" y="18" font-size="13" fill="currentColor">${escapeXml(title)}</text>`,
+    `<text x="${W3 - 12}" y="18" font-size="9" fill="currentColor" opacity="0.55" text-anchor="end">snapshot \xB7 ${escapeXml(snapshotDate)}</text>`,
+    ...body,
+    ...sourceLines2.map((line2, i) => `<text x="12" y="${H + 8 + i * 13}" font-size="9" font-style="italic" fill="currentColor" opacity="0.55">${escapeXml(line2)}</text>`),
+    "</svg>"
+  ];
+  return parts.join("\n");
 }
-function estimateHeight(text) {
-  const lines = Math.max(1, Math.ceil(text.length / 45) + (text.match(/\n/g)?.length ?? 0));
+function svgSourceLines(caption) {
+  if (!caption) return [];
+  const lines = [];
+  let line2 = "";
+  for (const word of caption.split(" ")) {
+    if (line2 && (line2 + " " + word).length > 64) {
+      lines.push(line2);
+      line2 = word;
+    } else {
+      line2 = line2 ? `${line2} ${word}` : word;
+    }
+  }
+  if (line2) lines.push(line2);
+  if (lines.length <= 2) return lines;
+  const second = lines.slice(1).join(" ");
+  return [lines[0], second.length > 64 ? `${second.slice(0, 63).trimEnd()}\u2026` : second];
+}
+function escapeXml(text2) {
+  return text2.replace(/[<>&"']/g, (ch) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;", "'": "&apos;" })[ch]);
+}
+function estimateHeight(text2) {
+  const lines = Math.max(1, Math.ceil(text2.length / 45) + (text2.match(/\n/g)?.length ?? 0));
   return Math.min(600, 40 + lines * 24);
 }
 var CanvasExporter = class {
@@ -19014,7 +22971,7 @@ var CanvasExporter = class {
    * never disagree — one mechanism, two outputs, the pattern the weekly review
    * established.
    */
-  async writeMarkdown(spec, resolvePersonName, webUrl) {
+  async writeMarkdown(spec, resolvePersonName, webUrl2) {
     const date = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
     const subject = (spec.summary_text ?? "composition").replace(/[\\/:*?"<>|#^[\]]/g, "").slice(0, 60).trim();
     const path = (0, import_obsidian31.normalizePath)(`Myu/Canvas/${date} ${subject || "composition"}.md`);
@@ -19023,14 +22980,14 @@ var CanvasExporter = class {
       if (!this.app.vault.getAbstractFileByPath("Myu/Canvas")) await this.app.vault.createFolder("Myu/Canvas");
       const body = buildCompositionMarkdown(spec, resolvePersonName);
       const head = ["---", "type: myu-canvas", "myu-generated: true", `captured: ${date}`, "---", ""].join("\n");
-      const foot = ["", "---", "", `*Snapshot taken ${date}. [Open the live canvas \u25B8](${webUrl})*`, ""].join("\n");
+      const foot = ["", "---", "", `*Snapshot taken ${date}. [Open the live canvas \u25B8](${webUrl2})*`, ""].join("\n");
       await this.app.vault.create(path, head + body + foot);
       return { status: "written", canvasPath: path };
     } catch (err) {
       return { status: "error", message: err instanceof Error ? err.message : String(err) };
     }
   }
-  async write(spec, resolvePersonPath, webUrl) {
+  async write(spec, resolvePersonPath, webUrl2) {
     const date = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
     const subject = (spec.summary_text ?? "composition").replace(/[\\/:*?"<>|]/g, "").slice(0, 60).trim();
     const base = (0, import_obsidian31.normalizePath)(`Myu/Canvas/${date} ${subject}`);
@@ -19043,7 +23000,7 @@ var CanvasExporter = class {
         if (component.type !== "chart") continue;
         const data = component.data ?? {};
         const title = typeof data.title === "string" && data.title || component.label || "Chart";
-        const svg = chartToSvg(title, data.recharts_config, date);
+        const svg = chartToSvg(title, data.recharts_config, date, data.data_source);
         if (!svg) continue;
         const assetsFolder = `${folder}/assets`;
         if (!this.app.vault.getAbstractFileByPath(assetsFolder)) {
@@ -19059,7 +23016,7 @@ var CanvasExporter = class {
       const { canvas, linkedPages } = buildCanvas(
         spec,
         resolvePersonPath,
-        webUrl,
+        webUrl2,
         (id) => chartPaths.get(id) ?? null
       );
       const existingPath = this.findExistingCanvas(spec.id);
@@ -19126,64 +23083,64 @@ var LIVE_NOTICE_EVENTS = [
   "relationship_alert",
   "priority_card"
 ];
-function str2(v) {
+function str9(v) {
   return typeof v === "string" ? v.trim() : "";
 }
 function liveNoticeFor(eventType, payload, accountId) {
   switch (eventType) {
     case "DEVICE_TRANSFER_PENDING": {
-      const device = str2(payload.device_name) || "A new device";
+      const device = str9(payload.device_name) || "A new device";
       return { title: "New Device Request", body: `\u201C${device}\u201D wants to join your account`, kind: "info", durationMs: 0, action: "open_devices" };
     }
     case "DEVICE_TRANSFER_COMPLETED": {
-      const device = str2(payload.new_device_name) || "A device";
+      const device = str9(payload.new_device_name) || "A device";
       return { title: "Transfer Completed", body: `\u201C${device}\u201D was added by another device`, kind: "info" };
     }
     case "DEVICE_TRANSFER_DENIED":
-      return { title: "Transfer Denied", body: str2(payload.reason) || "The device transfer was denied", kind: "error" };
+      return { title: "Transfer Denied", body: str9(payload.reason) || "The device transfer was denied", kind: "error" };
     case "logout": {
-      const target = str2(payload.content);
+      const target = str9(payload.content);
       if (!target || !accountId || target !== accountId) return null;
-      return { title: "Logged Out", body: str2(payload.reason) || "Your session was ended by an administrator", kind: "error", durationMs: 0 };
+      return { title: "Logged Out", body: str9(payload.reason) || "Your session was ended by an administrator", kind: "error", durationMs: 0 };
     }
     case "toast": {
-      const body = str2(payload.content) || str2(payload.message);
-      const title = str2(payload.title);
+      const body = str9(payload.content) || str9(payload.message);
+      const title = str9(payload.title);
       if (!body && !title) return null;
-      const type = str2(payload.type);
+      const type = str9(payload.type);
       const kind = type === "error" || type === "warning" ? "error" : type === "success" ? "success" : "info";
       const persistent = payload.persistent === true;
       const duration = typeof payload.duration === "number" && payload.duration > 0 ? payload.duration : void 0;
       return { title: title || body, body: title ? body : void 0, kind, durationMs: persistent ? 0 : duration };
     }
     case "career_position_update": {
-      const role = str2(payload.role_title);
+      const role = str9(payload.role_title);
       if (!role) return null;
-      const company = str2(payload.company_name);
+      const company = str9(payload.company_name);
       return { title: "Career position updated", body: role + (company ? ` at ${company}` : ""), kind: "info" };
     }
     case "relationship_alert": {
-      const severity = str2(payload.severity);
+      const severity = str9(payload.severity);
       if (severity !== "high" && severity !== "critical") return null;
-      const name = str2(payload.person_name);
-      const message = str2(payload.message) || `Relationship status change detected${name ? ` with ${name}` : ""}`;
-      const rel = str2(payload.relationship_id);
-      return { title: name ? `\u26A0\uFE0F ${name}` : "Relationship alert", body: message, kind: "error", durationMs: 8e3, ...rel ? { action: "open_person", relationshipId: rel, personName: name } : {}, dedupeKey: `relationship_alert:${rel || name}:${str2(payload.alert_type)}` };
+      const name = str9(payload.person_name);
+      const message = str9(payload.message) || `Relationship status change detected${name ? ` with ${name}` : ""}`;
+      const rel = str9(payload.relationship_id);
+      return { title: name ? `\u26A0\uFE0F ${name}` : "Relationship alert", body: message, kind: "error", durationMs: 8e3, ...rel ? { action: "open_person", relationshipId: rel, personName: name } : {}, dedupeKey: `relationship_alert:${rel || name}:${str9(payload.alert_type)}` };
     }
     case "priority_card": {
-      const type = str2(payload.card_type).replace(/_card$/, "");
+      const type = str9(payload.card_type).replace(/_card$/, "");
       if (!TOAST_CARD_TYPES.has(type)) return null;
-      const urgency = str2(payload.urgency);
+      const urgency = str9(payload.urgency);
       const critical = urgency === "critical" || urgency === "immediate";
       if (!critical && urgency !== "high" && urgency !== "urgent") return null;
       const data = payload.card_data && typeof payload.card_data === "object" ? payload.card_data : {};
-      const title = str2(data.title) || str2(payload.title) || type.replace(/_/g, " ");
-      const body = str2(data.description) || str2(payload.description);
-      const rel = str2(data.relationship_id) || str2(data.person_id);
-      return { title, body: body || void 0, kind: critical ? "error" : "info", durationMs: critical ? 0 : 8e3, ...rel ? { action: "open_person", relationshipId: rel, personName: str2(data.person_name) } : {}, dedupeKey: `priority_card:${type}` };
+      const title = str9(data.title) || str9(payload.title) || type.replace(/_/g, " ");
+      const body = str9(data.description) || str9(payload.description);
+      const rel = str9(data.relationship_id) || str9(data.person_id);
+      return { title, body: body || void 0, kind: critical ? "error" : "info", durationMs: critical ? 0 : 8e3, ...rel ? { action: "open_person", relationshipId: rel, personName: str9(data.person_name) } : {}, dedupeKey: `priority_card:${type}` };
     }
     case "career_prediction_ready": {
-      const summary = str2(payload.summary);
+      const summary = str9(payload.summary);
       if (!summary) return null;
       return { title: "New career prediction available", body: summary.length > 60 ? summary.slice(0, 57) + "..." : summary, kind: "info" };
     }
@@ -19210,38 +23167,21 @@ function registerLiveNotices(subscribe, deps) {
 
 // src/views/MergeIntoModal.ts
 var import_obsidian32 = require("obsidian");
-
-// src/views/personActions.ts
-function mergeCandidates(entities, sourceId) {
-  return entities.filter((e) => e.entity_type === "person" && e.entity_id !== sourceId);
-}
-var PERSON_ACTION_COPY = {
-  merge: (source, target) => ({
-    title: `Merge ${source} into ${target}?`,
-    body: `Everything Myu knows about ${source} (memories, open items, history) moves to ${target}. ${source} is removed from your people, and their note in the Myu folder goes to the trash. This cannot be undone here.`,
-    cta: "Merge"
-  }),
-  self: (name) => ({
-    title: `Is ${name} you?`,
-    // Backend folds the person into the self (memories, threads, names) as of
-    // 2026-08-29. The earlier wording that said it did NOT is gone.
-    body: `Everything Myu knows about ${name} (memories, open items, and the name itself) is added to your own profile, so future mentions of ${name} are recognised as you. ${name} is removed from your people, and their note in the Myu folder goes to the trash.`,
-    cta: "Yes, that\u2019s me"
-  })
-};
-
-// src/views/MergeIntoModal.ts
 var MergeIntoModal = class extends import_obsidian32.FuzzySuggestModal {
   constructor(app, plugin, sourceId, sourceName, onPick) {
     super(app);
     this.plugin = plugin;
     this.sourceId = sourceId;
+    this.sourceName = sourceName;
     this.onPick = onPick;
     this.entities = [];
-    this.setPlaceholder(`Merge ${sourceName} into\u2026`);
+    this.setPlaceholder(IDENTITY_WORDS.samePersonSearch);
   }
   async onOpen() {
     await super.onOpen();
+    const head = this.modalEl.createDiv({ cls: "myu-same-head", prepend: true });
+    head.createDiv({ cls: "myu-same-title", text: IDENTITY_WORDS.samePersonTitle(this.sourceName) });
+    head.createDiv({ cls: "myu-quiet myu-same-hint", text: IDENTITY_WORDS.samePersonHint(this.sourceName) });
     const res = await this.plugin.backend.listEntities("person");
     this.entities = mergeCandidates(res.data?.entities ?? [], this.sourceId);
     this.inputEl.dispatchEvent(new Event("input"));
@@ -19429,7 +23369,7 @@ function renderChatBlock(parent, block, host) {
 function s(v) {
   return typeof v === "string" ? v.trim() : "";
 }
-function list(v) {
+function list6(v) {
   return Array.isArray(v) ? v.map((x) => typeof x === "string" ? x : s(x?.text) || s(x?.label)).filter(Boolean) : [];
 }
 function cell(v) {
@@ -19443,7 +23383,7 @@ function chatBlockMarkdown(block) {
       return s(b.text) || null;
     case "question": {
       const q = s(b.text) || s(b.question);
-      const opts = list(b.options);
+      const opts = list6(b.options);
       return q ? [`> ${q}`, ...opts.length ? ["", ...opts.map((o) => `- ${o}`)] : []].join("\n") : null;
     }
     case "suggestion": {
@@ -19459,7 +23399,7 @@ function chatBlockMarkdown(block) {
     case "action_card": {
       const title = s(b.title);
       const desc = s(b.description);
-      const facts = [s(b.due_date) && `due ${s(b.due_date)}`, s(b.estimated_effort) && `effort: ${s(b.estimated_effort)}`, list(b.related_people).length ? `with ${list(b.related_people).join(", ")}` : ""].filter(Boolean);
+      const facts = [s(b.due_date) && `due ${s(b.due_date)}`, s(b.estimated_effort) && `effort: ${s(b.estimated_effort)}`, list6(b.related_people).length ? `with ${list6(b.related_people).join(", ")}` : ""].filter(Boolean);
       if (!title && !desc && facts.length === 0) return null;
       return [title ? `**${title}**` : "", desc, ...facts.map((f) => `- ${f}`)].filter(Boolean).join("\n");
     }
@@ -19494,10 +23434,11 @@ function chatBlockMarkdown(block) {
     }
     case "diagram": {
       const source = s(b.source) || s(b.mermaid);
-      if (!source) return s(b.caption) || s(b.title) || null;
+      if (!source) return s(b.fallback_text) || s(b.caption) || s(b.title) || null;
       return [s(b.title) ? `**${s(b.title)}**
 ` : "", "```mermaid", source, "```", s(b.caption) ? `
-*${s(b.caption)}*` : ""].filter((x) => x !== "").join("\n");
+*${s(b.caption)}*` : "", s(b.data_source) ? `
+${s(b.data_source)}` : ""].filter((x) => x !== "").join("\n");
     }
     case "separator":
       return s(b.label) ? `---
@@ -19512,7 +23453,7 @@ function chatBlockMarkdown(block) {
         if (take) out.push("", `**${who}**${s(a.to) ? ` \u2192 ${s(a.to)}` : ""}`, "", take);
       }
       const section = (key, title) => {
-        const items = list(syn[key]);
+        const items = list6(syn[key]);
         if (items.length) out.push("", `**${title}**`, ...items.map((i) => `- ${i}`));
       };
       section("agreements", "Points of Agreement");
@@ -19658,8 +23599,8 @@ function staysOpen(component) {
   return /^linkedin_(confirm|recover)/.test(component.id ?? "");
 }
 function foldLabel(component, markdown) {
-  const label = (component.label ?? "").trim() || (typeof component.data?.title === "string" ? String(component.data.title).trim() : "");
-  if (label) return label;
+  const label2 = (component.label ?? "").trim() || (typeof component.data?.title === "string" ? String(component.data.title).trim() : "");
+  if (label2) return label2;
   const firstLine = markdown.split("\n").map((l) => l.replace(/^#+\s*/, "").trim()).find((l) => l.length > 0) ?? "";
   const plain = firstLine.replace(/[*_`>[\]]/g, "").trim();
   return plain.length > 72 ? `${plain.slice(0, 71)}\u2026` : plain || "More";
@@ -19760,13 +23701,13 @@ function blockHeader(n, block) {
   const lines = countLines(block.text);
   return `${INDENT}[pasted text ${n} \xB7 ${formatCount(block.text.length)} chars \xB7 ${formatCount(lines)} ${lines === 1 ? "line" : "lines"} \xB7 ${block.source}]`;
 }
-function blockBody(text) {
-  return text.split("\n").map((line) => line ? `${INDENT}| ${line}` : `${INDENT}|`).join("\n");
+function blockBody(text2) {
+  return text2.split("\n").map((line2) => line2 ? `${INDENT}| ${line2}` : `${INDENT}|`).join("\n");
 }
 var textOf2 = (value) => typeof value === "string" ? value : "";
-function shortenedBody(text) {
-  return `${blockBody(text.slice(0, SHORTENED_TO))}
-${INDENT}| [pasted text shortened for this attachment: ${formatCount(SHORTENED_TO)} of ${formatCount(text.length)} chars]`;
+function shortenedBody(text2) {
+  return `${blockBody(text2.slice(0, SHORTENED_TO))}
+${INDENT}| [pasted text shortened for this attachment: ${formatCount(SHORTENED_TO)} of ${formatCount(text2.length)} chars]`;
 }
 function formatConversationTranscript(input, opts) {
   const maxChars = opts?.maxChars ?? DEFAULT_MAX_CHARS;
@@ -19785,7 +23726,7 @@ function formatConversationTranscript(input, opts) {
     parts.push("--- Journal Entry ---", `ID: ${entry.id}`, `Timestamp: ${entry.ts}`, "");
     const typed = textOf2(entry.typed);
     if (typed.trim()) {
-      for (const line of typed.split("\n")) parts.push(INDENT + line);
+      for (const line2 of typed.split("\n")) parts.push(INDENT + line2);
     } else if (!entry.blocks?.length) {
       parts.push(`${INDENT}(empty content)`);
     }
@@ -19800,7 +23741,7 @@ function formatConversationTranscript(input, opts) {
       const first = lines.shift() ?? "";
       parts.push(`[${turn.chatter} ${turn.ts || now()}]${first ? ` ${first}` : ""}`);
       const agent = turn.chatter === AGENT;
-      for (const line of lines) parts.push(agent ? line : INDENT + line);
+      for (const line2 of lines) parts.push(agent ? line2 : INDENT + line2);
       pushBlocks(turn.blocks);
     }
   }
@@ -19933,11 +23874,11 @@ async function listConversations(deps) {
     const journalId = String(entry.journal_id ?? entry.id ?? "");
     if (!journalId) continue;
     const created = parseWhen(firstPresent(entry.timestamp, entry.occurred_at, entry.created_at, entry.created));
-    const text = await readText(entry.encrypted_content, entry.content, deps.key);
-    if (text === null) continue;
+    const text2 = await readText(entry.encrypted_content, entry.content, deps.key);
+    if (text2 === null) continue;
     const pasted = readPastedBlocks(entry.pasted_blocks);
-    if (!text.trim() && pasted.length === 0) continue;
-    out.push({ journalId, day: created ? created.toISOString().slice(0, 10) : "", preview: previewOf(text, pasted), ...pasted.length ? { pasted } : {} });
+    if (!text2.trim() && pasted.length === 0) continue;
+    out.push({ journalId, day: created ? created.toISOString().slice(0, 10) : "", preview: previewOf(text2, pasted), ...pasted.length ? { pasted } : {} });
   }
   out.sort((a, b) => b.day.localeCompare(a.day));
   return out;
@@ -19969,15 +23910,25 @@ async function loadConversation(deps, journalId, opening, onOffer) {
 }
 
 // src/views/spaceConversationPane.ts
-function renderWords(host, text, parts, cls) {
+function renderListOffers(host, offers, note, add2) {
+  const row = host.createDiv({ cls: "myu-prep-offers myu-chat-offers" });
+  for (const o of offers) {
+    const chip = row.createEl("button", { cls: "myu-aff myu-prep-offer", text: o.added ? `${o.text} \xB7 ${PREP_LIST_WORDS.onYourList}` : PREP_LIST_WORDS.plus(o.text), attr: { "data-added": String(o.added) } });
+    chip.disabled = o.added || o.busy || !add2;
+    chip.onclick = () => add2?.(o.text);
+  }
+  row.createSpan({ cls: "myu-quiet myu-prep-offers-caption", text: PREP_LIST_WORDS.addsToList });
+  if (note) host.createDiv({ cls: "myu-quiet myu-line-note", text: note });
+}
+function renderWords(host, text2, parts, cls) {
   if (!parts) {
-    host.createDiv({ cls: `${cls} myu-space-words`, text });
+    host.createDiv({ cls: `${cls} myu-space-words`, text: text2 });
     return;
   }
   const box = host.createDiv({ cls: `${cls} myu-space-readback` });
   for (const l of parts.lead) box.createDiv({ text: l });
-  const list2 = box.createEl("ul", { cls: "myu-space-bullets" });
-  for (const b of parts.bullets) list2.createEl("li", { text: b });
+  const list7 = box.createEl("ul", { cls: "myu-space-bullets" });
+  for (const b of parts.bullets) list7.createEl("li", { text: b });
   for (const l of parts.closing) box.createDiv({ text: l });
   for (const l of parts.warning) box.createDiv({ cls: "myu-space-warning myu-quiet", text: l });
 }
@@ -19987,13 +23938,13 @@ function renderSpaceStatus(host, status) {
   strip.createDiv({ cls: "myu-space-status-words", text: status });
 }
 function renderAskButtons(acts, ask, busy, on) {
-  const toggle = (label, pressed, press) => {
-    const b = acts.createEl("button", { cls: "myu-aff myu-pick", text: label, attr: { "aria-pressed": String(pressed) } });
+  const toggle = (label2, pressed, press) => {
+    const b = acts.createEl("button", { cls: "myu-aff myu-pick", text: label2, attr: { "aria-pressed": String(pressed) } });
     b.disabled = busy;
     b.onclick = press;
   };
-  const plain = (label, press, cls = "myu-aff") => {
-    const b = acts.createEl("button", { cls, text: label });
+  const plain = (label2, press, cls = "myu-aff") => {
+    const b = acts.createEl("button", { cls, text: label2 });
     b.disabled = busy;
     b.onclick = press;
   };
@@ -20047,6 +23998,7 @@ function renderSpaceConversation(thread, composer, screen, on) {
     const myu = thread.createDiv({ cls: "myu-chat-myu" });
     myu.createDiv({ cls: "myu-whisper", text: "myu" });
     renderWords(myu, turn.text, turn.parts, "myu-voice");
+    if (turn.offers?.length) renderListOffers(myu, turn.offers, turn.offersNote ?? null, on.addOffer);
   };
   for (const turn of screen.turns) drawTurn(turn);
   if (screen.ask) {
@@ -20127,8 +24079,8 @@ function renderSpaceConversation(thread, composer, screen, on) {
   };
   if (paste) {
     attachPasteListeners(input, {
-      addPasted: (text, source, at) => {
-        paste.add(text, source, at, input.value);
+      addPasted: (text2, source, at) => {
+        paste.add(text2, source, at, input.value);
         drawRow();
       },
       isTyping: () => paste.typing()
@@ -20144,8 +24096,8 @@ function renderSpaceConversation(thread, composer, screen, on) {
 }
 function renderSpaceTabs(host, retroShowing, on) {
   const tabs = host.createDiv({ cls: "myu-space-tabs", attr: { role: "tablist" } });
-  const tab = (text, selected, press) => {
-    const b = tabs.createEl("button", { cls: `myu-space-tab${selected ? " is-active" : ""}`, text, attr: { role: "tab", "aria-selected": String(selected) } });
+  const tab = (text2, selected, press) => {
+    const b = tabs.createEl("button", { cls: `myu-space-tab${selected ? " is-active" : ""}`, text: text2, attr: { role: "tab", "aria-selected": String(selected) } });
     b.onclick = () => {
       if (!selected) press();
     };
@@ -20168,6 +24120,10 @@ function renderSpaceRetro(host, panel, on) {
   const page = host.createDiv({ cls: "myu-space-retro" });
   if (panel.loading) {
     page.createEl("p", { cls: "myu-quiet myu-thinking", text: SPACE_RETRO_WORDS.loading });
+    return;
+  }
+  if (panel.waiting) {
+    page.createEl("p", { cls: "myu-quiet", text: panel.waiting });
     return;
   }
   if (panel.failed && !panel.view) {
@@ -20196,8 +24152,8 @@ function renderSpaceRetro(host, panel, on) {
     res.createDiv({ cls: "myu-space-retro-heading", text: SPACE_RETRO_WORDS.results });
     if (view.results.text) res.createDiv({ cls: "myu-space-retro-text", text: view.results.text });
     if (view.results.items.length) {
-      const list2 = res.createEl("ul", { cls: "myu-space-bullets" });
-      for (const it of view.results.items) list2.createEl("li", { text: it });
+      const list7 = res.createEl("ul", { cls: "myu-space-bullets" });
+      for (const it of view.results.items) list7.createEl("li", { text: it });
     }
   }
   for (const q of view.questions) {
@@ -20285,6 +24241,8 @@ var ChatView = class extends import_obsidian37.ItemView {
     this.space = null;
     /** The team's retro for that space, behind one quiet line under the title. */
     this.spaceRetro = null;
+    /** "Who is it?" under Myu's question about who someone is (2026-11-15): the person's people, found as they type. */
+    this.findPeople = peopleFinder(() => this.plugin.backend);
     // ── the cold-start calendar offer, inline (canonical in the thread) ────────
     // The web's AssistantOutput: the offer_block arrives server-composed inside
     // the welcome composition; presence of the component IS the gate, the panel
@@ -20357,8 +24315,8 @@ var ChatView = class extends import_obsidian37.ItemView {
    * can fall back. A read that FAILED stays here and says so: a space's words
    * never fall through to a journal thread.
    */
-  async openSpace(spaceId, label, opts = {}) {
-    const space = new SpaceConversation(spaceId, label, this.conversationDeps(() => space));
+  async openSpace(spaceId, label2, opts = {}) {
+    const space = new SpaceConversation(spaceId, label2, this.conversationDeps(() => space));
     const retro = new SpaceRetroPanel(spaceId, {
       backend: this.plugin.backend,
       onChange: () => {
@@ -20406,9 +24364,9 @@ var ChatView = class extends import_obsidian37.ItemView {
       // The same re-escrow the transport uses when a call is refused for the key.
       unlock: () => this.plugin.unlock.onEncryptionBlocked(),
       // "Take it there": a blank journal conversation with the text in the box, unsent.
-      openJournal: (text) => {
+      openJournal: (text2) => {
         this.startNew();
-        this.draft = text;
+        this.draft = text2;
         this.render();
       },
       onChange: () => {
@@ -20418,7 +24376,12 @@ var ChatView = class extends import_obsidian37.ItemView {
       openPage: (url) => window.open(url, "_blank"),
       openConversation: (ref) => void this.plugin.openConversationRef(ref, self2().screen().title),
       // An ask settled here leaves its row on Today: read the list again.
-      onAnswered: () => this.plugin.requestTodayRefresh()
+      onAnswered: () => this.plugin.requestTodayRefresh(),
+      // One of Myu's offers went onto a meeting's list: its page and its Today row read again.
+      onListChanged: (eventId) => {
+        this.plugin.prepListChanged(eventId);
+        this.plugin.requestTodayRefresh();
+      }
     };
   }
   /**
@@ -20427,10 +24390,10 @@ var ChatView = class extends import_obsidian37.ItemView {
    * person or a company. One ask at a time with its buttons, as a meeting's conversation. The account's own has
    * no conversation door; its asks come from the lines list, and what Myu says back is said in place.
    */
-  async openSubject(type, id, label) {
-    if (type === "space") return this.openSpace(id, label);
-    if (type === "meeting") return this.openMeeting(id, label);
-    const subject = new SpaceConversation(id, label, this.conversationDeps(() => subject), { type });
+  async openSubject(type, id, label2) {
+    if (type === "space") return this.openSpace(id, label2);
+    if (type === "meeting") return this.openMeeting(id, label2);
+    const subject = new SpaceConversation(id, label2, this.conversationDeps(() => subject), { type });
     this.browsing = false;
     this.space = subject;
     this.spaceExpanded = /* @__PURE__ */ new Map();
@@ -20446,8 +24409,8 @@ var ChatView = class extends import_obsidian37.ItemView {
    * (`POST /journal_chats/add` with its id), where Myu reads them as the answer. `occurrenceKey`
    * is the occurrence's start in ms, when the door knows it (a line, the arc's Now).
    */
-  async openMeeting(eventId, label, occurrenceKey) {
-    const meeting = new SpaceConversation(eventId, label, this.conversationDeps(() => meeting), {
+  async openMeeting(eventId, label2, occurrenceKey) {
+    const meeting = new SpaceConversation(eventId, label2, this.conversationDeps(() => meeting), {
       type: "meeting",
       ...occurrenceKey ? { occurrenceKey } : {}
     });
@@ -20482,25 +24445,29 @@ var ChatView = class extends import_obsidian37.ItemView {
    * The opening question's button: the answer (`POST /myu/lines/answer`), the pages it opens, what
    * Myu said back under the question, then Today again (the same question leaves its row there).
    */
-  async pressOpening(line, button) {
+  async pressOpening(line2, button) {
     if (this.openingUi.busy) return;
     this.openingUi = { busy: true };
     this.render();
-    const out = await pressLineButton({ answer: (lineId, answer) => this.plugin.backend.answerMyuLine(lineId, answer), apiBase: this.plugin.settings.base_url }, line, button);
+    const out = await pressLineButton({ answer: (lineId, answer) => this.plugin.backend.answerMyuLine(lineId, answer), apiBase: this.plugin.settings.base_url }, line2, button);
     for (const url of out.open) window.open(url, "_blank");
     if (out.conversation) {
-      void this.plugin.openConversationRef(out.conversation, line.subjects?.[0]?.label ?? "");
+      void this.plugin.openConversationRef(out.conversation, line2.subjects?.[0]?.label ?? "");
       this.plugin.requestTodayRefresh();
       return;
     }
-    if (this.openingLine?.line_id !== line.line_id) return;
+    if (this.openingLine?.line_id !== line2.line_id) return;
     if (out.closed) {
-      this.openingLine = null;
-      this.openingUi = {};
+      if (out.ui.closed) this.openingUi = out.ui;
+      else {
+        this.openingLine = null;
+        this.openingUi = {};
+      }
       this.render();
       this.plugin.requestTodayRefresh();
       return;
     }
+    if (out.undo) this.plugin.offerUndo(out.undo.said, out.undo.moveId);
     this.openingUi = out.ui;
     this.render();
     if (out.settled) this.plugin.requestTodayRefresh();
@@ -20533,16 +24500,16 @@ var ChatView = class extends import_obsidian37.ItemView {
     this.render();
     this.moved();
   }
-  async send(text) {
+  async send(text2) {
     if (this.busy) return;
-    const content = text.trim();
+    const content = text2.trim();
     const pasted = [...this.pasted];
     if (!content && pasted.length === 0) return;
     const accountId = this.plugin.settings.account_id;
     if (!accountId) return;
     if (pastedBlocksProblem(pasted)) {
       if (!this.draft.trim() && content) {
-        this.draft = text;
+        this.draft = text2;
         this.render();
       } else {
         this.drawPasted();
@@ -20578,7 +24545,7 @@ var ChatView = class extends import_obsidian37.ItemView {
     if (!res.ok || !res.data) {
       if (!this.draft.trim() && this.pasted.length === 0) {
         this.turns = this.turns.filter((t) => t !== mine);
-        this.draft = text;
+        this.draft = text2;
         this.pasted = pasted;
       }
       this.turns.push({
@@ -20685,9 +24652,9 @@ var ChatView = class extends import_obsidian37.ItemView {
     if (!this.canvasAsks.has(compositionId)) {
       this.canvasAsks.set(compositionId, null);
       void this.plugin.backend.getComposition(compositionId).then((res) => {
-        const line = canvasAsksLine(res?.data?.composition);
-        if (line) {
-          this.canvasAsks.set(compositionId, line);
+        const line2 = canvasAsksLine(res?.data?.composition);
+        if (line2) {
+          this.canvasAsks.set(compositionId, line2);
           this.render();
         }
       }).catch(() => void 0);
@@ -20697,8 +24664,8 @@ var ChatView = class extends import_obsidian37.ItemView {
   async checkLinkedInAsk() {
     if (this.linkedinAsk) return;
     if (this.plugin.helpQueue.length === 0) await this.plugin.loadHelpQueue();
-    const text = this.turns.map((t) => [t.text ?? "", ...(t.blocks ?? []).map((b) => "text" in b && typeof b.text === "string" ? b.text : "")].join("\n")).join("\n");
-    const ask = linkedInAskInText(this.plugin.helpQueue, text);
+    const text2 = this.turns.map((t) => [t.text ?? "", ...(t.blocks ?? []).map((b) => "text" in b && typeof b.text === "string" ? b.text : "")].join("\n")).join("\n");
+    const ask = linkedInAskInText(this.plugin.helpQueue, text2);
     if (!ask || this.plugin.linkedinAskResolved.has(ask.relationshipId)) return;
     const card = await this.plugin.backend.getCard("person", ask.relationshipId).catch(() => null);
     const suggestions = suggestionsOf(card?.data?.suggestions);
@@ -20790,11 +24757,11 @@ var ChatView = class extends import_obsidian37.ItemView {
       return;
     }
     const data = component.data ?? {};
-    const text = (v) => typeof v === "string" ? v.trim() : "";
-    if (text(data.lead)) box.createDiv({ cls: "myu-voice", text: text(data.lead) });
-    if (text(data.gap_line)) box.createDiv({ cls: "myu-quiet", text: text(data.gap_line) });
+    const text2 = (v) => typeof v === "string" ? v.trim() : "";
+    if (text2(data.lead)) box.createDiv({ cls: "myu-voice", text: text2(data.lead) });
+    if (text2(data.gap_line)) box.createDiv({ cls: "myu-quiet", text: text2(data.gap_line) });
     const person = data.named_person && typeof data.named_person === "object" ? data.named_person : null;
-    if (person && text(person.name)) box.createDiv({ cls: "myu-whisper", text: `${text(person.name)}${text(person.when_text) ? ` \u2014 ${text(person.when_text)}` : ""}` });
+    if (person && text2(person.name)) box.createDiv({ cls: "myu-whisper", text: `${text2(person.name)}${text2(person.when_text) ? ` \u2014 ${text2(person.when_text)}` : ""}` });
     renderComponentActions(box, component, {
       run: async (_componentId, action, params) => {
         const out = await runOfferOption(this.plugin, action.replace(/^offer:/, ""), params);
@@ -20811,7 +24778,7 @@ var ChatView = class extends import_obsidian37.ItemView {
       },
       interact: async () => void 0
     });
-    if (text(data.trust_line)) box.createDiv({ cls: "myu-quiet", text: text(data.trust_line) });
+    if (text2(data.trust_line)) box.createDiv({ cls: "myu-quiet", text: text2(data.trust_line) });
     queueMicrotask(() => {
       try {
         box.scrollIntoView({ block: "nearest" });
@@ -20827,8 +24794,8 @@ var ChatView = class extends import_obsidian37.ItemView {
       row.createSpan({ cls: "myu-whisper", text: given === 1 ? "Thanks. Marked as helpful." : "Thanks. Marked as not helpful." });
       return;
     }
-    for (const [rating, icon, label] of [[1, "thumbs-up", "Helpful"], [-1, "thumbs-down", "Not helpful"]]) {
-      const b = row.createEl("button", { cls: "myu-affordance myu-icon-button myu-rating-btn", attr: { "aria-label": `${label} \u2014 rate this reply` } });
+    for (const [rating, icon, label2] of [[1, "thumbs-up", "Helpful"], [-1, "thumbs-down", "Not helpful"]]) {
+      const b = row.createEl("button", { cls: "myu-affordance myu-icon-button myu-rating-btn", attr: { "aria-label": `${label2} \u2014 rate this reply` } });
       (0, import_obsidian37.setIcon)(b, icon);
       b.onclick = () => {
         if (!this.journalId) return;
@@ -20908,8 +24875,8 @@ var ChatView = class extends import_obsidian37.ItemView {
       const opening = index === 0 ? this.openingLine : null;
       if (turn.text) myu.createDiv({ cls: "myu-voice", text: turn.text, ...opening ? { attr: lineIdAttr(opening.line_id) } : {} });
       if (index === 0 && this.openingLine) {
-        const line = this.openingLine;
-        renderLineAsk(myu, line, this.openingUi, { press: (b) => void this.pressOpening(line, b) }, { showText: false });
+        const line2 = this.openingLine;
+        renderLineAsk(myu, line2, this.openingUi, { press: (b) => void this.pressOpening(line2, b), people: this.findPeople }, { showText: false });
       }
       for (const block of turn.blocks ?? []) this.renderBlock(myu, block);
       renderReferences(myu, turn.references);
@@ -20953,7 +24920,7 @@ var ChatView = class extends import_obsidian37.ItemView {
         this.undoPaste();
       }
     };
-    attachPasteListeners(input, { addPasted: (text, source, at) => this.addPasted(text, source, at) });
+    attachPasteListeners(input, { addPasted: (text2, source, at) => this.addPasted(text2, source, at) });
     const send = composer.createEl("button", { cls: "myu-affordance", text: "Send" });
     send.onclick = () => void this.send(input.value);
     this.sendEl = send;
@@ -20979,8 +24946,8 @@ var ChatView = class extends import_obsidian37.ItemView {
     if (this.sendEl) this.sendEl.disabled = !!pastedBlocksProblem(this.pasted);
   }
   /** A paste or a drop became a chip (the listener already took the selected text out of the box). */
-  addPasted(text, source, at) {
-    const out = chipAdded(this.pasted, text, source, at);
+  addPasted(text2, source, at) {
+    const out = chipAdded(this.pasted, text2, source, at);
     this.pasted = out.chips;
     this.undo = out.undo;
     this.pastedNote = null;
@@ -21071,22 +25038,23 @@ var ChatView = class extends import_obsidian37.ItemView {
     const thread = root.createDiv({ cls: "myu-chat-thread" });
     const composer = root.createDiv({ cls: "myu-chat-composer" });
     const input = renderSpaceConversation(thread, composer, screen, {
-      send: (text) => void space.send(text),
+      send: (text2) => void space.send(text2),
       choose: (id) => void space.choose(id),
       pick: (id) => space.pick(id),
       dropTyped: () => space.dropTyped(),
       earlier: () => void space.loadEarlier(),
       unlock: () => void unlockBoth(),
-      draft: (text) => {
-        space.draft = text;
+      addOffer: (text2) => void space.addOffer(text2),
+      draft: (text2) => {
+        space.draft = text2;
       },
       pasted: {
         chips: () => space.pasted,
         canUndo: () => !!space.undo,
         note: () => space.pastedNote,
         typing: () => space.typing,
-        add: (text, source, at, value) => {
-          const chip = space.addPasted(text, source, at, value);
+        add: (text2, source, at, value) => {
+          const chip = space.addPasted(text2, source, at, value);
           announce(this.liveEl, PASTE_WORDS.announce(chip.chars));
         },
         undo: (value) => space.undoPasted(value),
@@ -21839,11 +25807,11 @@ var ConversationWriter = class {
 function renderConversation(turns) {
   const parts = [];
   for (const turn of turns) {
-    const text = turn.text ?? (turn.blocks ?? []).map((b) => b.text ?? (b.type === "composition_offer" ? offerLine(b.composition_id, b.summary_text) : "")).filter(Boolean).join("\n\n");
+    const text2 = turn.text ?? (turn.blocks ?? []).map((b) => b.text ?? (b.type === "composition_offer" ? offerLine(b.composition_id, b.summary_text) : "")).filter(Boolean).join("\n\n");
     const pasted = turn.role === "user" ? turn.pasted ?? [] : [];
-    if (!text && pasted.length === 0) continue;
+    if (!text2 && pasted.length === 0) continue;
     const speaker = `**${turn.role === "user" ? "You" : "Myu"}:**`;
-    parts.push(text ? `${speaker} ${text}` : speaker);
+    parts.push(text2 ? `${speaker} ${text2}` : speaker);
     pasted.forEach((block, i) => parts.push(pastedCallout(block, pasted.length > 1 ? i + 1 : void 0)));
     if (turn.references?.length) {
       parts.push(turn.references.map((r) => `> [${r.id}] ${r.url ? `[${r.title || r.url}](${r.url})` : r.title ?? "source"}`).join("\n"));
@@ -21853,8 +25821,8 @@ function renderConversation(turns) {
 }
 function offerLine(compositionId, summary) {
   const what = summary?.trim() ? `a canvas: \u201C${summary.trim()}\u201D` : "a canvas";
-  const link = compositionId ? ` \u2014 [open it \u25B8](obsidian://myu-canvas?id=${encodeURIComponent(compositionId)})` : "";
-  return `*(Myu offered ${what}${link})*`;
+  const link2 = compositionId ? ` \u2014 [open it \u25B8](obsidian://myu-canvas?id=${encodeURIComponent(compositionId)})` : "";
+  return `*(Myu offered ${what}${link2})*`;
 }
 function slugFrom(turns) {
   const first = turns.find((t) => t.role === "user")?.text ?? "conversation";
@@ -22021,8 +25989,8 @@ var FEEDBACK_FILE_WORDS = {
   tooBigToSend: "That\u2019s too much to send at once. Try fewer or smaller files.",
   /** A kept file that could not be read as the report went: named, and left out. */
   couldNotRead: (names) => {
-    const list2 = names.length <= 2 ? names.join(" and ") : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
-    return `Couldn\u2019t read ${list2}, so ${names.length === 1 ? "it isn\u2019t" : "they aren\u2019t"} going.`;
+    const list7 = names.length <= 2 ? names.join(" and ") : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+    return `Couldn\u2019t read ${list7}, so ${names.length === 1 ? "it isn\u2019t" : "they aren\u2019t"} going.`;
   }
 };
 var MB = 1024 * 1024;
@@ -22086,16 +26054,16 @@ function takeFiles(have, picked) {
 }
 function fileRefusalWords(refused) {
   const names = (why) => refused.filter((r) => r.why === why).map((r) => r.file.name);
-  const list2 = (ns) => ns.length <= 2 ? ns.join(" and ") : `${ns.slice(0, -1).join(", ")} and ${ns[ns.length - 1]}`;
+  const list7 = (ns) => ns.length <= 2 ? ns.join(" and ") : `${ns.slice(0, -1).join(", ")} and ${ns[ns.length - 1]}`;
   const out = [];
   const big = names("too_big");
-  if (big.length) out.push(`${list2(big)} ${big.length === 1 ? "is" : "are"} over ${mb(FEEDBACK_FILE_MAX_BYTES)}, so ${big.length === 1 ? "it" : "they"} can\u2019t go.`);
+  if (big.length) out.push(`${list7(big)} ${big.length === 1 ? "is" : "are"} over ${mb(FEEDBACK_FILE_MAX_BYTES)}, so ${big.length === 1 ? "it" : "they"} can\u2019t go.`);
   const much = names("too_much");
-  if (much.length) out.push(`Files can be ${mb(FEEDBACK_FILES_TOTAL_MAX_BYTES)} in all, so ${list2(much)} didn\u2019t fit.`);
+  if (much.length) out.push(`Files can be ${mb(FEEDBACK_FILES_TOTAL_MAX_BYTES)} in all, so ${list7(much)} didn\u2019t fit.`);
   const many = names("too_many");
-  if (many.length) out.push(`Up to ${FEEDBACK_FILES_MAX} files, so ${list2(many)} ${many.length === 1 ? "was" : "were"} left out.`);
+  if (many.length) out.push(`Up to ${FEEDBACK_FILES_MAX} files, so ${list7(many)} ${many.length === 1 ? "was" : "were"} left out.`);
   const already = names("already");
-  if (already.length) out.push(`${list2(already)} ${already.length === 1 ? "is" : "are"} already on it.`);
+  if (already.length) out.push(`${list7(already)} ${already.length === 1 ? "is" : "are"} already on it.`);
   return out;
 }
 function filesAttached(body) {
@@ -22145,7 +26113,7 @@ var FeedbackModal = class extends import_obsidian45.Modal {
     contentEl.createEl("h2", { text: "Send feedback to askMyu" });
     contentEl.createEl("p", { cls: "myu-prose myu-quiet", text: "Goes to the team by email, with the plugin build number. Nothing from your vault is attached unless you add a file." });
     new import_obsidian45.Setting(contentEl).setName("About").addDropdown((d) => {
-      for (const [id, label] of CATEGORIES) d.addOption(id, label);
+      for (const [id, label2] of CATEGORIES) d.addOption(id, label2);
       d.setValue(this.category).onChange((v) => {
         this.category = v;
       });
@@ -22180,7 +26148,7 @@ var FeedbackModal = class extends import_obsidian45.Modal {
     add2.disabled = this.busy;
     add2.onclick = () => this.pick();
     el.createEl("p", { cls: "myu-prose myu-quiet", text: `${FEEDBACK_FILE_WORDS.caps} ${FEEDBACK_FILE_WORDS.byEmail}` });
-    for (const line of this.refusals) el.createEl("p", { cls: "myu-prose myu-quiet myu-fb-refused", text: line });
+    for (const line2 of this.refusals) el.createEl("p", { cls: "myu-prose myu-quiet myu-fb-refused", text: line2 });
   }
   /** The computer's own picker, several files at a time, through an input that is never shown. */
   pick() {
@@ -22391,8 +26359,12 @@ var HelpMyuView = class extends import_obsidian48.ItemView {
         const why = [item.reason, item.target.subtitle].filter(Boolean).join(" \xB7 ");
         if (why) row.createDiv({ cls: "myu-quiet", text: why });
         const actions = row.createDiv({ cls: "myu-canvas-actions" });
-        const yes = actions.createEl("button", { cls: "myu-affordance myu-cta", text: "Merge" });
-        yes.onclick = () => this.plugin.mergePersonInto({ id: item.source.relationship_id, name: item.source.display_name }, { id: item.target.relationship_id, name: item.target.display_name });
+        const yes = actions.createEl("button", { cls: "myu-affordance myu-cta", text: IDENTITY_WORDS.samePerson });
+        yes.onclick = async () => {
+          yes.disabled = true;
+          const went = await this.plugin.samePersonFromHelp({ id: item.source.relationship_id, name: item.source.display_name }, { id: item.target.relationship_id, name: item.target.display_name });
+          if (!went) yes.disabled = false;
+        };
         const no = actions.createEl("button", { cls: "myu-affordance", text: "Not the same" });
         no.onclick = async () => {
           no.disabled = true;
@@ -22438,11 +26410,11 @@ function weaveSnippets(folder) {
     }
   ];
 }
-function fence(text, lang) {
-  const longest = Math.max(2, ...[...text.matchAll(/`+/g)].map((m) => m[0].length));
+function fence(text2, lang) {
+  const longest = Math.max(2, ...[...text2.matchAll(/`+/g)].map((m) => m[0].length));
   const ticks = "`".repeat(longest + 1);
   return `${ticks}${lang}
-${text}
+${text2}
 ${ticks}`;
 }
 function weaveGuide(folder, opts = {}) {
@@ -22534,8 +26506,8 @@ function lookText(version) {
   return `/* @myu-look ${version} \u2014 installed by the askMyu plugin. Yours to edit, turn off, or remove: Settings \u2192 askMyu \u2192 Advanced \u2192 Myu look. */
 ${myu_look_default}`;
 }
-function lookStamp(text) {
-  const m = /^\/\* @myu-look (\S+)/.exec(text);
+function lookStamp(text2) {
+  const m = /^\/\* @myu-look (\S+)/.exec(text2);
   return m ? m[1] ?? null : null;
 }
 function lookStanding(installed, version) {
@@ -22691,18 +26663,18 @@ var DriveImportModal = class extends import_obsidian51.Modal {
 };
 
 // src/composition/offers.ts
-function str3(v) {
+function str10(v) {
   return typeof v === "string" ? v.trim() : "";
 }
 function offerFromPayload(payload, now) {
-  const compositionId = str3(payload.composition_id);
+  const compositionId = str10(payload.composition_id);
   if (!compositionId) return null;
   return {
     compositionId,
-    summaryText: str3(payload.summary_text),
-    actionLabel: str3(payload.action_label) || "View",
-    subjectName: str3(payload.subject_name) || void 0,
-    flowType: str3(payload.flow_type) || void 0,
+    summaryText: str10(payload.summary_text),
+    actionLabel: str10(payload.action_label) || "View",
+    subjectName: str10(payload.subject_name) || void 0,
+    flowType: str10(payload.flow_type) || void 0,
     receivedAt: now
   };
 }
@@ -22713,24 +26685,24 @@ function routeOffer(source, payload, openPaneId, now, paneFollows = true) {
   if (openPaneId && paneFollows) return { kind: "replace", compositionId: offer.compositionId, summaryText: offer.summaryText };
   return { kind: "offer", offer, announce: source === "offer" && payload.announce === true };
 }
-function addOffer(list2, offer) {
-  return [offer, ...list2.filter((o) => o.compositionId !== offer.compositionId)].slice(0, 10);
+function addOffer(list7, offer) {
+  return [offer, ...list7.filter((o) => o.compositionId !== offer.compositionId)].slice(0, 10);
 }
 
 // src/views/wellbeingRows.ts
-function str4(v) {
+function str11(v) {
   return typeof v === "string" ? v.trim() : "";
 }
 function burnoutRow(payload) {
-  const person = str4(payload.person_name);
-  const drivers = (Array.isArray(payload.primary_drivers) ? payload.primary_drivers : []).map((d) => typeof d === "string" ? d : d && typeof d === "object" ? str4(d.dimension) : "").filter(Boolean).slice(0, 2).map((d) => d.replace(/_/g, " "));
+  const person = str11(payload.person_name);
+  const drivers = (Array.isArray(payload.primary_drivers) ? payload.primary_drivers : []).map((d) => typeof d === "string" ? d : d && typeof d === "object" ? str11(d.dimension) : "").filter(Boolean).slice(0, 2).map((d) => d.replace(/_/g, " "));
   const summary = drivers.length >= 2 ? `${drivers[0]} and ${drivers[1]} are adding up` : drivers.length === 1 ? `${drivers[0]} is adding up` : "Stress levels are elevated \u2014 consider taking breaks";
-  return { title: person ? `${person} might need support` : "Take care of yourself", summary, personId: str4(payload.person_id) || void 0, personName: person || void 0 };
+  return { title: person ? `${person} might need support` : "Take care of yourself", summary, personId: str11(payload.person_id) || void 0, personName: person || void 0 };
 }
 function goalMilestoneRow(payload) {
-  const type = str4(payload.milestone_type);
+  const type = str11(payload.milestone_type);
   if (type !== "stalled" && type !== "deadline_approaching") return null;
-  const goal = str4(payload.goal_content) || str4(payload.message);
+  const goal = str11(payload.goal_content) || str11(payload.message);
   if (!goal) return null;
   return { title: type === "stalled" ? "A goal needs attention" : "A goal deadline is approaching", summary: goal };
 }
@@ -22776,6 +26748,34 @@ var ConversationSaveModal = class extends import_obsidian52.Modal {
   }
 };
 
+// src/samePerson.ts
+function undoAction(deps, moveId) {
+  return { label: IDENTITY_WORDS.undo, run: () => void undoPersonMove(deps, moveId) };
+}
+async function samePerson(deps, sourceId, targetId) {
+  const res = await deps.backend.samePerson(sourceId, targetId).catch(() => null);
+  if (!res?.ok || !res.data?.success) {
+    deps.failed(IDENTITY_WORDS.didNotGoThrough);
+    return false;
+  }
+  const moveId = res.data.move_id?.trim() || null;
+  deps.done(res.data.said?.trim() || IDENTITY_WORDS.samePerson, moveId ? undoAction(deps, moveId) : null);
+  await deps.after?.();
+  return true;
+}
+async function undoPersonMove(deps, moveId) {
+  const res = await deps.backend.undoPersonChange(moveId).catch(() => null);
+  const went = !!res?.ok && !!res.data?.success;
+  const words = undoWords(res ? { success: went, error: res.error ?? res.data?.error ?? null } : null);
+  if (!went) {
+    deps.failed(words);
+    return false;
+  }
+  deps.done(words, null);
+  await deps.undone?.();
+  return true;
+}
+
 // src/vault/MaterializationService.ts
 var import_obsidian53 = require("obsidian");
 var PEOPLE_SWEEP_MS = 24 * 60 * 60 * 1e3;
@@ -22791,6 +26791,11 @@ var MaterializationService = class {
     this.lastNetCall = 0;
     /** True while a full sweep runs — the ambient ratchet must not start a second one. */
     this.sweeping = false;
+    /**
+     * Each meeting record's note → its calendar meeting and the ledger's counts (2026-10-30), from the last meeting list
+     * read: the calendar's days open a record's meeting page first.
+     */
+    this.recordPages = /* @__PURE__ */ new Map();
     /** entities_changed: the people list moved on the server — re-list now, not on the ratchet. Never more than once a minute. */
     this.lastPeopleRefresh = 0;
   }
@@ -22814,11 +26819,11 @@ var MaterializationService = class {
     const api = this.deps.api();
     const get = (level) => Promise.resolve().then(() => api.getSelfCard(level)).catch(() => null);
     const deep = await get("deep_dive");
-    const whole = deep?.ok ? deep.data?.card ?? null : null;
-    if (whole && whole.tiles != null) return whole;
+    const whole2 = deep?.ok ? deep.data?.card ?? null : null;
+    if (whole2 && whole2.tiles != null) return whole2;
     const read = readCard ? null : await get("read");
     const small = readCard ?? (read?.ok ? read.data?.card ?? null : null);
-    return whole ? withReadExtras(whole, small) : small;
+    return whole2 ? withReadExtras(whole2, small) : small;
   }
   enabled() {
     const s2 = this.deps.settings();
@@ -22919,6 +26924,9 @@ var MaterializationService = class {
     const when = whenDate ? whenDate.toISOString().slice(0, 10) : "";
     const name = sanitizeName(`${when ? `${when} ` : ""}${title}`.trim() || id);
     const path = `${this.folder}/Meetings/${name}.md`;
+    const record = row;
+    const page = { event_id: typeof record.calendar_event_id === "string" && record.calendar_event_id ? record.calendar_event_id : null, counts: meetingRecordCounts(record) || null, title };
+    this.recordPages.set(`Meetings/${name}`, page);
     const exists = this.deps.app.vault.getAbstractFileByPath((0, import_obsidian53.normalizePath)(path)) !== null;
     if (exists && !fullRefresh) return;
     this.deps.onProgress(`Myu is writing your meeting history \u2014 ${i} of ${total} \xB7 ${title}`);
@@ -22937,7 +26945,7 @@ var MaterializationService = class {
         participation: d?.participation
       };
     }
-    await this.writeHeld(path, buildMeetingHistoryMarkdown(meeting));
+    await this.writeHeld(path, buildMeetingHistoryMarkdown(meeting, page));
   }
   /** The memories payload, flattened and DECRYPTED: rows carry `content` or
       E2EE `encrypted_content` — only a device with custody can open those,
@@ -22948,16 +26956,16 @@ var MaterializationService = class {
     const key = this.deps.contentKey();
     const out = [];
     for (const row of rows) {
-      let text = (row.content ?? "").trim();
-      if (!text && typeof row.encrypted_content === "string" && row.encrypted_content && key) {
+      let text2 = (row.content ?? "").trim();
+      if (!text2 && typeof row.encrypted_content === "string" && row.encrypted_content && key) {
         try {
-          text = (await decryptWithKey(row.encrypted_content, key)).trim();
+          text2 = (await decryptWithKey(row.encrypted_content, key)).trim();
         } catch {
           continue;
         }
       }
-      if (!text) continue;
-      out.push({ memory_text: text, created_at: row.memory_date });
+      if (!text2) continue;
+      out.push({ memory_text: text2, created_at: row.memory_date });
     }
     return out;
   }
@@ -23024,7 +27032,10 @@ var MaterializationService = class {
         const day = file.basename.slice(0, 10);
         if (/^\d{4}-\d{2}-\d{2}$/.test(day)) {
           const bucket = meetingsByDay.get(day) ?? [];
-          bucket.push(`Meetings/${file.basename}`);
+          const link2 = `Meetings/${file.basename}`;
+          const page = this.recordPages.get(link2);
+          const record = page ? { link: link2, title: page.title, event_id: page.event_id, counts: page.counts } : null;
+          bucket.push(record ?? link2);
           meetingsByDay.set(day, bucket);
         }
       } else if (file.path.startsWith(`${folder}/Journal/`)) {
@@ -23087,19 +27098,19 @@ var MaterializationService = class {
     if (!created) return null;
     const day = created.toISOString().slice(0, 10);
     const time = created.toISOString().slice(11, 16);
-    let text = "";
+    let text2 = "";
     const enc = entry.encrypted_content;
     if (typeof enc === "string" && enc) {
       try {
-        text = await decryptWithKey(enc, key);
+        text2 = await decryptWithKey(enc, key);
       } catch {
         return null;
       }
     } else if (typeof entry.content === "string") {
-      text = entry.content;
+      text2 = entry.content;
     }
     const pasted = readPastedBlocks(entry.pasted_blocks);
-    if (!text.trim() && pasted.length === 0) return null;
+    if (!text2.trim() && pasted.length === 0) return null;
     const journalId = String(entry.journal_id ?? entry.id ?? "") || void 0;
     const recentCutoff = Date.now() - 7 * 864e5;
     let turns;
@@ -23134,7 +27145,7 @@ var MaterializationService = class {
       }
       if (collected.length > 0) turns = collected;
     }
-    return { day, entry: { time, text, journalId, turns, ...pasted.length ? { pasted } : {} } };
+    return { day, entry: { time, text: text2, journalId, turns, ...pasted.length ? { pasted } : {} } };
   }
   /** Myu/Companies/ — org pages with wikilinked people. Person-pass sibling. */
   async materializeCompanies() {
@@ -23276,8 +27287,8 @@ var MaterializationService = class {
     const since = mode === "delta" ? s2.vault_changes_since : 0;
     const key = this.deps.contentKey();
     const accountId = s2.account_id;
-    const say = (line) => {
-      if (!opts.quiet) this.deps.onProgress(line);
+    const say = (line2) => {
+      if (!opts.quiet) this.deps.onProgress(line2);
     };
     let people = 0;
     let skipped = 0;
@@ -23542,9 +27553,9 @@ function groupByOwner(commitments) {
   for (const c of commitments) {
     const key = c.owner_relationship_id;
     if (!key) continue;
-    const list2 = map.get(key) ?? [];
-    list2.push(c);
-    map.set(key, list2);
+    const list7 = map.get(key) ?? [];
+    list7.push(c);
+    map.set(key, list7);
   }
   return map;
 }
@@ -23886,11 +27897,11 @@ var OnboardingModal = class extends import_obsidian56.Modal {
     if (!this.isOpen) return;
     this.render();
   }
-  say(text) {
-    this.transcript.push({ role: "myu", text });
+  say(text2) {
+    this.transcript.push({ role: "myu", text: text2 });
   }
-  you(text) {
-    this.transcript.push({ role: "you", text });
+  you(text2) {
+    this.transcript.push({ role: "you", text: text2 });
   }
   // ── render ─────────────────────────────────────────────────────────────────
   render() {
@@ -23898,22 +27909,22 @@ var OnboardingModal = class extends import_obsidian56.Modal {
     contentEl.empty();
     contentEl.createEl("h2", { text: "Tell Myu who you are" });
     const log = contentEl.createDiv({ cls: "myu-onboard-log" });
-    for (const line of this.transcript) {
-      if (line.role === "read") {
+    for (const line2 of this.transcript) {
+      if (line2.role === "read") {
         const fold = log.createEl("details", { cls: "myu-fold myu-onboard-read" });
         if (this.readOpen) fold.setAttr("open", "");
         fold.createEl("summary", { text: "What Myu learned from your career" });
         const body = fold.createDiv({ cls: "markdown-rendered" });
-        void import_obsidian56.MarkdownRenderer.render(this.app, line.text, body, "/", this.mdHost);
+        void import_obsidian56.MarkdownRenderer.render(this.app, line2.text, body, "/", this.mdHost);
         body.createDiv({ cls: "myu-quiet", text: "The full canvas is open behind this window. You can look at it after this." });
         fold.addEventListener("toggle", () => {
           this.readOpen = fold.hasAttribute("open");
         });
         continue;
       }
-      const row = log.createDiv({ cls: `myu-onboard-line myu-onboard-${line.role}` });
-      row.createSpan({ cls: "myu-onboard-role", text: line.role === "myu" ? "myu" : "you" });
-      row.createSpan({ cls: "myu-onboard-text", text: line.text });
+      const row = log.createDiv({ cls: `myu-onboard-line myu-onboard-${line2.role}` });
+      row.createSpan({ cls: "myu-onboard-role", text: line2.role === "myu" ? "myu" : "you" });
+      row.createSpan({ cls: "myu-onboard-text", text: line2.text });
     }
     if (this.working) {
       contentEl.createEl("p", { cls: "myu-quiet myu-thinking", text: "Thinking" });
@@ -23943,7 +27954,7 @@ var OnboardingModal = class extends import_obsidian56.Modal {
     );
   }
   renderMoment(root) {
-    let text = "";
+    let text2 = "";
     let field = null;
     const seeds = root.createDiv({ cls: "myu-prep-chips" });
     void Promise.resolve().then(() => this.plugin.linkSurvey()).then((people) => {
@@ -23952,8 +27963,8 @@ var OnboardingModal = class extends import_obsidian56.Modal {
       for (const p of people.slice(0, 3)) {
         const chip = seeds.createEl("button", { cls: "myu-chip myu-chip-amber", text: p.name });
         chip.onclick = () => {
-          text = `About ${p.name}: `;
-          field?.setValue(text);
+          text2 = `About ${p.name}: `;
+          field?.setValue(text2);
           field?.inputEl.focus();
         };
       }
@@ -23962,7 +27973,7 @@ var OnboardingModal = class extends import_obsidian56.Modal {
     new import_obsidian56.Setting(root).setName("Right now").addText((t) => {
       field = t;
       t.setPlaceholder(this.payback() ? ONBOARDING_COPY.situatedPlaceholder : "A sentence or two, in your words").onChange((v) => {
-        text = v;
+        text2 = v;
         if (this.momentUndo) {
           this.momentUndo = null;
           drawRow();
@@ -23970,7 +27981,7 @@ var OnboardingModal = class extends import_obsidian56.Modal {
       });
     }).addButton((b) => {
       tell = b;
-      b.setButtonText("Tell Myu").setCta().onClick(() => void this.submitMoment(text.trim()));
+      b.setButtonText("Tell Myu").setCta().onClick(() => void this.submitMoment(text2.trim()));
     });
     const row = root.createDiv({ cls: "myu-pasted-row" });
     const input = field?.inputEl ?? null;
@@ -23989,7 +28000,7 @@ var OnboardingModal = class extends import_obsidian56.Modal {
       if (input && out) {
         this.momentPasted = out.chips;
         input.value = out.value;
-        text = out.value;
+        text2 = out.value;
       }
       drawRow();
       if (input && out) {
@@ -24007,16 +28018,16 @@ var OnboardingModal = class extends import_obsidian56.Modal {
       const at = this.momentPasted.findIndex((c) => c.id === id);
       const chip = this.momentPasted[at];
       if (!chip) return;
-      new PastedTextModal(this.app, chip, this.momentPasted.length > 1 ? at + 1 : void 0, text, {
+      new PastedTextModal(this.app, chip, this.momentPasted.length > 1 ? at + 1 : void 0, text2, {
         putBack: () => {
-          if (!canPutBack(text, chip).ok) return;
-          text = putBackText(text, chip);
+          if (!canPutBack(text2, chip).ok) return;
+          text2 = putBackText(text2, chip);
           this.momentPasted = this.momentPasted.filter((c) => c !== chip);
           this.momentUndo = null;
-          if (input) input.value = text;
+          if (input) input.value = text2;
           drawRow();
           input?.focus();
-          input?.setSelectionRange(text.length, text.length);
+          input?.setSelectionRange(text2.length, text2.length);
         },
         remove: () => removeChip(id)
       }).open();
@@ -24027,7 +28038,7 @@ var OnboardingModal = class extends import_obsidian56.Modal {
           const out = chipAdded(this.momentPasted, pastedText2, source, at);
           this.momentPasted = out.chips;
           this.momentUndo = out.undo;
-          text = input.value;
+          text2 = input.value;
           announce(this.liveEl, PASTE_WORDS.announce(out.chip.chars));
           drawRow();
         }
@@ -24179,13 +28190,13 @@ I can see your past roles, but couldn't quite tell what you're doing right now. 
     if (this.payback()) return ONBOARDING_COPY.situatedQuestion;
     return "Where are you in your career right now? A sentence or two, in your own words.";
   }
-  async submitMoment(text) {
+  async submitMoment(text2) {
     const chips = [...this.momentPasted];
-    if (!text && chips.length === 0) return;
+    if (!text2 && chips.length === 0) return;
     if (pastedBlocksProblem(chips)) return;
     const accountId = this.plugin.settings.account_id;
     if (!accountId) return;
-    this.you([text, ...chips.map((c, i) => chipLabel(c, chips.length > 1 ? i + 1 : void 0))].filter(Boolean).join("\n"));
+    this.you([text2, ...chips.map((c, i) => chipLabel(c, chips.length > 1 ? i + 1 : void 0))].filter(Boolean).join("\n"));
     this.momentPasted = [];
     this.momentUndo = null;
     this.working = true;
@@ -24194,7 +28205,7 @@ I can see your past roles, but couldn't quite tell what you're doing right now. 
     const priorAttempts = this.scripts().onboard_moment_attempt_count ?? 0;
     let shouldComplete = arcProvided;
     try {
-      const classify = await this.plugin.backend.classifyCareerMoment(accountId, text, chips);
+      const classify = await this.plugin.backend.classifyCareerMoment(accountId, text2, chips);
       const confidence = classify.data?.confidence ?? 0;
       const captured = classify.data?.moment_captured === true || confidence >= CONFIDENCE_SUFFICIENT;
       const borderline = !captured && confidence >= CONFIDENCE_BORDERLINE_MIN;
@@ -24212,9 +28223,116 @@ I can see your past roles, but couldn't quite tell what you're doing right now. 
     onboardingSession.stage = null;
     this.close();
     this.handOff();
-    void this.plugin.openChat({ text, send: true, pasted: chips, templateType: "onboarding_moment" });
+    void this.plugin.openChat({ text: text2, send: true, pasted: chips, templateType: "onboarding_moment" });
   }
 };
+
+// src/views/AddressHeldModal.ts
+var import_obsidian57 = require("obsidian");
+function heardAnswer(res) {
+  if (!res || res.status === 0 || res.error === "paused") return addressHeldOutcome(0, null);
+  return addressHeldOutcome(res.status, res.data);
+}
+var AddressHeldModal = class extends import_obsidian57.Modal {
+  constructor(app, deps) {
+    super(app);
+    this.deps = deps;
+    /** "Enter its password" was pressed: the field is open. */
+    this.typing = false;
+    /** The question has ended (too many tries, or too long): only the way back. */
+    this.ended = false;
+    /** The server's words for the last answer. */
+    this.said = null;
+    this.password = "";
+    this.busy = false;
+  }
+  onOpen() {
+    this.render();
+  }
+  onClose() {
+    this.contentEl.empty();
+  }
+  choiceLabel(id) {
+    const sent = this.deps.held.choices.find((c) => c.id === id)?.label;
+    return sent || (id === "password" ? ADDRESS_HELD_WORDS.password : ADDRESS_HELD_WORDS.startOwn);
+  }
+  render() {
+    const { contentEl } = this;
+    contentEl.empty();
+    contentEl.addClass("myu-power-down");
+    if (this.deps.held.email) contentEl.createEl("h2", { text: this.deps.held.email });
+    contentEl.createEl("p", { cls: "myu-prose", text: this.deps.held.message });
+    if (!this.ended) {
+      if (this.typing) {
+        new import_obsidian57.Setting(contentEl).setName(ADDRESS_HELD_WORDS.passwordField).addText((t) => {
+          t.setValue(this.password).onChange((v) => this.password = v);
+          t.inputEl.type = "password";
+        });
+      }
+      const row = new import_obsidian57.Setting(contentEl);
+      if (this.typing) {
+        row.addButton((b) => b.setButtonText(ADDRESS_HELD_WORDS.open).setCta().onClick(() => void this.send("password")));
+      } else {
+        row.addButton(
+          (b) => b.setButtonText(this.choiceLabel("password")).setCta().onClick(() => {
+            this.typing = true;
+            this.render();
+          })
+        );
+      }
+      row.addButton((b) => b.setButtonText(this.choiceLabel("start_own")).onClick(() => void this.send("start_own")));
+    }
+    if (this.said) contentEl.createEl("p", { cls: "myu-prose", text: this.said });
+    const doors = contentEl.createDiv({ cls: "myu-modal-doors" });
+    const back = doors.createEl("button", { cls: "myu-affordance", text: ADDRESS_HELD_WORDS.back });
+    back.onclick = () => {
+      this.close();
+      this.deps.back();
+    };
+  }
+  async send(choice) {
+    if (this.busy) return;
+    if (choice === "password" && !this.password) return;
+    this.busy = true;
+    const body = addressHeldBody(this.deps.held.held_token, choice, choice === "password" ? this.password : void 0);
+    const res = await this.deps.answer(body).catch(() => null);
+    this.busy = false;
+    const outcome = heardAnswer(res);
+    if (outcome.kind === "done") {
+      this.close();
+      await this.deps.answered(outcome.again_url);
+      return;
+    }
+    this.said = outcome.message;
+    this.password = "";
+    if (outcome.kind === "too_many" || outcome.kind === "expired") this.ended = true;
+    this.render();
+  }
+};
+
+// src/addressHeldSignin.ts
+function againToken(againUrl, token) {
+  const m = againUrl ? /[?&]token=([^&#\s]+)/.exec(againUrl) : null;
+  if (!m) return token;
+  try {
+    const t = decodeURIComponent(m[1]).trim();
+    return t || token;
+  } catch {
+    return token;
+  }
+}
+async function magicSignin(deps, token) {
+  const outcome = await deps.redeem(token);
+  if (typeof outcome === "string") {
+    deps.landed(outcome);
+    return;
+  }
+  let again = null;
+  deps.ask(outcome.held, (againUrl) => {
+    again ?? (again = magicSignin(deps, againToken(againUrl, token)));
+    return again;
+  });
+}
 
 // src/refreshGate.ts
 var RefreshGate = class {
@@ -24429,7 +28547,7 @@ var TODAY_REFRESH_MS = 5 * 60 * 1e3;
 var TODAY_REFRESH_GAP_MS = 5e3;
 var LIVE_WATCHDOG_MS = 45 * 1e3;
 var QUEUE_RETRY_MS = 10 * 60 * 1e3;
-var AskMyuPlugin = class extends import_obsidian57.Plugin {
+var AskMyuPlugin = class extends import_obsidian58.Plugin {
   constructor() {
     super(...arguments);
     this.settings = { ...DEFAULT_SETTINGS };
@@ -24721,9 +28839,9 @@ var AskMyuPlugin = class extends import_obsidian57.Plugin {
       canRun: () => this.unlock.current === "unlocked",
       findTheirPage: (name) => this.personIndex.find(name)?.path ?? null,
       flags: () => this.backendFlags,
-      onProgress: (line) => {
-        this.materializeProgress = line;
-        if (line === null) void this.refreshToday();
+      onProgress: (line2) => {
+        this.materializeProgress = line2;
+        if (line2 === null) void this.refreshToday();
         else this.paintProgress();
       }
     });
@@ -24778,7 +28896,7 @@ var AskMyuPlugin = class extends import_obsidian57.Plugin {
     this.registerEvent(
       this.app.workspace.on("file-menu", (menu, file) => {
         if (this.unlock.current !== "unlocked") return;
-        if (!(file instanceof import_obsidian57.TFile) || file.extension !== "md") return;
+        if (!(file instanceof import_obsidian58.TFile) || file.extension !== "md") return;
         menu.addItem(
           (i) => i.setTitle("Ask Myu about this note").setIcon("message-circle").onClick(() => void this.askMyuAboutNote(file))
         );
@@ -24790,7 +28908,7 @@ var AskMyuPlugin = class extends import_obsidian57.Plugin {
         const person = this.personOfNote(file);
         if (person) {
           menu.addSeparator();
-          menu.addItem((i) => i.setTitle(`Merge ${person.name} into\u2026`).setIcon("git-merge").onClick(() => this.mergePerson(person)));
+          menu.addItem((i) => i.setTitle(PERSON_ACTION_COPY.samePersonAs).setIcon("users").onClick(() => this.mergePerson(person)));
           menu.addItem((i) => i.setTitle(`${person.name} is me`).setIcon("user-check").onClick(() => this.markPersonAsSelf(person)));
           menu.addItem((i) => i.setTitle(`Archive ${person.name}`).setIcon("archive").onClick(() => void this.archivePerson(person)));
         }
@@ -24824,7 +28942,7 @@ var AskMyuPlugin = class extends import_obsidian57.Plugin {
     });
     this.registerObsidianProtocolHandler("myu-prep", (params) => {
       stamp("myu-prep");
-      if (typeof params.event === "string" && params.event) void this.openPrep(params.event);
+      if (typeof params.event === "string" && params.event) void this.openPrep(params.event, { label: typeof params.title === "string" ? params.title : "" });
     });
     this.registerObsidianProtocolHandler("myu-connected", () => {
       stamp("myu-connected");
@@ -24858,10 +28976,10 @@ var AskMyuPlugin = class extends import_obsidian57.Plugin {
       if (typeof params.token === "string" && params.token) void this.completeMagicSignup(params.token);
     });
     this.sse.subscribe("initiative_cue", (payload) => {
-      const text = typeof payload.text === "string" ? payload.text : null;
-      if (!text) return;
+      const text2 = typeof payload.text === "string" ? payload.text : null;
+      if (!text2) return;
       this.liveCues.push({
-        text,
+        text: text2,
         event_id: typeof payload.event_id === "string" ? payload.event_id : void 0,
         received_at: Date.now()
       });
@@ -24875,6 +28993,10 @@ var AskMyuPlugin = class extends import_obsidian57.Plugin {
     this.sse.subscribe("brief_item_updated", () => void this.refreshToday());
     this.sse.subscribe("menu_marks", (payload) => this.menuMarks.take(payload));
     for (const type of ["line_new", "line_updated"]) this.sse.subscribe(type, () => this.menuMarks.lineChanged());
+    this.sse.subscribe("line_updated", () => this.prepView()?.lineUpdated());
+    this.sse.subscribe("line_updated", (payload) => {
+      for (const leaf of this.app.workspace.getLeavesOfType(TODAY_VIEW_TYPE)) if (leaf.view instanceof TodayView) void leaf.view.lineUpdated(payload.line_id);
+    });
     for (const type of ["line_new", "line_updated", "space.retro.updated"]) {
       this.sse.subscribe(type, (payload) => {
         const spaceId = typeof payload.space_id === "string" ? payload.space_id : void 0;
@@ -25122,7 +29244,8 @@ var AskMyuPlugin = class extends import_obsidian57.Plugin {
       }
     });
     for (const [id, name, run] of [
-      ["merge-person", "Merge this person into\u2026", (p) => this.mergePerson(p)],
+      // The id stays as it was, so a hotkey set on it keeps working; the words are "Same person as…" (2026-11-15).
+      ["merge-person", PERSON_ACTION_COPY.samePersonAs, (p) => this.mergePerson(p)],
       ["this-is-me", "This person is me", (p) => this.markPersonAsSelf(p)],
       ["archive-person", "Archive this person", (p) => void this.archivePerson(p)]
     ]) {
@@ -25378,12 +29501,12 @@ var AskMyuPlugin = class extends import_obsidian57.Plugin {
       const view = leaf.view;
       if (!(view instanceof TodayView)) continue;
       view.paintDots();
-      if (import_obsidian57.Platform.isMobile) view.paintMenuMarks();
+      if (import_obsidian58.Platform.isMobile) view.paintMenuMarks();
     }
   }
   /** On a phone, what is new in Myu's places, for the top of the Today pane; null on a computer (the status bar says it). */
   menuMarksLine() {
-    return todayPaneMarks(this.menuMarks.words(), { mobile: import_obsidian57.Platform.isMobile, unlocked: this.unlock?.current === "unlocked" });
+    return todayPaneMarks(this.menuMarks.words(), { mobile: import_obsidian58.Platform.isMobile, unlocked: this.unlock?.current === "unlocked" });
   }
   /** The menu's marks, read again: only signed in and past the terms (a gated account is answered 428, which shows the terms screen). */
   refreshMenuMarks() {
@@ -25557,24 +29680,56 @@ var AskMyuPlugin = class extends import_obsidian57.Plugin {
     const res = await this.backend.getHelpMyuQueue().catch(() => null);
     this.helpQueue = res?.ok ? res.data?.queue ?? [] : [];
   }
-  /** A merge the Help Myu queue proposed — same confirm, same wire as the picker path. */
-  mergePersonInto(source, target) {
-    new PersonActionConfirmModal(this.app, PERSON_ACTION_COPY.merge(source.name, target.name), (yes) => {
-      if (!yes) return;
-      void (async () => {
-        const res = await this.backend.mergeRelationships(source.id, target.id);
-        if (!res.ok) {
-          notifyError(`Couldn\u2019t merge: ${res.error ?? res.data?.message ?? res.status}`);
-          return;
-        }
-        await this.materializer.retirePersonNote(source.id);
-        notifyStatus(`Merged ${source.name} into ${target.name}.`);
+  /**
+   * "Same person" from the Help Myu row (2026-11-15): the row itself asks "Are A and B the same person?", so its "Same person" goes
+   * straight to the same door as the picker's, as the web's help row does; the server's sentence and Undo follow.
+   */
+  async samePersonFromHelp(source, target) {
+    return samePerson(
+      this.samePersonDeps(source, () => {
         this.helpQueue = this.helpQueue.filter((i) => !(i.item_type === "merge_candidate" && i.source.relationship_id === source.id));
-        void this.refreshToday({ now: true });
         for (const leaf of this.app.workspace.getLeavesOfType(HELP_VIEW_TYPE)) if (leaf.view instanceof HelpMyuView) leaf.view.render();
+      }),
+      source.id,
+      target.id
+    );
+  }
+  /**
+   * Undo beside an answer's sentence (2026-11-15 follow-up): "Done. 3 things moved to Mira Okonjo." after "Yes" or "Choose who" on
+   * Myu's question, "Taken off. 1 thing went back to waiting." after "Not her?". Pressed, it puts the move back and says what it
+   * came to ("Put back as it was.", or why nothing was); Today reads again.
+   */
+  offerUndo(said, moveId) {
+    notifyDone(said, undoAction(this.undoDeps(), moveId));
+  }
+  /** What an undo shows, and what is read again after it. */
+  undoDeps() {
+    return {
+      backend: this.backend,
+      done: (said, undo) => notifyDone(said, undo),
+      failed: (said) => notifyError(said),
+      undone: () => {
+        void this.refreshToday({ now: true });
         void this.materializer.materializeAll();
-      })();
-    }).open();
+      }
+    };
+  }
+  /**
+   * What "Same person" shows and does in the vault (2026-11-15): the server's sentence with Undo in a notice, "That did not go
+   * through. Try again." when it did not; after it, the note of the one who moved goes to the trash and Today and Myu's folder read
+   * again; after an undo, Today and Myu's folder read again.
+   */
+  samePersonDeps(source, after) {
+    return {
+      ...this.undoDeps(),
+      backend: this.backend,
+      after: async () => {
+        await this.materializer.retirePersonNote(source.id).catch(() => false);
+        after?.();
+        void this.refreshToday({ now: true });
+        void this.materializer.materializeAll();
+      }
+    };
   }
   /** The chat pane, if one is open anywhere. */
   chatView() {
@@ -25619,7 +29774,7 @@ var AskMyuPlugin = class extends import_obsidian57.Plugin {
    * are the files the person added in the modal, passed through as they are.
    */
   sendFeedback(opts) {
-    return this.backend.submitFeedback({ message: opts.message, category: opts.category, ...opts.rating ? { rating: opts.rating } : {}, app: "obsidian", version: BUILD_STAMP, context: { surface_state: opts.surface, ...opts.journalId ? { journal_id: opts.journalId } : {}, platform: import_obsidian57.Platform.isMobile ? "mobile" : "desktop" }, ...opts.attachments ? { attachments: opts.attachments } : {} });
+    return this.backend.submitFeedback({ message: opts.message, category: opts.category, ...opts.rating ? { rating: opts.rating } : {}, app: "obsidian", version: BUILD_STAMP, context: { surface_state: opts.surface, ...opts.journalId ? { journal_id: opts.journalId } : {}, platform: import_obsidian58.Platform.isMobile ? "mobile" : "desktop" }, ...opts.attachments ? { attachments: opts.attachments } : {} });
   }
   /** The canvas pane, if one is open anywhere. */
   canvasView() {
@@ -25657,8 +29812,13 @@ var AskMyuPlugin = class extends import_obsidian57.Plugin {
     const view = leaf.view;
     if (view instanceof CanvasView) await view.showComposition(compositionId);
   }
-  /** The meeting's card opens in the right sidebar; one leaf, reused, like cards. */
-  async openPrep(eventId) {
+  /**
+   * The meeting's page opens in the right sidebar; one leaf, reused, like cards. From a Today row's Open ▸
+   * (2026-10-29, BRIEF_WEB_PREP_NOTES §3) the meeting's own conversation opens in the chat pane too, Myu first, and
+   * the page stays in front: the page has no chat of its own, and "Ask it in the chat" means that pane.
+   */
+  async openPrep(eventId, talk) {
+    if (talk) await this.loadMeetingConversation(eventId, talk.label, talk.occurrenceKey);
     const existing = this.app.workspace.getLeavesOfType(PREP_VIEW_TYPE);
     const leaf = existing[0] ?? this.app.workspace.getRightLeaf(false);
     if (!leaf) return;
@@ -25667,6 +29827,27 @@ var AskMyuPlugin = class extends import_obsidian57.Plugin {
     this.broughtForward(leaf);
     const view = leaf.view;
     if (view instanceof PrepView) await view.showMeeting(eventId);
+  }
+  /** The meeting's page, if one is open. */
+  prepView() {
+    const view = this.app.workspace.getLeavesOfType(PREP_VIEW_TYPE)[0]?.view;
+    return view instanceof PrepView ? view : null;
+  }
+  /** A meeting's list changed outside its page (a Today row, an offer in the chat pane): the page reads again. */
+  prepListChanged(eventId) {
+    this.prepView()?.listChanged(eventId);
+  }
+  /**
+   * The meeting's conversation loaded into the chat pane (one made when there is none) without bringing the pane
+   * forward: it is one tab away, on this meeting, when the person wants to ask Myu something.
+   */
+  async loadMeetingConversation(eventId, label2, occurrenceKey) {
+    const existing = this.app.workspace.getLeavesOfType(CHAT_VIEW_TYPE);
+    const leaf = existing[0] ?? this.app.workspace.getRightLeaf(false);
+    if (!leaf) return;
+    if (!existing.length) await leaf.setViewState({ type: CHAT_VIEW_TYPE, active: false });
+    const view = leaf.view;
+    if (view instanceof ChatView) void view.openMeeting(eventId, label2, occurrenceKey);
   }
   /** The Today pane again, now (a question answered in the chat pane changes it). */
   requestTodayRefresh() {
@@ -25699,11 +29880,30 @@ var AskMyuPlugin = class extends import_obsidian57.Plugin {
     }
     return this.settings.device_id;
   }
-  /** P9 — redeem an emailed sign-in token (protocol handler or pasted link). */
+  /**
+   * P9 — redeem an emailed sign-in token (protocol handler or pasted link). An address held by a password account nobody
+   * confirmed is asked about first (2026-11-17): one question, then the same link once more (`addressHeldSignin.ts`).
+   */
   async completeMagicSignup(token) {
     if (this.unlock.current === "unlocked") return;
     const deviceId = await this.ensureDeviceId();
-    const outcome = await this.unlock.completeMagicLink(token, deviceId);
+    await magicSignin(
+      {
+        redeem: (t) => this.unlock.completeMagicLink(t, deviceId),
+        ask: (held, answered) => new AddressHeldModal(this.app, {
+          held,
+          answer: (body) => this.backend.answerAddressHeld(body),
+          answered,
+          // Back to the start: the sign-in window, as Today's "Sign in" opens it.
+          back: () => new SignupModal(this.app, this, () => void this.refreshTodayNow(), "signin").open()
+        }).open(),
+        landed: (outcome) => this.magicLanded(outcome)
+      },
+      token
+    );
+  }
+  /** Where a redeemed link landed, said or shown. */
+  magicLanded(outcome) {
     if (outcome === "ceremony") {
       this.openGenesisCeremony();
     } else if (outcome === "existing_account") {
@@ -26001,11 +30201,11 @@ var AskMyuPlugin = class extends import_obsidian57.Plugin {
     if (!opening) {
       const scope = subjectType === "meeting" || subjectType === "account" ? "today" : subjectType === "space" ? "spaces" : "people";
       const res = await this.backend.getMyuLines(scope).catch(() => null);
-      const line = (res?.data?.lines ?? []).find(
+      const line2 = (res?.data?.lines ?? []).find(
         (l) => (l.subjects ?? []).some((s2) => s2.type === subjectType && s2.id === subjectId && (!opts.occurrenceKey || !s2.occurrence_key || s2.occurrence_key === opts.occurrenceKey))
       );
-      opening = (line?.text ?? "").trim();
-      openingLine = line;
+      opening = (line2?.text ?? "").trim();
+      openingLine = line2;
     }
     const lineHere = openingLine && (openingLine.text ?? "").trim() === opening ? openingLine : void 0;
     const kind = conversationSubjectType(lineHere?.conversation?.subject_type || subjectType);
@@ -26036,35 +30236,35 @@ var AskMyuPlugin = class extends import_obsidian57.Plugin {
    * The chat pane, showing a meeting's own conversation (2026-09-30): the question before it, the
    * arc's session, "Anything you didn't say in there?" and the Yes/No after it, each answered there.
    */
-  async openMeetingConversation(eventId, label, occurrenceKey) {
+  async openMeetingConversation(eventId, label2, occurrenceKey) {
     const existing = this.app.workspace.getLeavesOfType(CHAT_VIEW_TYPE);
     const leaf = existing[0] ?? this.app.workspace.getRightLeaf(false);
     if (!leaf) return;
     if (!existing.length) await leaf.setViewState({ type: CHAT_VIEW_TYPE, active: true });
     await this.app.workspace.revealLeaf(leaf);
     const view = leaf.view;
-    if (view instanceof ChatView) await view.openMeeting(eventId, label, occurrenceKey);
+    if (view instanceof ChatView) await view.openMeeting(eventId, label2, occurrenceKey);
     this.broughtForward(leaf);
   }
   /**
    * The chat pane, showing a line's own conversation (2026-10-03): the account's "About you" question, or a
    * person's or a company's line answered with several picks or a typed name. False when the pane cannot open.
    */
-  async openSubjectConversation(type, id, label) {
+  async openSubjectConversation(type, id, label2) {
     const existing = this.app.workspace.getLeavesOfType(CHAT_VIEW_TYPE);
     const leaf = existing[0] ?? this.app.workspace.getRightLeaf(false);
     if (!leaf) return false;
     if (!existing.length) await leaf.setViewState({ type: CHAT_VIEW_TYPE, active: true });
     await this.app.workspace.revealLeaf(leaf);
     const view = leaf.view;
-    const opened = view instanceof ChatView ? await view.openSubject(type, id, label) : false;
+    const opened = view instanceof ChatView ? await view.openSubject(type, id, label2) : false;
     this.broughtForward(leaf);
     return opened;
   }
   /** A conversation an answer asks to open (`open_conversation`: the arc's Now). */
-  async openConversationRef(ref, label = "") {
-    if (ref.subject_type === "meeting") await this.openMeetingConversation(ref.subject_id, label, ref.occurrence_key);
-    else await this.openChatAbout(ref.subject_type, ref.subject_id, { label, occurrenceKey: ref.occurrence_key });
+  async openConversationRef(ref, label2 = "") {
+    if (ref.subject_type === "meeting") await this.openMeetingConversation(ref.subject_id, label2, ref.occurrence_key);
+    else await this.openChatAbout(ref.subject_type, ref.subject_id, { label: label2, occurrenceKey: ref.occurrence_key });
   }
   /**
    * A meeting's note in Myu's folder (written from the meeting history, `type: myu-meeting` and its
@@ -26080,14 +30280,14 @@ var AskMyuPlugin = class extends import_obsidian57.Plugin {
     return true;
   }
   /** The chat pane, showing a space's own conversation. False when this backend has no space mode. */
-  async openSpaceConversation(spaceId, label, opts = {}) {
+  async openSpaceConversation(spaceId, label2, opts = {}) {
     const existing = this.app.workspace.getLeavesOfType(CHAT_VIEW_TYPE);
     const leaf = existing[0] ?? this.app.workspace.getRightLeaf(false);
     if (!leaf) return false;
     if (!existing.length) await leaf.setViewState({ type: CHAT_VIEW_TYPE, active: true });
     await this.app.workspace.revealLeaf(leaf);
     const view = leaf.view;
-    const opened = view instanceof ChatView ? await view.openSpace(spaceId, label, opts) : false;
+    const opened = view instanceof ChatView ? await view.openSpace(spaceId, label2, opts) : false;
     if (opened) this.broughtForward(leaf);
     return opened;
   }
@@ -26122,20 +30322,12 @@ var AskMyuPlugin = class extends import_obsidian57.Plugin {
     if (fm?.type !== "myu-person" || typeof fm["myu-id"] !== "string") return null;
     return { id: fm["myu-id"], name: file.basename };
   }
+  /** "Same person as…": pick who they really are, one yes, then the server's sentence with Undo (2026-11-15). */
   mergePerson(source) {
     new MergeIntoModal(this.app, this, source.id, source.name, (target) => {
-      new PersonActionConfirmModal(this.app, PERSON_ACTION_COPY.merge(source.name, target.display_name), (yes) => {
-        if (!yes) return;
-        void (async () => {
-          const res = await this.backend.mergeRelationships(source.id, target.entity_id);
-          if (!res.ok) {
-            notifyError(`Couldn\u2019t merge: ${res.error ?? res.data?.message ?? res.status}`);
-            return;
-          }
-          await this.materializer.retirePersonNote(source.id);
-          notifyStatus(`Merged ${source.name} into ${target.display_name}.`);
-          void this.materializer.materializeAll();
-        })();
+      const copy = PERSON_ACTION_COPY.samePerson(source.name, target.display_name, { vaultNotes: this.settings.materialize_consented });
+      new PersonActionConfirmModal(this.app, copy, (yes) => {
+        if (yes) void samePerson(this.samePersonDeps(source), source.id, target.entity_id);
       }).open();
     }).open();
   }
@@ -26180,8 +30372,8 @@ var AskMyuPlugin = class extends import_obsidian57.Plugin {
       notifyError("Sign in and allow Myu to write first (Settings \u2192 askMyu).");
       return;
     }
-    const summary = await this.exporter.exportEverything((line) => {
-      this.materializeProgress = line || null;
+    const summary = await this.exporter.exportEverything((line2) => {
+      this.materializeProgress = line2 || null;
       void this.refreshToday();
     });
     this.lastSyncAt = Date.now();
@@ -26225,17 +30417,17 @@ var AskMyuPlugin = class extends import_obsidian57.Plugin {
       if (!opts.quiet) notifyError("Couldn't load that canvas. Check the id and your connection.");
       return { status: "error", message: res.error || "could not load the composition" };
     }
-    const webUrl = `${this.settings.base_url.replace(/\/api\/?$/, "")}/dashboard`;
+    const webUrl2 = `${this.settings.base_url.replace(/\/api\/?$/, "")}/dashboard`;
     const outcome = format === "markdown" ? await this.canvasExporter.writeMarkdown(
       spec,
       // The note links to the user's OWN person page when they keep one,
       // by basename — the link belongs in their graph, not ours.
       (name) => this.personIndex.find(name)?.path?.replace(/\.md$/, "").split("/").pop() ?? null,
-      webUrl
+      webUrl2
     ) : await this.canvasExporter.write(
       spec,
       (name) => this.personIndex.find(name)?.path ?? null,
-      webUrl
+      webUrl2
     );
     if (!opts.quiet) {
       if (outcome.status === "written") notifyStatus(`Saved to ${outcome.canvasPath}.`);

@@ -214,3 +214,38 @@ test('a drafted interview debrief: the first choice reads as the server says ("S
     assert.ok(!m.host().visibleTexts().includes(DRAFT_ASK));
   }
 });
+
+// ── the pages a line is about (2026-10-28) ───────────────────────────────────
+
+const links = (host: FakeEl) => [...host.walk()].filter((e) => e.tag === 'a' && e.classes.has('myu-line-link'));
+
+test('a LinkedIn match question: "See the profile on LinkedIn" under its words, before Yes and No, opening in the browser', () => {
+  const m = mount(new MockApi(), line({
+    text: "There's one LinkedIn profile that looks like David Chang. Is that right?",
+    ask_kind: 'yes_no',
+    needs_you: false,
+    est: undefined,
+    choices: [{ id: 'yes', label: 'Yes' }, { id: 'no', label: 'No' }],
+    links: [{ url: 'https://linkedin.com/in/david-chang-1a2b3c' }],
+  }));
+  const a = links(m.host());
+  assert.equal(a.length, 1);
+  assert.equal(a[0].text, 'See the profile on LinkedIn ↗');
+  assert.equal(a[0].attrs.href, 'https://linkedin.com/in/david-chang-1a2b3c');
+  assert.equal(a[0].attrs.target, '_blank');
+  const order = [...m.host().walk()].filter((e) => e === a[0] || e.classes.has('myu-line-choices'));
+  assert.equal(order[0], a[0], 'the link comes before the buttons');
+});
+
+test('several profiles: each choice\'s link under the buttons, with the choice\'s words; a bad address is never drawn', () => {
+  const m = mount(new MockApi(), line({
+    text: 'Two LinkedIn profiles could be David Chang. Which one is it?',
+    choices: [{ id: 'c1', label: 'David Chang — Chef' }, { id: 'c2', label: 'David Chang — Engineer' }, { id: 'none', label: 'None of these' }],
+    links: [{ url: 'https://linkedin.com/in/dc-eng', choice_id: 'c2' }, { url: 'https://linkedin.com/in/dc-chef', choice_id: 'c1' }, { url: 'javascript:alert(1)' }],
+  }));
+  assert.deepEqual(links(m.host()).map((e) => [e.text, e.attrs.href]), [
+    ['David Chang — Chef ↗', 'https://linkedin.com/in/dc-chef'],
+    ['David Chang — Engineer ↗', 'https://linkedin.com/in/dc-eng'],
+  ]);
+  assert.ok(m.host().visibleTexts().some((t) => t.startsWith('See each profile on LinkedIn:')));
+});

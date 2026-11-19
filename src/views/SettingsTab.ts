@@ -58,6 +58,24 @@ import { normalizePreferences } from '../transport/api';
 import { appendBrand } from '../brand';
 import { PersonActionConfirmModal } from './PersonActionConfirmModal';
 import { loadFailure } from './settingsLoad';
+import { ADDRESS_CONFIRM_WORDS } from '../addressHeld';
+import type { ApiResponse } from '../transport';
+
+/** Whether the account's own address is confirmed, in the shared words (2026-11-17). */
+function confirmWords(confirmed: boolean): string {
+  return confirmed ? ADDRESS_CONFIRM_WORDS.confirmed : ADDRESS_CONFIRM_WORDS.notConfirmed;
+}
+
+/**
+ * What "Mail the confirmation again" says when the mail went: the server's sentence when it sends one, ours otherwise.
+ * Null when it did not go (a refusal, `success: false`, or "not_sent").
+ */
+export function mailedAgainWords(res: Pick<ApiResponse, 'ok' | 'data'> | null, email: string): string | null {
+  const data = res?.ok ? res.data : null;
+  if (!data || data.success === false || data.email_confirmation === 'not_sent') return null;
+  const message = typeof data.email_message === 'string' ? data.email_message.trim() : '';
+  return message || ADDRESS_CONFIRM_WORDS.mailedAgain(email);
+}
 
 /** The optional look, as a file the reader saves — on the public repo. */
 const MYU_LOOK_URL = 'https://github.com/AskMyu/askmyu-obsidian-plugin/raw/main/snippets/myu-look.css';
@@ -414,7 +432,7 @@ export class AskMyuSettingTab extends PluginSettingTab {
    * that could not work.
    */
   private async renderAccountEmails(host: HTMLElement): Promise<void> {
-    const res = await this.plugin.backend.listAccountEmails().catch(() => null);
+    const [res, own] = await Promise.all([this.plugin.backend.listAccountEmails().catch(() => null), this.ownAddress()]);
     const why = loadFailure(res);
     if (why) {
       this.renderLoadFailure(host, 'Email addresses', why, () => {
@@ -434,15 +452,21 @@ export class AskMyuSettingTab extends PluginSettingTab {
         }),
       );
 
+    let ownShown = false;
     for (const entry of emails) {
       const address = String(entry.email ?? '');
       if (!address) continue;
       const isPrimary = entry.is_primary === true;
       const verified = entry.verified === true;
+      // The account's own address says whether it is confirmed (2026-11-17), beside what the list says of it.
+      const mine = own && address.toLowerCase() === own.email.toLowerCase() ? own : null;
+      if (mine) ownShown = true;
+      const listed = isPrimary ? 'Primary' : verified ? 'Verified' : 'Waiting for you to click the link Myu emailed';
 
       const row = new Setting(host)
         .setName(address)
-        .setDesc(isPrimary ? 'Primary' : verified ? 'Verified' : 'Waiting for you to click the link Myu emailed');
+        .setDesc(mine ? `${listed} · ${confirmWords(mine.confirmed)}` : listed);
+      if (mine && !mine.confirmed) this.addMailAgain(row, mine.email);
 
       if (!verified) {
         row.addButton((b) =>
@@ -471,8 +495,42 @@ export class AskMyuSettingTab extends PluginSettingTab {
         );
       }
     }
+
+    // The list did not carry the account's own address: it gets its own row, so its state is still said.
+    if (own && !ownShown) {
+      const row = new Setting(host).setName(own.email).setDesc(confirmWords(own.confirmed));
+      if (!own.confirmed) this.addMailAgain(row, own.email);
+    }
   }
 
+  /**
+   * The account's own address and whether it is confirmed (`GET /account/get`, 2026-11-17). Null when the server does
+   * not say (an older one leaves `email_confirmed` out) or could not be asked: then nothing new is shown.
+   */
+  private async ownAddress(): Promise<{ email: string; confirmed: boolean } | null> {
+    try {
+      const res = await this.plugin.backend.getAccount();
+      const data = res.ok ? res.data : null;
+      const email = typeof data?.email === 'string' ? data.email.trim() : '';
+      return email && typeof data?.email_confirmed === 'boolean' ? { email, confirmed: data.email_confirmed } : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** "Mail the confirmation again" on the account's own address: `POST /account/emails/resend` with that address. */
+  private addMailAgain(row: Setting, email: string): void {
+    row.addButton((b) =>
+      b.setButtonText(ADDRESS_CONFIRM_WORDS.mailAgain).onClick(async () => {
+        b.setDisabled(true);
+        const res = await this.plugin.backend.resendAccountEmail(email).catch(() => null);
+        b.setDisabled(false);
+        const said = mailedAgainWords(res, email);
+        if (said) notifyStatus(said);
+        else notifyError(ADDRESS_CONFIRM_WORDS.mailFailed);
+      }),
+    );
+  }
   /** How Myu addresses you, and how directly it speaks. Account state, so it
       is written back rather than mirrored (rule 3). */
   private async renderPreferences(host: HTMLElement): Promise<void> {
@@ -1318,7 +1376,7 @@ export class AskMyuSettingTab extends PluginSettingTab {
   }
 }
 
-function describeState(state: string, detail: string | null): string {
+export function describeState(state: string, detail: string | null): string {
   if (detail === 'offline') return 'waiting for network';
   switch (state) {
     case 'unlocked':
@@ -1329,6 +1387,8 @@ function describeState(state: string, detail: string | null): string {
       if (detail === 'genesis_pending') return 'one step left: the twelve-word recovery phrase';
       if (detail === 'genesis_failed') return 'key setup did not finish. Try again';
       if (detail === 'existing_account') return 'welcome back. Approve this device or use your recovery phrase';
+      // Refused by the server (2026-11-18): the same way in as a device never approved.
+      if (detail === 'not_this_account') return "this device can't open your account yet. Approve it from a device you already use, or use your recovery phrase";
       return detail === 'device_revoked' ? 'this device was removed. Approve it again' : 'needs approval';
     default:
       return 'not connected';

@@ -9,7 +9,7 @@ import { App, Modal, Setting } from 'obsidian';
 export class PersonActionConfirmModal extends Modal {
   private answered = false;
 
-  constructor(app: App, private readonly copy: { title: string; body: string; cta: string }, private readonly onAnswer: (yes: boolean) => void | Promise<void>) {
+  constructor(app: App, private readonly copy: { title: string; body: string; cta: string; note?: string }, private readonly onAnswer: (yes: boolean) => void | Promise<void>) {
     super(app);
   }
 
@@ -18,6 +18,8 @@ export class PersonActionConfirmModal extends Modal {
     contentEl.addClass('myu-power-down');
     contentEl.createEl('h2', { text: this.copy.title });
     contentEl.createEl('p', { cls: 'myu-prose', text: this.copy.body });
+    // What the vault does beside it ("Same person": the note of the one who moves goes to the trash), when it does anything.
+    if (this.copy.note) contentEl.createEl('p', { cls: 'myu-prose myu-quiet', text: this.copy.note });
     new Setting(contentEl)
       .addButton((b) => b.setButtonText('Not now').onClick(() => this.answer(false)))
       .addButton((b) => b.setButtonText(this.copy.cta).setDestructive().onClick(() => this.answer(true)));

@@ -30,6 +30,26 @@ import { flattenMemoryPayload } from '../vault/myuFiles';
 import { cardDayWords } from '../cardDays';
 import { decryptWithKey } from '../crypto/primitives';
 import { MAP_FOLD_WORDS, firstNameOf, isOnMap } from '../mapFold';
+import type { PrepHistoryRow } from '../wire';
+import { MEETING_POST_WORDS, pastMeetingWords } from '../meetingPost';
+import { PREP_LIST_WORDS, prepFirstName } from '../prepList';
+import type { SectionBlock } from './cardSections';
+import type { Repeated } from '../lastMoments';
+import { isRepeatedSection, repeatedOf } from '../lastMomentsVault';
+import { renderRepeated } from './lastMomentsParts';
+
+/** Past 1:1s on a card: how many are read, and how many show before "+ {n} older ▸". */
+const PAST_READ = 20;
+const PAST_SHOWN = 5;
+
+/** A fact as a row (Between you): the label, the words, the source and the meeting under them, the date on the right. */
+function factRow(host: HTMLElement, block: SectionBlock): void {
+  const row = host.createDiv({ cls: 'myu-prep-attr myu-card-fact' });
+  row.createSpan({ cls: 'myu-prep-attr-label', text: block.label ?? '' });
+  row.createSpan({ cls: 'myu-prep-attr-text', text: block.text });
+  if (block.sub) row.createSpan({ cls: 'myu-prep-attr-sub', text: block.sub });
+  if (block.right) row.createSpan({ cls: 'myu-prep-attr-acts' }).createSpan({ cls: 'myu-prep-attr-right', text: block.right });
+}
 
 export const CARD_VIEW_TYPE = 'askmyu-card';
 
@@ -51,6 +71,19 @@ export class CardView extends ItemView {
    * next press. Both forgotten when the pane moves to someone else.
    */
   private mapWord: { entityId: string; text: string } | null = null;
+  /**
+   * The post (2026-10-30): the past 1:1s with the person on the card (read once per showing), whether all of them show,
+   * and which sections' older rows are open (Between you's "+ 4 older ▸").
+   */
+  private past: { forId: string; rows: PrepHistoryRow[]; across: string | null } | null = null;
+  private pastAll = false;
+  private olderOpen = new Set<string>();
+  /**
+   * What has repeated between the two of you (2026-11-13): the server's sentences from the card's read (`noticed`, on the card or at
+   * the read's top level), and which of them are open to their sources.
+   */
+  private repeated: Repeated[] = [];
+  private repeatedOpen = new Set<string>();
   /** The press in flight — tests wait on it. */
   private busy: Promise<void> = Promise.resolve();
 
@@ -133,6 +166,11 @@ export class CardView extends ItemView {
     this.entityName = fallbackName;
     this.board = null;
     this.boardOpen = false;
+    this.past = null;
+    this.pastAll = false;
+    this.olderOpen.clear();
+    this.repeated = [];
+    this.repeatedOpen.clear();
     this.title = `Myu — ${fallbackName}`;
     this.state = 'loading';
     this.card = null;
@@ -160,8 +198,11 @@ export class CardView extends ItemView {
     this.linkedinKnown = res.data.linkedin_known !== false;
 
     this.card = res.data.card;
+    this.repeated = entityType === 'person' ? repeatedOf(res.data) : [];
     this.state = 'idle';
     this.render();
+    // A person's past 1:1s ride beside the card (2026-10-30); the card is drawn without waiting for them.
+    if (entityType === 'person') void this.loadPast(entityId);
   }
 
   /** Both LinkedIn doors, shared with the Help Myu tab (linkedinCards.ts). */
@@ -296,19 +337,40 @@ export class CardView extends ItemView {
     // Sections go through the pure extraction (cardSections.ts) so what the
     // pane can show is a TESTED property, and what it can't is DISCLOSED —
     // R7: a section this surface can't draw is named, never silently dropped.
+    // What has repeated between the two of you (2026-11-13): the server's sentences, each opening to its sources; none when there
+    // is nothing. A section of its own that carries it is drawn here, once, and not among the sections below.
+    if (this.entityType === 'person') renderRepeated(root, this.repeated, this.repeatedOpen);
+
     let undrawn = 0;
     for (const section of this.card.sections ?? []) {
-      const blocks = sectionBlocks(section);
+      if (this.entityType === 'person' && this.repeated.length && isRepeatedSection(section)) continue;
+      const blocks = sectionBlocks(section, { firstName: prepFirstName(header?.display_name) });
       if (blocks.length === 0) {
         undrawn++;
         continue;
       }
       const zone = root.createDiv({ cls: 'myu-zone' });
       if (section.title) zone.createDiv({ cls: 'myu-whisper', text: section.title.toLowerCase() });
+      const sectionKey = section.section_id ?? section.section_type ?? '';
       for (const block of blocks) {
         if (block.kind === 'narrative') {
           // Myu's voice — serif, under its label, printed as the backend wrote it.
           zone.createDiv({ cls: 'myu-voice', text: block.text });
+        } else if (block.kind === 'older' && !block.children?.length) {
+          // The older ones counted, none sent: the line says what they are, and nothing opens.
+          zone.createDiv({ cls: 'myu-quiet myu-card-older', text: block.text });
+        } else if (block.kind === 'older') {
+          // The older rows, folded under the line that says what they are (Between you, 2026-10-30).
+          const open = this.olderOpen.has(sectionKey);
+          const fold = zone.createEl('button', { cls: 'myu-aff myu-fold-aff myu-card-older', text: block.text, attr: { 'aria-expanded': String(open) } });
+          fold.onclick = () => {
+            if (open) this.olderOpen.delete(sectionKey);
+            else this.olderOpen.add(sectionKey);
+            this.render();
+          };
+          if (open) for (const child of block.children ?? []) factRow(zone, child);
+        } else if (block.label !== undefined) {
+          factRow(zone, block);
         } else {
           const row = zone.createDiv({ cls: 'myu-row' });
           if (block.meta) row.createSpan({ cls: 'myu-time', text: block.meta });
@@ -333,6 +395,7 @@ export class CardView extends ItemView {
       }
     }
 
+    if (this.entityType === 'person' && this.entityId) this.renderPast(root, this.entityId);
     if (this.entityType === 'person' && this.entityId) void this.renderRelated(root, this.entityId);
 
     if (undrawn > 0) {
@@ -501,6 +564,42 @@ export class CardView extends ItemView {
   }
 
   /** The expanded feed card's related people + memories (feed/related-*). Quiet rows; people open their card. */
+  /** The past 1:1s with this person (`GET /prep/history?relationship_id=`), read once each time the card is shown. */
+  private async loadPast(relationshipId: string): Promise<void> {
+    const res = await this.plugin.backend.getPrepHistory({ relationship_id: relationshipId }, PAST_READ).catch(() => null);
+    if (this.entityId !== relationshipId || !res?.ok) return;
+    this.past = { forId: relationshipId, rows: (res.data?.history ?? []).filter((r) => !!r.event_id), across: res.data?.across?.text?.trim() || null };
+    this.render();
+  }
+
+  /**
+   * Past 1:1s (2026-10-30, BRIEF_WEB_MEETING_POST §3): one row per meeting, its numbers and what wrote its record
+   * ("Thu 29 Oct · 2 of 3 covered · 2 decisions · 7 actions · notes by Gemini"), Open ▸ to that meeting's page; the
+   * first few, then "+ {n} older ▸"; the across-line under them when the server sends one.
+   */
+  private renderPast(root: HTMLElement, relationshipId: string): void {
+    const past = this.past?.forId === relationshipId ? this.past : null;
+    if (!past || !past.rows.length) return;
+    const zone = root.createDiv({ cls: 'myu-zone myu-card-past' });
+    zone.createDiv({ cls: 'myu-whisper', text: MEETING_POST_WORDS.pastOneOnOnes });
+    const shown = this.pastAll ? past.rows : past.rows.slice(0, PAST_SHOWN);
+    for (const r of shown) {
+      const row = zone.createDiv({ cls: 'myu-row myu-card-past-row', attr: { 'data-event': r.event_id } });
+      row.createSpan({ cls: 'myu-row-title', text: pastMeetingWords(r) });
+      const open = row.createEl('button', { cls: 'myu-aff', text: PREP_LIST_WORDS.open });
+      open.onclick = () => void this.plugin.openPrep(r.event_id);
+    }
+    const rest = past.rows.length - shown.length;
+    if (rest > 0) {
+      const more = zone.createEl('button', { cls: 'myu-aff myu-fold-aff', text: MEETING_POST_WORDS.older(rest) });
+      more.onclick = () => {
+        this.pastAll = true;
+        this.render();
+      };
+    }
+    if (past.across) zone.createDiv({ cls: 'myu-quiet myu-card-across', text: past.across });
+  }
+
   private async renderRelated(root: HTMLElement, relationshipId: string): Promise<void> {
     const [people, memories] = await Promise.all([
       this.plugin.backend.getRelatedPersons(relationshipId).catch(() => null),

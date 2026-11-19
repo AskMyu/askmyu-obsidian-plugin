@@ -195,7 +195,8 @@ export function effectSteps(effects: SpaceEffect[] | undefined | null): SpaceMod
   const out: SpaceModeStep[] = [];
   for (const e of effects ?? []) {
     if (e.type === 'open_journal') out.push({ do: 'open_journal', text: typeof e.text === 'string' ? e.text : '' });
-    else if (e.type === 'consent_needed' && e.provider === 'space') out.push({ do: 'unlock_space' });
+    // A space that waits for a member (2026-11-17, `space_waiting`) is not unlocked from here: the readback says the wait.
+    else if (e.type === 'consent_needed' && e.provider === 'space' && (e as { reason?: unknown }).reason !== 'space_waiting') out.push({ do: 'unlock_space' });
     else if (e.type === 'open_onboarding' && (e.step === 'linkedin' || e.step === 'resume')) out.push({ do: 'open_onboarding', step: e.step });
   }
   return out;

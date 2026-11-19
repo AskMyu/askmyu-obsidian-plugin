@@ -9,6 +9,7 @@
 import { ItemView, WorkspaceLeaf, setIcon } from 'obsidian';
 import type AskMyuPlugin from '../main';
 import { renderLinkedInMatches, suggestionsOf } from './linkedinCards';
+import { IDENTITY_WORDS } from '../personIdentities';
 
 export const HELP_VIEW_TYPE = 'askmyu-help';
 
@@ -67,8 +68,13 @@ export class HelpMyuView extends ItemView {
         const why = [item.reason, item.target.subtitle].filter(Boolean).join(' \u00b7 ');
         if (why) row.createDiv({ cls: 'myu-quiet', text: why });
         const actions = row.createDiv({ cls: 'myu-canvas-actions' });
-        const yes = actions.createEl('button', { cls: 'myu-affordance myu-cta', text: 'Merge' });
-        yes.onclick = () => this.plugin.mergePersonInto({ id: item.source.relationship_id, name: item.source.display_name }, { id: item.target.relationship_id, name: item.target.display_name });
+        // "Same person" (2026-11-15): the same door as the picker's, with the server's sentence and Undo; never the old word.
+        const yes = actions.createEl('button', { cls: 'myu-affordance myu-cta', text: IDENTITY_WORDS.samePerson });
+        yes.onclick = async () => {
+          yes.disabled = true;
+          const went = await this.plugin.samePersonFromHelp({ id: item.source.relationship_id, name: item.source.display_name }, { id: item.target.relationship_id, name: item.target.display_name });
+          if (!went) yes.disabled = false;
+        };
         const no = actions.createEl('button', { cls: 'myu-affordance', text: 'Not the same' });
         no.onclick = async () => {
           no.disabled = true;

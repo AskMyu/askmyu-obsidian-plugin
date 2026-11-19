@@ -20,7 +20,9 @@ await esbuild.build({
   // lineAnswers: Myu's questions outside a space answered with a tap (2026-09-25), same rule.
   // menuMarks: the status bar's words for what is new, and the keeper behind them (2026-10-06), same rule.
   // linesSeen: a line reported as seen after a second in view, once (2026-10-06), same rule.
-  entryPoints: ['tests/invariants.test.ts', 'tests/spaceMode.test.ts', 'tests/todayLines.test.ts', 'tests/spaceRetro.test.ts', 'tests/lineAnswers.test.ts', 'tests/menuMarks.test.ts', 'tests/linesSeen.test.ts'],
+  // lastMoments: the last moments of the week (2026-11-13): the full-day and "Add it?" lines, the card's, the prep's and the week's readers, same rule.
+  // identityLines: who someone is (2026-11-15): the question's four answers, "No, someone else", "Not her?", the said-back words, the people found, same rule.
+  entryPoints: ['tests/invariants.test.ts', 'tests/spaceMode.test.ts', 'tests/todayLines.test.ts', 'tests/spaceRetro.test.ts', 'tests/lineAnswers.test.ts', 'tests/menuMarks.test.ts', 'tests/linesSeen.test.ts', 'tests/lastMoments.test.ts', 'tests/identityLines.test.ts'],
   bundle: true,
   loader: { '.css': 'text' },
   platform: 'node',
@@ -67,6 +69,19 @@ await esbuild.build({
     'tests/todayDots.test.ts',
     // Send feedback with files (2026-10-14): which picks are kept, what a send carries, an old server, a 413.
     'tests/feedbackModal.test.ts',
+    // The person's list on Today (2026-10-29): Open ▸ the one link, three items, Later this week, the add under the question.
+    'tests/todayPrepList.test.ts',
+    // The last moments of the week (2026-11-13): "Which day?", the message an answer brings, what has repeated, they may ask about, your side of the work.
+    'tests/lastMomentsPane.test.ts',
+    // Who someone is (2026-11-15): the question's buttons, "Who is it?" (their people as they type, or the name), "Not her?".
+    'tests/identityLinesPane.test.ts',
+    // "Same person" (2026-11-15): its words, the picker, the one yes, the door, the server's sentence with Undo, the Help Myu row.
+    'tests/samePerson.test.ts',
+    // The address to confirm and a held address (2026-11-17): the sentence after sign-up, Settings' confirmed / not confirmed and
+    // "Mail the confirmation again", the one question on the mailed link's 409, the same link once more after an answer.
+    'tests/addressHeld.test.ts',
+    // A key the server refuses as not the account's (2026-11-18): lent once, dropped here, the device waits for approval; Settings' words.
+    'tests/keyRefused.test.ts',
     // Internal-only test files (tests/internal/, absent from the public
     // source) join the run when present, so both flavors gate identically.
     ...internalTests,
@@ -84,7 +99,7 @@ await esbuild.build({
 
 const result = spawnSync(
   process.execPath,
-  ['--test', `${OUT}/invariants.test.cjs`, `${OUT}/spaceMode.test.cjs`, `${OUT}/todayLines.test.cjs`, `${OUT}/spaceRetro.test.cjs`, `${OUT}/lineAnswers.test.cjs`, `${OUT}/menuMarks.test.cjs`, `${OUT}/linesSeen.test.cjs`, `${OUT}/ceremony.test.cjs`, `${OUT}/coldstart.test.cjs`, `${OUT}/spaceModePane.test.cjs`, `${OUT}/lineAnswersPane.test.cjs`, `${OUT}/debriefPane.test.cjs`, `${OUT}/pastedText.test.cjs`, `${OUT}/todayDots.test.cjs`, `${OUT}/feedbackModal.test.cjs`, ...internalTests.map((t) => `${OUT}/${t.replace(/^tests\//, '').replace(/\.ts$/, '.cjs')}`)],
+  ['--test', `${OUT}/invariants.test.cjs`, `${OUT}/spaceMode.test.cjs`, `${OUT}/todayLines.test.cjs`, `${OUT}/spaceRetro.test.cjs`, `${OUT}/lineAnswers.test.cjs`, `${OUT}/menuMarks.test.cjs`, `${OUT}/linesSeen.test.cjs`, `${OUT}/lastMoments.test.cjs`, `${OUT}/identityLines.test.cjs`, `${OUT}/ceremony.test.cjs`, `${OUT}/coldstart.test.cjs`, `${OUT}/spaceModePane.test.cjs`, `${OUT}/lineAnswersPane.test.cjs`, `${OUT}/debriefPane.test.cjs`, `${OUT}/pastedText.test.cjs`, `${OUT}/todayDots.test.cjs`, `${OUT}/feedbackModal.test.cjs`, `${OUT}/todayPrepList.test.cjs`, `${OUT}/lastMomentsPane.test.cjs`, `${OUT}/identityLinesPane.test.cjs`, `${OUT}/samePerson.test.cjs`, `${OUT}/addressHeld.test.cjs`, `${OUT}/keyRefused.test.cjs`, ...internalTests.map((t) => `${OUT}/${t.replace(/^tests\//, '').replace(/\.ts$/, '.cjs')}`)],
   { stdio: 'inherit' },
 );
 process.exit(result.status ?? 1);

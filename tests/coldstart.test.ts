@@ -975,13 +975,14 @@ test('terms — the Today pane: gated shows one screen and nothing else; an upda
   assert.ok(!make('ok').visibleTexts().some((t) => /Before you start|updated the terms/.test(t)), 'nothing when nothing is owed');
 });
 
-test('From Myu — the pane (F0): the title and the brief, Next and Earlier rows with the line under each, talk ▸ on every row and prep ▸ on the next one, Open with you today as checkboxes that mark done in Myu', async () => {
+test('From Myu — the pane (F0): the title and the brief, Next and Earlier rows with the line under each, Open ▸ the one link on a meeting\'s row and talk ▸ on a person\'s, Open with you today as checkboxes that mark done in Myu', async () => {
   const { TodayView } = await import('../src/views/TodayView');
   const { FakeEl } = await import('./ui-stub');
   const view = Object.create(TodayView.prototype) as InstanceType<typeof TodayView> & Record<string, unknown>;
   const now = Date.now();
   const opened: unknown[] = [];
   const preps: string[] = [];
+  const talks: unknown[] = [];
   const events: Array<{ myu_id: string; kind: string }> = [];
   const links: string[] = [];
   const settings = { materialize_folder: 'Myu', myu_checkbox_state: {} as Record<string, boolean>, vault_event_queue: [] as unknown[] };
@@ -998,7 +999,7 @@ test('From Myu — the pane (F0): the title and the brief, Next and Earlier rows
     saveSettings: async () => undefined,
     materializer: { refreshCommitmentSurfaces: async () => undefined },
     openChatAbout: async (type: string, id: string, opts: unknown) => { opened.push([type, id, opts]); },
-    openPrep: async (id: string) => { preps.push(id); },
+    openPrep: async (id: string, talk?: { label: string; occurrenceKey?: string }) => { preps.push(id); talks.push(talk); },
   };
   view['brief'] = { date: '2026-09-12', sections: [{ section: 'today', visible: true, items: [{ text: 'Two things from earlier this week are done.' }] }] };
   view['loadedOnce'] = true;
@@ -1040,19 +1041,21 @@ test('From Myu — the pane (F0): the title and the brief, Next and Earlier rows
   assert.ok(texts.includes('next') && texts.includes('earlier') && texts.includes('for you'), 'the zones');
   assert.ok(root.find((e) => e.classes.has('myu-ttl') && e.text === 'Dan Park'), 'a person’s line is a row of its own');
 
+  // A meeting's row has one link, Open ▸ (2026-10-29): the meeting's page, with its conversation in the chat pane.
   const buttons = root.querySelectorAll('button');
-  assert.equal(buttons.filter((b) => b.text === 'talk about this ▸').length, 4, 'talk about this ▸ on every row: two next, one earlier, one for you');
-  assert.equal(buttons.filter((b) => b.text === 'prepare ▸').length, 1, 'prepare ▸ on the next meeting only');
-  assert.ok(await root.click('prepare ▸'));
-  assert.deepEqual(preps, ['evt_retro']);
+  assert.equal(buttons.filter((b) => b.text === 'Open ▸').length, 3, 'Open ▸ on every meeting row: two next, one earlier');
+  assert.equal(buttons.filter((b) => b.text === 'talk about this ▸').length, 1, 'talk about this ▸ on the person\'s row only');
+  assert.equal(buttons.filter((b) => b.text === 'prepare ▸').length, 0);
   const retroRow = root.querySelectorAll('.myu-mrow').find((r) => !!r.find((e) => e.text === 'Sprint retro'))!;
-  await retroRow.querySelectorAll('button').find((b) => b.text === 'talk about this ▸')!.onclick!();
+  assert.deepEqual(retroRow.querySelectorAll('button').map((b) => b.text), ['Open ▸'], 'nothing else on the row navigates');
+  await retroRow.querySelectorAll('button')[0]!.onclick!();
+  assert.deepEqual(preps, ['evt_retro']);
+  const retroStart = (view['meetings'] as Array<{ event_id: string; startDate: Date }>)[0]!.startDate.getTime();
+  assert.deepEqual(talks, [{ label: 'Sprint retro', occurrenceKey: String(retroStart) }], 'the occurrence\'s own conversation');
+  const danRow = root.querySelectorAll('.myu-mrow').find((r) => !!r.find((e) => e.text === 'Dan Park'))!;
+  await danRow.querySelectorAll('button').find((b) => b.text === 'talk about this ▸')!.onclick!();
   assert.equal(opened.length, 1);
-  const [type, id, opts] = opened[0] as [string, string, { line?: string; phase?: string; label?: string }];
-  assert.equal(type, 'meeting');
-  assert.equal(id, 'evt_retro');
-  assert.equal(opts.line, 'Three things you might want to bring.', 'Myu speaks first with its line on the row');
-  assert.equal(opts.phase, 'before');
+  assert.deepEqual((opened[0] as unknown[]).slice(0, 2), ['person', 'rel_dan']);
 
   assert.ok(texts.includes('open items today'));
   const owner = root.find((e) => e.classes.has('myu-wl') && e.text === 'Dan Park');

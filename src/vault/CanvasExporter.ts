@@ -29,6 +29,8 @@
 import { normalizePath, TFile, type App } from 'obsidian';
 import type { CompositionComponentLite, CompositionSpecLite } from '../wire';
 import { buildCompositionMarkdown, componentMarkdown } from './myuFiles';
+import { chartSourceCaption } from '../chartSource';
+import { boxPlotDomain, chartValue, heatmapGrid, heatmapShade, readChart } from '../chartSpec';
 
 // Obsidian's .canvas JSON (JSONCanvas 1.0 subset).
 type CanvasNode = {
@@ -289,7 +291,9 @@ function toNode(
  * tests. Renders bar / line / area with numeric y-values; anything else
  * (pie, vega-lite, malformed rows) returns null and the caller keeps the
  * honest open-live link. Labeled a snapshot with its date IN the image, so a
- * canvas found in six months can't be mistaken for live data.
+ * canvas found in six months can't be mistaken for live data. Where the
+ * numbers came from (`source`, the chart's `data_source`, 2026-10-28) goes
+ * under it, up to two lines, so an estimate never reads as a measurement.
  */
 export interface RechartsConfigLite {
   type?: string;
@@ -303,7 +307,10 @@ export function chartToSvg(
   title: string,
   config: RechartsConfigLite | undefined,
   snapshotDate: string,
+  source?: unknown,
 ): string | null {
+  // A heatmap and a box plot (2026-10-28) carry cells and groups, not rows.
+  if (config && (config.type === 'heatmap' || config.type === 'box_plot')) return shapedChartSvg(title, config, snapshotDate, source);
   if (!config || !Array.isArray(config.data) || config.data.length === 0) return null;
   const kind = config.type;
   if (kind !== 'bar' && kind !== 'line' && kind !== 'area') return null;
@@ -314,6 +321,7 @@ export function chartToSvg(
 
   const W = 360;
   const H = 220;
+  const sourceLines = svgSourceLines(chartSourceCaption(source));
   const PAD = { top: 34, right: 12, bottom: 26, left: 12 };
   const plotW = W - PAD.left - PAD.right;
   const plotH = H - PAD.top - PAD.bottom;
@@ -321,12 +329,11 @@ export function chartToSvg(
   const min = Math.min(...values, 0);
   const span = max - min || 1;
   const yFor = (v: number) => PAD.top + plotH - ((v - min) / span) * plotH;
-  const color = typeof config.color === 'string' && /^#[0-9a-fA-F]{3,8}$/.test(config.color)
-    ? config.color
-    : 'var(--color-accent, #b8860b)';
+  // A chart's own colour is never sent now (CHART_CONTRACT_20261028) and a stored one is ignored: Obsidian's accent.
+  const color = 'var(--color-accent, #b8860b)';
 
   const parts: string[] = [
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" font-family="sans-serif">`,
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H + sourceLines.length * 13}" font-family="sans-serif">`,
     `<text x="${PAD.left}" y="18" font-size="13" fill="currentColor">${escapeXml(title)}</text>`,
     `<text x="${W - PAD.right}" y="18" font-size="9" fill="currentColor" opacity="0.55" text-anchor="end">snapshot · ${escapeXml(snapshotDate)}</text>`,
     `<line x1="${PAD.left}" y1="${yFor(Math.max(min, 0))}" x2="${W - PAD.right}" y2="${yFor(Math.max(min, 0))}" stroke="currentColor" opacity="0.25"/>`,
@@ -361,8 +368,103 @@ export function chartToSvg(
     parts.push(`<text x="${W - PAD.right}" y="${H - 8}" font-size="9" fill="currentColor" opacity="0.6" text-anchor="end">${escapeXml(lastLabel)}</text>`);
   }
 
+  sourceLines.forEach((line, i) => {
+    parts.push(`<text x="${PAD.left}" y="${H + 8 + i * 13}" font-size="9" font-style="italic" fill="currentColor" opacity="0.55">${escapeXml(line)}</text>`);
+  });
+
   parts.push('</svg>');
   return parts.join('\n');
+}
+
+/**
+ * A heatmap (a grid of squares shaded by value; an empty square where there is no value) or a box plot (per group, a
+ * box from the lower to the upper quarter, the middle marked, whiskers to the lowest and highest, far-out values as
+ * dots), as a static snapshot: the same frame as the bar, line and area pictures. Null when the chart does not read.
+ */
+function shapedChartSvg(title: string, raw: unknown, snapshotDate: string, source: unknown): string | null {
+  const desc = readChart(raw);
+  if (!desc) return null;
+  const W = 360;
+  const top = 34;
+  const accent = 'var(--color-accent, #b8860b)';
+  const cool = 'var(--color-blue, #4a7bd0)';
+  const sourceLines = svgSourceLines(chartSourceCaption(source));
+  const body: string[] = [];
+  let H: number;
+  if (desc.type === 'heatmap') {
+    const g = heatmapGrid(desc);
+    const labelW = Math.min(90, 8 + Math.max(4, ...g.rows.map((r) => r.length)) * 5.5);
+    const pitch = Math.max(6, Math.min(22, Math.floor((W - labelW - 12) / Math.max(1, g.columns.length))));
+    const cell = pitch - 2;
+    g.rows.forEach((r, i) => {
+      const y = top + i * pitch;
+      body.push(`<text x="${(labelW - 4).toFixed(1)}" y="${(y + cell / 2 + 3).toFixed(1)}" font-size="9" fill="currentColor" opacity="0.7" text-anchor="end">${escapeXml(r)}</text>`);
+      g.columns.forEach((c, j) => {
+        const x = labelW + j * pitch;
+        const v = g.value(r, c);
+        if (v === undefined || v === null) {
+          body.push(`<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${cell}" height="${cell}" rx="2" fill="none" stroke="currentColor" opacity="0.2"/>`);
+          return;
+        }
+        const sh = heatmapShade(v, g.min, g.max, !!desc.diverging);
+        body.push(`<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${cell}" height="${cell}" rx="2" fill="${sh.side === 'low' ? cool : accent}" fill-opacity="${(0.08 + 0.87 * sh.strength).toFixed(2)}"/>`);
+      });
+    });
+    const below = top + g.rows.length * pitch + 10;
+    if (g.columns.length) {
+      body.push(`<text x="${labelW}" y="${below}" font-size="9" fill="currentColor" opacity="0.6">${escapeXml(g.columns[0])}</text>`);
+      if (g.columns.length > 1) body.push(`<text x="${(labelW + (g.columns.length - 1) * pitch + cell).toFixed(1)}" y="${below}" font-size="9" fill="currentColor" opacity="0.6" text-anchor="end">${escapeXml(g.columns[g.columns.length - 1])}</text>`);
+    }
+    H = below + 8;
+  } else {
+    const groups = desc.groups ?? [];
+    const [lo, hi] = boxPlotDomain(groups);
+    const span = hi - lo || 1;
+    const plotH = 140;
+    const left = 30;
+    const colW = Math.min(64, (W - left - 12) / Math.max(1, groups.length));
+    const yOf = (v: number) => top + (1 - (v - lo) / span) * plotH;
+    for (const t of [lo, hi]) body.push(`<text x="${left - 4}" y="${(yOf(t) + 3).toFixed(1)}" font-size="9" fill="currentColor" opacity="0.6" text-anchor="end">${escapeXml(chartValue(t))}</text>`);
+    groups.forEach((g, i) => {
+      const cx = left + i * colW + colW / 2;
+      body.push(
+        `<line x1="${cx.toFixed(1)}" x2="${cx.toFixed(1)}" y1="${yOf(g.max).toFixed(1)}" y2="${yOf(g.min).toFixed(1)}" stroke="${accent}"/>`,
+        `<rect x="${(cx - 12).toFixed(1)}" y="${yOf(g.q3).toFixed(1)}" width="24" height="${Math.max(1, yOf(g.q1) - yOf(g.q3)).toFixed(1)}" fill="${accent}" fill-opacity="0.2" stroke="${accent}"/>`,
+        `<line x1="${(cx - 12).toFixed(1)}" x2="${(cx + 12).toFixed(1)}" y1="${yOf(g.median).toFixed(1)}" y2="${yOf(g.median).toFixed(1)}" stroke="currentColor" stroke-width="2"/>`,
+        ...(g.outliers ?? []).map((o) => `<circle cx="${cx.toFixed(1)}" cy="${yOf(o).toFixed(1)}" r="2.5" fill="none" stroke="${accent}"/>`),
+        `<text x="${cx.toFixed(1)}" y="${top + plotH + 14}" font-size="9" fill="currentColor" opacity="0.7" text-anchor="middle">${escapeXml(g.label.length > 10 ? `${g.label.slice(0, 9)}…` : g.label)}</text>`,
+      );
+    });
+    H = top + plotH + 22;
+  }
+  const parts = [
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H + sourceLines.length * 13}" font-family="sans-serif">`,
+    `<text x="12" y="18" font-size="13" fill="currentColor">${escapeXml(title)}</text>`,
+    `<text x="${W - 12}" y="18" font-size="9" fill="currentColor" opacity="0.55" text-anchor="end">snapshot · ${escapeXml(snapshotDate)}</text>`,
+    ...body,
+    ...sourceLines.map((line, i) => `<text x="12" y="${H + 8 + i * 13}" font-size="9" font-style="italic" fill="currentColor" opacity="0.55">${escapeXml(line)}</text>`),
+    '</svg>',
+  ];
+  return parts.join('\n');
+}
+
+/** The source sentence in lines that fit the 360px picture (about 64 characters each), two at most. */
+function svgSourceLines(caption: string | null): string[] {
+  if (!caption) return [];
+  const lines: string[] = [];
+  let line = '';
+  for (const word of caption.split(' ')) {
+    if (line && (line + ' ' + word).length > 64) {
+      lines.push(line);
+      line = word;
+    } else {
+      line = line ? `${line} ${word}` : word;
+    }
+  }
+  if (line) lines.push(line);
+  if (lines.length <= 2) return lines;
+  const second = lines.slice(1).join(' ');
+  return [lines[0], second.length > 64 ? `${second.slice(0, 63).trimEnd()}…` : second];
 }
 
 function escapeXml(text: string): string {
@@ -470,7 +572,7 @@ export class CanvasExporter {
         const data = component.data ?? {};
         const title =
           (typeof data.title === 'string' && data.title) || component.label || 'Chart';
-        const svg = chartToSvg(title, data.recharts_config as RechartsConfigLite | undefined, date);
+        const svg = chartToSvg(title, data.recharts_config as RechartsConfigLite | undefined, date, data.data_source);
         if (!svg) continue;
         const assetsFolder = `${folder}/assets`;
         if (!this.app.vault.getAbstractFileByPath(assetsFolder)) {

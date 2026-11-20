@@ -348,6 +348,59 @@ export interface PressResult {
   conversation?: LineConversation;
   /** The answer moved things and can be put back (2026-11-15): its sentence and its move, for Undo beside it. */
   undo?: { said: string; moveId: string };
+  /**
+   * The server refused the press but said why and kept the line (19c: a yes with no `route_seen`, or a route that changed; 18b's stale
+   * button): its sentence is the note, nothing settled, and the pane reads again so the line draws as it now stands.
+   */
+  readAgain?: boolean;
+  /** Its send is already going (19c2): the sentence stays under the line, and the pane reads again once after this many ms. */
+  readAgainAfterMs?: number;
+}
+
+/** "A moment" (19c2): how long after "This is being sent. Give it a moment." the line is read again, once. Mirror of shared's. */
+export const SEND_SETTLE_MS = 3000;
+
+/** The server's word for a press on a send line whose send is already going (19c2). Mirror of shared's. */
+export const SEND_IN_FLIGHT = 'in_flight';
+
+/**
+ * A press on a send line while its send is already going (19c2): nothing new happened, and nothing is said as sent. The server's
+ * `status: "in_flight"`; else (before that field) a success that keeps the line open with a sentence. Mirror of shared `inFlightOf`.
+ */
+export function inFlightOf(res: unknown): { said: string } | null {
+  if (!isAnswerBody(res) || res.closed === true) return null;
+  const rb = res.readback;
+  const said = (typeof rb === 'string' ? rb : rb && typeof rb === 'object' && 'text' in rb && typeof rb.text === 'string' ? rb.text : '').trim();
+  if (res.status === SEND_IN_FLIGHT) return { said };
+  return res.success !== false && res.line_open === true && said ? { said } : null;
+}
+
+/** An answer's body, read field by field (no assertion: the mirror's looser wire types and the monorepo's read it the same). */
+interface AnswerBody { success?: unknown; closed?: unknown; line_open?: unknown; status?: unknown; readback?: unknown }
+const isAnswerBody = (x: unknown): x is AnswerBody => !!x && typeof x === 'object';
+
+/** A send line's `route_seen` as it was drawn (19c), exactly as served. Mirror of shared `routeSeenOf`. */
+export function routeSeenOf(line: unknown): string | null {
+  const r = line && typeof line === 'object' ? (line as { route_seen?: unknown }).route_seen : null;
+  return typeof r === 'string' && r !== '' ? r : null;
+}
+
+/** An answer on `line` with its `route_seen` echoed (19c); unchanged for a line that carries none. Mirror of shared `withRouteSeen`. */
+export function withRouteSeen<A extends object>(line: unknown, answer: A): A & { route_seen?: string } {
+  const r = routeSeenOf(line);
+  return r === null ? answer : { ...answer, route_seen: r };
+}
+
+/**
+ * A refusal that says why and keeps the line (a 4xx with a readback and `line_open: true`, whatever its code; 19c's `route_seen_required`
+ * and `route_changed` are 409s): the answer, not an error. A line closed under the press and a missing key keep their own ways. Mirror of
+ * the web's `isChoiceGone`.
+ */
+export function refusedKeepingLine(res: { status?: number; ok?: boolean; error?: string | null; data?: unknown } | null | undefined): boolean {
+  if (!res || res.ok || !res.status || res.status < 400 || res.status >= 500) return false;
+  if (lineClosed(res) || res.error === 'key_needed' || res.error === 'no_working_copy') return false;
+  const d = res.data as { line_open?: unknown; readback?: { text?: unknown } | null } | null | undefined;
+  return d?.line_open === true && typeof d.readback?.text === 'string' && !!d.readback.text.trim();
 }
 
 /** A press on a line the server had already closed (409 `line_closed`). Mirror of shared `isLineClosed`. */
@@ -369,10 +422,15 @@ export async function pressLineButton(
   // opens "Which day?" or "Who is it?" in its place).
   if (button.opens === 'day' && !button.answer.day) return { ui: {}, settled: false, open: [] };
   if (button.opens === 'who' && !button.answer.relationship_id && !button.answer.text?.trim()) return { ui: {}, settled: false, open: [] };
-  const res = await deps.answer(line.line_id, button.answer).catch(() => null);
+  // 19c: every answer on a send line echoes the way it goes, as this line was drawn.
+  const res = await deps.answer(line.line_id, withRouteSeen(line, button.answer)).catch(() => null);
   // Closed under the press (2026-09-25): no note, no readback; the pane reads the list again. A question about who someone is
   // (2026-11-15) says "Already answered." in place of its buttons, so the person is not left with buttons that answer nothing.
   if (lineClosed(res)) return { ui: identityLine(line) ? { closed: IDENTITY_WORDS.alreadyAnswered } : {}, settled: false, closed: true, open: [] };
+  if (refusedKeepingLine(res)) return { ui: { note: readbackText(res?.data) }, settled: false, open: [], readAgain: true };
+  // Already going (19c2): nothing new happened, nothing is said as sent; the sentence under the line, read again after a moment.
+  const flight = routeSeenOf(line) && res?.ok ? inFlightOf(res.data) : null;
+  if (flight) return { ui: { note: flight.said || readbackText(res?.data) }, settled: false, open: [], readAgainAfterMs: SEND_SETTLE_MS };
   if (!res?.ok || !res.data) {
     return { ui: { note: res?.error === 'offline' ? LINE_ANSWER_WORDS.offline : LINE_ANSWER_WORDS.failed }, settled: false, open: [] };
   }
@@ -383,8 +441,8 @@ export async function pressLineButton(
   // A message the answer wrote: one an effect carries (R19's draft_ready, "Send it yourself"), else the answer's own (2026-11-13: after
   // Move it, the short message to the other person; after Add it, the addition), under the line that says who or where it is for.
   const own = answerDraftOf(res.data, line);
+  // The answer's own message first (its `must_see`, "Copy it"'s copy at open); an effect's only when it brings none: one message.
   const draft =
-    actions.find((a): a is Extract<LineEffectAction, { kind: 'draft' }> => a.kind === 'draft')?.draft ??
     (own
       ? {
           text: own.text,
@@ -394,7 +452,7 @@ export async function pressLineButton(
           ...(own.mustSee.length ? { must_see: own.mustSee } : {}),
           ...('choice_id' in button.answer && button.answer.choice_id === 'copy' && OWN_ANSWERS_KINDS.includes(line.kind ?? '') ? { copyAtOpen: true } : {}),
         }
-      : undefined);
+      : undefined) ?? actions.find((a): a is Extract<LineEffectAction, { kind: 'draft' }> => a.kind === 'draft')?.draft;
   const conversation = actions.find((a): a is Extract<LineEffectAction, { kind: 'conversation' }> => a.kind === 'conversation')?.conversation;
   const also = conversation ? { conversation } : {};
   // What the answer did, in the server's words (2026-11-15: "Done. 1 thing moved to Tess Colleague." beside the readback's "Okay.").

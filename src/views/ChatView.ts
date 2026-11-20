@@ -379,7 +379,8 @@ export class ChatView extends ItemView {
     if (out.undo) this.plugin.offerUndo(out.undo.said, out.undo.moveId);
     this.openingUi = out.ui;
     this.render();
-    if (out.settled) this.plugin.requestTodayRefresh();
+    if (out.settled || out.readAgain) this.plugin.requestTodayRefresh();
+    if (out.readAgainAfterMs) window.setTimeout(() => this.plugin.requestTodayRefresh(), out.readAgainAfterMs);
   }
 
   /** A blank thread: this conversation is finished, the next one starts clean. */

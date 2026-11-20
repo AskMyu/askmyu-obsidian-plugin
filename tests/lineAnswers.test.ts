@@ -43,7 +43,7 @@ test('buttons, kind by kind, as the web draws them', () => {
   // R21: a task offer is "take" and "not me" again, with the two quiet ways out after them.
   assert.deepEqual(
     ids(line({ choices: [{ id: 'take', label: "Yes, I'll do it" }, { id: 'not_me', label: 'Not me' }] })),
-    ['take', 'not_me', 'later(quiet)', 'dismiss(quiet)'],
+    ['take', 'not_me', 'later(quiet)'],
   );
   // A choice line with nothing to choose is answered by writing: no buttons at all.
   assert.deepEqual(ids(line({ choices: [] })), []);
@@ -291,4 +291,10 @@ test('a send line: its two choices only, no "Not now" / "Don\'t ask again" (2026
   const send = line({ kind: 'send', ask_kind: 'yes_no', choices: [{ id: 'yes', label: 'Send it' }, { id: 'no', label: 'Don’t send' }] });
   assert.ok(!ids(send).some((id) => /later|dismiss/.test(id)), ids(send).join(' '));
   assert.ok(ids(line({})).some((id) => /later/.test(id)) && ids(line({})).some((id) => /dismiss/.test(id)), ids(line({})).join(' '));
+});
+
+test('"‹person› answered what you asked" (build 19): a tell with its own choice, drawn and answered by its id, no way out added', () => {
+  const answered = line({ line_id: 'AW1', kind: 'ask_answered', ask_kind: 'tell', persons_own: true, needs_you: false, text: 'Priya answered what you asked: “Friday works.”', choices: [{ id: 'not_an_answer', label: 'Not an answer, keep waiting' }] } as Partial<MyuLineLite>);
+  const b = lineButtons(answered);
+  assert.deepEqual(b.map((x) => [x.label, x.answer]), [['Not an answer, keep waiting', { choice_id: 'not_an_answer' }]]);
 });

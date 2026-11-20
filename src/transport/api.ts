@@ -1177,6 +1177,8 @@ export interface MyuLineLite {
   why?: { fired_because?: string; evidence?: Array<{ kind?: string; ref?: string; count?: number }>; loop?: string } | null;
   /** 2026-11-15: the way someone was met, on the question about who they are and the assumed tie, when the server serves it. */
   identity?: LineIdentity | null;
+  /** 19c: the way a send line goes, as served; every answer on it echoes it exactly (`withRouteSeen`). Opaque. */
+  route_seen?: string | null;
 }
 export interface MyuLinesResult {
   success?: boolean;

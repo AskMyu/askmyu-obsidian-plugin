@@ -73,14 +73,19 @@ const heading = (row: string): boolean => row.trim().endsWith(':');
 const bullet = (row: string): boolean => /^[•·\-*]\s/.test(row.trim());
 /** An item's row at its usual one-line length, when the short form would otherwise run past the limit. */
 const ONE_LINE_CHARS = LINE_SHORT_CHARS / 2;
-/** At most this many rows of the first item under a heading. */
-const ITEM_ROWS_MAX = 3;
+/**
+ * At most this many rows of the first item under a heading: a bulleted item runs to the next bullet, at most three rows; an unbulleted
+ * one is at most two (2026-11-19: a check's finding is two rows, "It says…" and "You decided…", with the next finding right under it).
+ */
+const ITEM_ROWS_BULLETED = 3;
+const ITEM_ROWS_PLAIN = 2;
 
 /**
  * The first two lines of words, at most about 240 characters, cut at a word with "…". Never ending on a heading (2026-11-19, the
  * operator's screen: "That affects something you promised: read all" hid the thing itself), and never whole because of one (the same
  * evening: a document's check line, twelve rows, showed whole): a short form that would end on a heading runs on, past the headings
- * under it, to the end of the first item (the rows up to the next blank line, heading or bullet; at most three). Past the limit, each of
+ * under it, to the end of the first item (the rows up to the next blank line, heading or bullet; at most three for a bulleted item, two
+ * for an unbulleted one). Past the limit, each of
  * the item's rows is cut at one line's length. A line of headings only: as many rows as the limit holds.
  */
 function cutOf(whole: string): string {
@@ -109,8 +114,9 @@ function cutOf(whole: string): string {
     }
     return cutAt(kept.join('\n').trimEnd(), LINE_SHORT_CHARS);
   }
+  const rowsMax = bullet(rows[first]) ? ITEM_ROWS_BULLETED : ITEM_ROWS_PLAIN;
   let last = first + 1;
-  while (last < rows.length && last - first < ITEM_ROWS_MAX && rows[last].trim() && !heading(rows[last]) && !bullet(rows[last])) last += 1;
+  while (last < rows.length && last - first < rowsMax && rows[last].trim() && !heading(rows[last]) && !bullet(rows[last])) last += 1;
   const taken = rows.slice(0, last);
   const joined = taken.join('\n').trimEnd();
   if (joined.length <= LINE_SHORT_CHARS) return joined;

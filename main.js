@@ -8829,7 +8829,7 @@ function vennOverlapLabel(own, setNames, setCount) {
 }
 
 // src/buildStamp.ts
-var BUILD_STAMP = true ? "0.1.5" : "dev";
+var BUILD_STAMP = true ? "0.1.6" : "dev";
 
 // src/calendarMyu.ts
 function isMyuCalendarEntry(e) {
@@ -11819,21 +11819,49 @@ var WAY_OUT_IDS = [
   "not_on_linkedin",
   "reject",
   "none",
-  "dismiss"
+  "dismiss",
+  // Build 19's list (2026-11-19, the backend's `lines/ChoiceRoles`).
+  "neither",
+  "not_sure",
+  "not_done",
+  // 19b (the server's settings, every choice list): Decline, That wasn't a promise, Not me, and the rest of its way-out ids.
+  "decline",
+  "not_a_promise",
+  "not_me",
+  "not_interview",
+  "not_this",
+  "not_this_meeting",
+  "nothing",
+  "nothing_new",
+  "noneed",
+  "private",
+  "not_finished"
 ];
-var LATER_IDS = ["not_now", "later", "hold_time", "renegotiate"];
+var LATER_IDS = ["not_now", "later", "hold_time", "not_yet", "notnow", "decide_later", "wait"];
+var ROLE_BY_KIND = {
+  // "Keep it for next time" on a retro's fourth task (19b) closes the ask too.
+  keep: { check_promise: "way_out", full_day: "way_out", space_still_waiting: "later", todo_ask: "way_out", prep_suggestion: "way_out", prep_question_form: "act" },
+  // "Not yet" on a push that is ready (19b): sets it aside.
+  hold: { push_ready: "later" },
+  // A goal's date passed: "Not yet" closes the ask (19b), where elsewhere it sets it aside.
+  not_yet: { goal_date: "way_out" },
+  // The room's "Not done" answers the claim (19b): it does the thing.
+  not_done: { room_done: "act" }
+};
 var OWN_ANSWERS_KINDS = ["send", "send_many", "send_batch"];
-function choiceRole(choice) {
+function choiceRole(choice, kind) {
   const role = choice?.role;
   if (role === "act" || role === "way_out" || role === "later") return role;
   const id = choice?.id ?? "";
+  const byKind = kind ? ROLE_BY_KIND[id]?.[kind] : void 0;
+  if (byKind) return byKind;
   if (WAY_OUT_IDS.includes(id)) return "way_out";
   if (LATER_IDS.includes(id)) return "later";
   return "act";
 }
 function waysOutOf(line2) {
   if (line2.kind && OWN_ANSWERS_KINDS.includes(line2.kind)) return { later: false, never: false };
-  const roles = (line2.choices ?? []).map((c) => choiceRole(c));
+  const roles = (line2.choices ?? []).map((c) => choiceRole(c, line2.kind));
   return { later: !roles.includes("later"), never: !roles.includes("way_out") };
 }
 
@@ -12058,14 +12086,41 @@ function lineEffectActions(effects, apiBase) {
   }
   return out;
 }
+var SEND_SETTLE_MS = 3e3;
+var SEND_IN_FLIGHT = "in_flight";
+function inFlightOf(res) {
+  if (!isAnswerBody(res) || res.closed === true) return null;
+  const rb = res.readback;
+  const said = (typeof rb === "string" ? rb : rb && typeof rb === "object" && "text" in rb && typeof rb.text === "string" ? rb.text : "").trim();
+  if (res.status === SEND_IN_FLIGHT) return { said };
+  return res.success !== false && res.line_open === true && said ? { said } : null;
+}
+var isAnswerBody = (x) => !!x && typeof x === "object";
+function routeSeenOf(line2) {
+  const r = line2 && typeof line2 === "object" ? line2.route_seen : null;
+  return typeof r === "string" && r !== "" ? r : null;
+}
+function withRouteSeen(line2, answer) {
+  const r = routeSeenOf(line2);
+  return r === null ? answer : { ...answer, route_seen: r };
+}
+function refusedKeepingLine(res) {
+  if (!res || res.ok || !res.status || res.status < 400 || res.status >= 500) return false;
+  if (lineClosed(res) || res.error === "key_needed" || res.error === "no_working_copy") return false;
+  const d = res.data;
+  return d?.line_open === true && typeof d.readback?.text === "string" && !!d.readback.text.trim();
+}
 function lineClosed(res) {
   return res?.status === 409 && res.error === "line_closed";
 }
 async function pressLineButton(deps, line2, button) {
   if (button.opens === "day" && !button.answer.day) return { ui: {}, settled: false, open: [] };
   if (button.opens === "who" && !button.answer.relationship_id && !button.answer.text?.trim()) return { ui: {}, settled: false, open: [] };
-  const res = await deps.answer(line2.line_id, button.answer).catch(() => null);
+  const res = await deps.answer(line2.line_id, withRouteSeen(line2, button.answer)).catch(() => null);
   if (lineClosed(res)) return { ui: identityLine(line2) ? { closed: IDENTITY_WORDS.alreadyAnswered } : {}, settled: false, closed: true, open: [] };
+  if (refusedKeepingLine(res)) return { ui: { note: readbackText(res?.data) }, settled: false, open: [], readAgain: true };
+  const flight = routeSeenOf(line2) && res?.ok ? inFlightOf(res.data) : null;
+  if (flight) return { ui: { note: flight.said || readbackText(res?.data) }, settled: false, open: [], readAgainAfterMs: SEND_SETTLE_MS };
   if (!res?.ok || !res.data) {
     return { ui: { note: res?.error === "offline" ? LINE_ANSWER_WORDS.offline : LINE_ANSWER_WORDS.failed }, settled: false, open: [] };
   }
@@ -12074,14 +12129,14 @@ async function pressLineButton(deps, line2, button) {
   const notes = actions.flatMap((a) => a.kind === "note" ? [a.text] : []);
   const links = actions.flatMap((a) => a.kind === "link" ? [a.link] : []);
   const own = answerDraftOf(res.data, line2);
-  const draft = actions.find((a) => a.kind === "draft")?.draft ?? (own ? {
+  const draft = (own ? {
     text: own.text,
     label: LINE_ANSWER_WORDS.draftLink,
     ...own.lead ? { lead: own.lead } : {},
     ...own.toName ? { to_name: own.toName } : {},
     ...own.mustSee.length ? { must_see: own.mustSee } : {},
     ..."choice_id" in button.answer && button.answer.choice_id === "copy" && OWN_ANSWERS_KINDS.includes(line2.kind ?? "") ? { copyAtOpen: true } : {}
-  } : void 0);
+  } : void 0) ?? actions.find((a) => a.kind === "draft")?.draft;
   const conversation = actions.find((a) => a.kind === "conversation")?.conversation;
   const also = conversation ? { conversation } : {};
   const effects = (res.data.effects ?? []).map((e) => ({ type: e.type, text: typeof e.text === "string" ? e.text : void 0, move_id: typeof e.move_id === "string" ? e.move_id : void 0 }));
@@ -12757,11 +12812,24 @@ var SpaceConversation = class {
     this.answering = true;
     this.note = null;
     this.deps.onChange();
-    const res = await this.deps.backend.answerMyuLine(ask.line_id, body).catch(() => null);
+    const res = await this.deps.backend.answerMyuLine(ask.line_id, withRouteSeen(ask.line, body)).catch(() => null);
     this.answering = false;
     if (lineClosed(res)) {
       await this.read();
       this.deps.onChange();
+      return;
+    }
+    if (refusedKeepingLine(res)) {
+      this.note = readbackText(res?.data);
+      await this.read();
+      this.deps.onChange();
+      return;
+    }
+    const flight = routeSeenOf(ask.line) && res?.ok ? inFlightOf(res.data) : null;
+    if (flight) {
+      this.note = flight.said || readbackText(res?.data);
+      this.deps.onChange();
+      window.setTimeout(() => void this.read().then(() => this.deps.onChange()), SEND_SETTLE_MS);
       return;
     }
     if (!res?.ok || !res.data) {
@@ -13532,7 +13600,8 @@ function cutAt(text2, max) {
 var heading = (row) => row.trim().endsWith(":");
 var bullet = (row) => /^[•·\-*]\s/.test(row.trim());
 var ONE_LINE_CHARS = LINE_SHORT_CHARS / 2;
-var ITEM_ROWS_MAX = 3;
+var ITEM_ROWS_BULLETED = 3;
+var ITEM_ROWS_PLAIN = 2;
 function cutOf(whole2) {
   const rows = whole2.split("\n");
   let seen = 0;
@@ -13557,8 +13626,9 @@ function cutOf(whole2) {
     }
     return cutAt(kept.join("\n").trimEnd(), LINE_SHORT_CHARS);
   }
+  const rowsMax = bullet(rows[first]) ? ITEM_ROWS_BULLETED : ITEM_ROWS_PLAIN;
   let last = first + 1;
-  while (last < rows.length && last - first < ITEM_ROWS_MAX && rows[last].trim() && !heading(rows[last]) && !bullet(rows[last])) last += 1;
+  while (last < rows.length && last - first < rowsMax && rows[last].trim() && !heading(rows[last]) && !bullet(rows[last])) last += 1;
   const taken = rows.slice(0, last);
   const joined = taken.join("\n").trimEnd();
   if (joined.length <= LINE_SHORT_CHARS) return joined;
@@ -13828,12 +13898,28 @@ function renderLineAsk(host, line2, ui, on, opts = {}) {
   renderAfter(host, ui);
 }
 
+// src/dueDay.ts
+var DAY = /^(\d{4})-(\d{2})-(\d{2})$/;
+function plainDay(raw) {
+  const s2 = typeof raw === "string" ? raw.trim() : "";
+  return DAY.test(s2) ? s2 : null;
+}
+function dayNoonMs(day) {
+  const m = DAY.exec((day ?? "").trim());
+  return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 12).getTime() : NaN;
+}
+var DAY_FIELDS = { deadline: "due_day", nextCheck: "next_check_day" };
+function sentDay(obj3, dayField) {
+  return obj3 && typeof obj3 === "object" ? plainDay(obj3[dayField]) : null;
+}
+
 // src/commitmentsFold.ts
 var COMMITMENTS_FOLD_WORDS = {
   title: "What you owe",
   youOwe: "you owe",
   owedToYou: "owed to you",
   nextCheck: (day) => `next check ${day}`,
+  checkWas: (day) => `the check was ${day}`,
   locked: "Unlock to read it",
   someone: "someone",
   more: (n) => `${n} more`
@@ -13856,11 +13942,17 @@ var whenOf = (c) => {
   const t = Date.parse(c.next_check ?? c.due ?? "");
   return Number.isFinite(t) ? t : Number.POSITIVE_INFINITY;
 };
+var startOfDay2 = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+var WEEKDAY_LONG = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+var MONTH_LONG = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+var longDayWords = (d, now) => `${WEEKDAY_LONG[d.getDay()]} ${d.getDate()} ${MONTH_LONG[d.getMonth()]}${d.getFullYear() === now.getFullYear() ? "" : ` ${d.getFullYear()}`}`;
 function commitmentRow(c, now = /* @__PURE__ */ new Date()) {
   const what = isLockedText(c.what) ? COMMITMENTS_FOLD_WORDS.locked : (c.what ?? "").trim();
   const name = c.counterparty?.name?.trim() || c.space?.name?.trim() || COMMITMENTS_FOLD_WORDS.someone;
-  const day = c.next_check ? dayWords2(c.next_check, now) : "";
-  const check = day ? COMMITMENTS_FOLD_WORDS.nextCheck(day) : null;
+  const checkDay = sentDay(c, DAY_FIELDS.nextCheck) ?? (c.next_check ? null : sentDay(c, DAY_FIELDS.deadline));
+  const instant = c.next_check ?? c.due ?? null;
+  const at = checkDay ? new Date(dayNoonMs(checkDay)) : instant ? new Date(instant) : null;
+  const check = !at || Number.isNaN(at.getTime()) ? null : startOfDay2(at) < startOfDay2(now) ? COMMITMENTS_FOLD_WORDS.checkWas(longDayWords(at, now)) : COMMITMENTS_FOLD_WORDS.nextCheck(dayWords2(at, now));
   const status = c.status && c.status !== "open" ? String(c.status) : null;
   const relId = c.counterparty?.relationship_id ?? (c.counterparty?.type === "person" ? c.counterparty.id : void 0);
   const spaceId = c.counterparty?.type === "space" ? c.counterparty.id : c.space?.space_id;
@@ -15135,7 +15227,8 @@ var TodayView = class extends import_obsidian16.ItemView {
     ui.set(id, out.ui);
     if (out.settled) answered.add(id);
     this.render();
-    if (out.settled) await this.refresh();
+    if (out.settled || out.readAgain) await this.refresh();
+    if (out.readAgainAfterMs) window.setTimeout(() => void this.refresh(), out.readAgainAfterMs);
   }
   /** "6 people" — a count, never who. */
   who(m) {
@@ -24635,7 +24728,8 @@ var ChatView = class extends import_obsidian37.ItemView {
     if (out.undo) this.plugin.offerUndo(out.undo.said, out.undo.moveId);
     this.openingUi = out.ui;
     this.render();
-    if (out.settled) this.plugin.requestTodayRefresh();
+    if (out.settled || out.readAgain) this.plugin.requestTodayRefresh();
+    if (out.readAgainAfterMs) window.setTimeout(() => this.plugin.requestTodayRefresh(), out.readAgainAfterMs);
   }
   /** A blank thread: this conversation is finished, the next one starts clean. */
   startNew() {

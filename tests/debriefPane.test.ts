@@ -254,7 +254,7 @@ test('Today: a drafted interview debrief is a row of its own: the line, its thre
   const words = rows[0].querySelector('.myu-line');
   assert.equal(words?.text, DRAFT.text);
   assert.equal(words?.attrs['data-line-id'], 'D1', 'the words carry the line\'s id: seen is reported from here');
-  assert.deepEqual(rows[0].querySelectorAll('button').map((b) => b.text), ['Send invites', 'Not an interview', 'Not this one', 'Not now', "Don't ask again"], 'no "talk about this": the line is the draft');
+  assert.deepEqual(rows[0].querySelectorAll('button').map((b) => b.text), ['Send invites', 'Not an interview', 'Not this one', 'Not now'], 'no "talk about this": the line is the draft');
 
   assert.ok(await root.click('Not this one'));
   await settle();

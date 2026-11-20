@@ -1129,7 +1129,10 @@ export class TodayView extends ItemView {
     ui.set(id, out.ui);
     if (out.settled) answered.add(id);
     this.render();
-    if (out.settled) await this.refresh();
+    // Refused but kept (19c): the sentence stays under the line, and the list is read so the line draws as it now stands.
+    if (out.settled || out.readAgain) await this.refresh();
+    // Its send is already going (19c2): read again once, after a moment.
+    if (out.readAgainAfterMs) window.setTimeout(() => void this.refresh(), out.readAgainAfterMs);
   }
 
   /** "6 people" — a count, never who. */

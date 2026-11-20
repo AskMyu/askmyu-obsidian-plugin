@@ -842,6 +842,9 @@ export interface CommitmentOrigin {
 }
 
 export interface Commitment {
+  /** 19b3: the deadline's day and the next check's day (`YYYY-MM-DD`), beside their instants; named and compared from these. */
+  due_day?: string | null;
+  next_check_day?: string | null;
   commitment_id: string;
   /** A locked placeholder when the reader has no key. */
   what: string;

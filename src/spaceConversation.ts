@@ -24,7 +24,7 @@
 import type { AskMyuApi, MyuLineLite } from './transport/api';
 import type { PastedBlockWire, SpaceAnswer, SpaceAsk, SpaceChoice, SpaceConversationRead, SpacePrepMine, SpaceTurn } from './wire';
 import { PASTE_WORDS, canPutBack, chipAdded, chipsBack, pastedBlocksProblem, pastedTextLost, putBackText, readPastedBlocks, undoChip, type PasteUndo } from './pastedText';
-import { LINE_ANSWER_WORDS, lineClosed, quietWaysOut } from './lineAnswers';
+import { LINE_ANSWER_WORDS, SEND_SETTLE_MS, inFlightOf, lineClosed, quietWaysOut, refusedKeepingLine, routeSeenOf, withRouteSeen } from './lineAnswers';
 import { canSendPicks, isPickMany, pickManyAnswer, pickManyParts, togglePick, typedAnswer, typedHint } from './pickMany';
 import { DEBRIEF_PANE_WORDS, debriefEffectSteps, isDebriefConversation } from './debriefPane';
 import { listOffersOf } from './prepList';
@@ -692,12 +692,28 @@ export class SpaceConversation {
     this.answering = true;
     this.note = null;
     this.deps.onChange();
-    const res = await this.deps.backend.answerMyuLine(ask.line_id, body).catch(() => null);
+    // 19c: every answer on a send line echoes the way it goes, as the ask was drawn.
+    const res = await this.deps.backend.answerMyuLine(ask.line_id, withRouteSeen(ask.line, body)).catch(() => null);
     this.answering = false;
     // Closed under the press (409 line_closed): read the conversation again and show the ask that is up now.
     if (lineClosed(res)) {
       await this.read();
       this.deps.onChange();
+      return;
+    }
+    // Refused but kept (19c: no route_seen, or a route that changed): the server's sentence in place; the ask read again as it now stands.
+    if (refusedKeepingLine(res)) {
+      this.note = readbackText(res?.data);
+      await this.read();
+      this.deps.onChange();
+      return;
+    }
+    // Already going (19c2): nothing new happened; the sentence in place, and the conversation read again once, after a moment.
+    const flight = routeSeenOf(ask.line) && res?.ok ? inFlightOf(res.data) : null;
+    if (flight) {
+      this.note = flight.said || readbackText(res?.data);
+      this.deps.onChange();
+      window.setTimeout(() => void this.read().then(() => this.deps.onChange()), SEND_SETTLE_MS);
       return;
     }
     if (!res?.ok || !res.data) {

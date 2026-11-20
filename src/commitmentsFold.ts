@@ -5,12 +5,14 @@
 
 import type { Commitment } from './wire';
 import { isLockedText } from './spaceModeLogic';
+import { DAY_FIELDS, dayNoonMs, sentDay } from './dueDay';
 
 export const COMMITMENTS_FOLD_WORDS = {
   title: 'What you owe',
   youOwe: 'you owe',
   owedToYou: 'owed to you',
   nextCheck: (day: string) => `next check ${day}`,
+  checkWas: (day: string) => `the check was ${day}`,
   locked: 'Unlock to read it',
   someone: 'someone',
   more: (n: number) => `${n} more`,
@@ -62,11 +64,23 @@ const whenOf = (c: Pick<Commitment, 'next_check' | 'due'>): number => {
   return Number.isFinite(t) ? t : Number.POSITIVE_INFINITY;
 };
 
+const startOfDay = (d: Date): number => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+const WEEKDAY_LONG = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const MONTH_LONG = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const longDayWords = (d: Date, now: Date): string => `${WEEKDAY_LONG[d.getDay()]} ${d.getDate()} ${MONTH_LONG[d.getMonth()]}${d.getFullYear() === now.getFullYear() ? '' : ` ${d.getFullYear()}`}`;
+
 export function commitmentRow(c: Commitment, now: Date = new Date()): CommitmentRow {
   const what = isLockedText(c.what) ? COMMITMENTS_FOLD_WORDS.locked : (c.what ?? '').trim();
   const name = c.counterparty?.name?.trim() || c.space?.name?.trim() || COMMITMENTS_FOLD_WORDS.someone;
-  const day = c.next_check ? dayWords(c.next_check, now) : '';
-  const check = day ? COMMITMENTS_FOLD_WORDS.nextCheck(day) : null;
+  // The check's day (19b3: `next_check_day`, else `next_check`); with no check of its own, its due day; a passed day: "the check was …".
+  const checkDay = sentDay(c, DAY_FIELDS.nextCheck) ?? (c.next_check ? null : sentDay(c, DAY_FIELDS.deadline));
+  const instant = c.next_check ?? c.due ?? null;
+  const at = checkDay ? new Date(dayNoonMs(checkDay)) : instant ? new Date(instant) : null;
+  const check = !at || Number.isNaN(at.getTime())
+    ? null
+    : startOfDay(at) < startOfDay(now)
+      ? COMMITMENTS_FOLD_WORDS.checkWas(longDayWords(at, now))
+      : COMMITMENTS_FOLD_WORDS.nextCheck(dayWords(at, now));
   const status = c.status && c.status !== 'open' ? String(c.status) : null;
   const relId = c.counterparty?.relationship_id ?? (c.counterparty?.type === 'person' ? c.counterparty.id : undefined);
   const spaceId = c.counterparty?.type === 'space' ? c.counterparty.id : c.space?.space_id;

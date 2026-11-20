@@ -22,7 +22,7 @@ await esbuild.build({
   // linesSeen: a line reported as seen after a second in view, once (2026-10-06), same rule.
   // lastMoments: the last moments of the week (2026-11-13): the full-day and "Add it?" lines, the card's, the prep's and the week's readers, same rule.
   // identityLines: who someone is (2026-11-15): the question's four answers, "No, someone else", "Not her?", the said-back words, the people found, same rule.
-  entryPoints: ['tests/invariants.test.ts', 'tests/spaceMode.test.ts', 'tests/todayLines.test.ts', 'tests/spaceRetro.test.ts', 'tests/lineAnswers.test.ts', 'tests/menuMarks.test.ts', 'tests/linesSeen.test.ts', 'tests/lastMoments.test.ts', 'tests/identityLines.test.ts'],
+  entryPoints: ['tests/invariants.test.ts', 'tests/dueDayPlaces.test.ts', 'tests/spaceMode.test.ts', 'tests/todayLines.test.ts', 'tests/spaceRetro.test.ts', 'tests/lineAnswers.test.ts', 'tests/menuMarks.test.ts', 'tests/linesSeen.test.ts', 'tests/lastMoments.test.ts', 'tests/identityLines.test.ts'],
   bundle: true,
   loader: { '.css': 'text' },
   platform: 'node',
@@ -99,7 +99,7 @@ await esbuild.build({
 
 const result = spawnSync(
   process.execPath,
-  ['--test', `${OUT}/invariants.test.cjs`, `${OUT}/spaceMode.test.cjs`, `${OUT}/todayLines.test.cjs`, `${OUT}/spaceRetro.test.cjs`, `${OUT}/lineAnswers.test.cjs`, `${OUT}/menuMarks.test.cjs`, `${OUT}/linesSeen.test.cjs`, `${OUT}/lastMoments.test.cjs`, `${OUT}/identityLines.test.cjs`, `${OUT}/ceremony.test.cjs`, `${OUT}/coldstart.test.cjs`, `${OUT}/spaceModePane.test.cjs`, `${OUT}/lineAnswersPane.test.cjs`, `${OUT}/debriefPane.test.cjs`, `${OUT}/pastedText.test.cjs`, `${OUT}/todayDots.test.cjs`, `${OUT}/feedbackModal.test.cjs`, `${OUT}/todayPrepList.test.cjs`, `${OUT}/lastMomentsPane.test.cjs`, `${OUT}/identityLinesPane.test.cjs`, `${OUT}/samePerson.test.cjs`, `${OUT}/addressHeld.test.cjs`, `${OUT}/keyRefused.test.cjs`, `${OUT}/disconnectOrder.test.cjs`, ...internalTests.map((t) => `${OUT}/${t.replace(/^tests\//, '').replace(/\.ts$/, '.cjs')}`)],
+  ['--test', `${OUT}/invariants.test.cjs`, `${OUT}/dueDayPlaces.test.cjs`, `${OUT}/spaceMode.test.cjs`, `${OUT}/todayLines.test.cjs`, `${OUT}/spaceRetro.test.cjs`, `${OUT}/lineAnswers.test.cjs`, `${OUT}/menuMarks.test.cjs`, `${OUT}/linesSeen.test.cjs`, `${OUT}/lastMoments.test.cjs`, `${OUT}/identityLines.test.cjs`, `${OUT}/ceremony.test.cjs`, `${OUT}/coldstart.test.cjs`, `${OUT}/spaceModePane.test.cjs`, `${OUT}/lineAnswersPane.test.cjs`, `${OUT}/debriefPane.test.cjs`, `${OUT}/pastedText.test.cjs`, `${OUT}/todayDots.test.cjs`, `${OUT}/feedbackModal.test.cjs`, `${OUT}/todayPrepList.test.cjs`, `${OUT}/lastMomentsPane.test.cjs`, `${OUT}/identityLinesPane.test.cjs`, `${OUT}/samePerson.test.cjs`, `${OUT}/addressHeld.test.cjs`, `${OUT}/keyRefused.test.cjs`, `${OUT}/disconnectOrder.test.cjs`, ...internalTests.map((t) => `${OUT}/${t.replace(/^tests\//, '').replace(/\.ts$/, '.cjs')}`)],
   { stdio: 'inherit' },
 );
 process.exit(result.status ?? 1);

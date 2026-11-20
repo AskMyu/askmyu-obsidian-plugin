@@ -11,7 +11,7 @@ import { FakeEl } from './ui-stub';
 import { MockApi } from '../src/transport/mock';
 import type { MyuLineLite } from '../src/transport/api';
 import { pressLineButton, type LineButton, type LineUi } from '../src/lineAnswers';
-import { renderLineAsk } from '../src/views/lineAsk';
+import { renderLineAsk, renderLineDraft } from '../src/views/lineAsk';
 
 const API = 'https://myu.askmyu.com/api';
 const line = (over: Partial<MyuLineLite>): MyuLineLite => ({
@@ -146,7 +146,7 @@ test('R19: "Write a message to Sam" on a Today row: the readback, then the messa
   assert.equal(box?.value, text);
   assert.equal(box?.attrs['aria-label'], 'Your message to Sam Lee');
   const copy = m.host().querySelectorAll('.myu-line-draft-acts')[0]?.children.find((c) => c.tag === 'button');
-  assert.equal(copy?.text, 'Copy');
+  assert.equal(copy?.text, 'Copy it');
   const link = m.host().querySelectorAll('.myu-line-draft-acts')[0]?.children.find((c) => c.tag === 'a');
   assert.equal(link?.text, 'Open the pull request');
   assert.equal(link?.attrs.href, 'https://github.com/o/r/pull/7');
@@ -248,4 +248,60 @@ test('several profiles: each choice\'s link under the buttons, with the choice\'
     ['David Chang — Engineer ↗', 'https://linkedin.com/in/dc-eng'],
   ]);
   assert.ok(m.host().visibleTexts().some((t) => t.startsWith('See each profile on LinkedIn:')));
+});
+
+test('a send line\'s own "Copy it" (2026-11-19): the draft is marked to copy as it opens; another answer\'s draft is not', async () => {
+  const send = { line_id: 'SL1', kind: 'send', ask_kind: 'choice', text: "I can't send mail for you yet.", choices: [{ id: 'copy', label: 'Copy it' }, { id: 'drop', label: 'Drop it' }] } as unknown as MyuLineLite;
+  const deps = { apiBase: 'http://x', answer: async () => ({ ok: true, data: { success: true, readback: { text: 'Here it is, to copy.' }, draft: { text: 'Hi Dana.' } } }) as never };
+  const pressed = await pressLineButton(deps, send, { id: 'copy', label: 'Copy it', answer: { choice_id: 'copy' }, quiet: false } as LineButton);
+  assert.equal(pressed.ui.draft?.copyAtOpen, true);
+  const other = await pressLineButton(deps, { ...send, kind: 'check_promise' } as MyuLineLite, { id: 'tell', label: 'Tell Dana', answer: { choice_id: 'tell' }, quiet: false } as LineButton);
+  assert.ok(!other.ui.draft?.copyAtOpen);
+});
+
+test('the draft box (2026-11-19): must_see under the words; copied as it opens it reads "Copied"; refused it stays "Copy it"', async () => {
+  const draw = (copyAtOpen: boolean) => {
+    const host = new FakeEl('div');
+    renderLineDraft(host as unknown as HTMLElement, { text: 'Hi Carla.', label: 'Open', must_see: ["I can't send mail for you yet.", 'To Carla Diaz at carla@example.test.'], copyAtOpen });
+    return host;
+  };
+  const nav = globalThis.navigator as unknown as Record<string, unknown>;
+  const had = Object.getOwnPropertyDescriptor(nav, 'clipboard');
+  const written: string[] = [];
+  Object.defineProperty(nav, 'clipboard', { value: { writeText: async (t: string) => void written.push(t) }, configurable: true });
+  try {
+    const host = draw(true);
+    await new Promise((r) => setTimeout(r, 10));
+    const texts = [...host.walk()].map((e) => e.text).filter(Boolean);
+    assert.ok(texts.includes("I can't send mail for you yet.") && texts.includes('To Carla Diaz at carla@example.test.'), texts.join(' | '));
+    assert.deepEqual(written, ['Hi Carla.']);
+    assert.ok(texts.includes('Copied'), texts.join(' | '));
+    Object.defineProperty(nav, 'clipboard', { value: { writeText: async () => { throw new Error('not allowed'); } }, configurable: true });
+    const refused = draw(true);
+    await new Promise((r) => setTimeout(r, 10));
+    assert.ok([...refused.walk()].some((e) => e.text === 'Copy it'));
+    // Not a send line's own: nothing written.
+    written.length = 0;
+    Object.defineProperty(nav, 'clipboard', { value: { writeText: async (t: string) => void written.push(t) }, configurable: true });
+    draw(false);
+    await new Promise((r) => setTimeout(r, 10));
+    assert.deepEqual(written, []);
+  } finally {
+    if (had) Object.defineProperty(nav, 'clipboard', had);
+    else delete nav.clipboard;
+  }
+});
+
+test('"Tell" with 18b\'s answer (2026-11-19): the readback says it cannot send; that sentence is not drawn again; "To …" is', async () => {
+  const promise = { line_id: 'CP9', kind: 'check_promise', ask_kind: 'choice', text: 'Jonah decided.', choices: [{ id: 'tell', label: 'Tell Tomás' }] } as unknown as MyuLineLite;
+  const READ = "I can't send mail for you yet. Here is what I would say to Tomás: copy it.";
+  const deps = {
+    apiBase: 'http://x',
+    answer: async () =>
+      ({ ok: true, data: { success: true, readback: { text: READ }, draft: { connected: false, in: 'mail', to: [{ name: 'Tomás Rivera', id: 't@x.example' }], text: 'Tomás, it changed.', must_see: ["I can't send mail for you yet.", 'To Tomás Rivera at t@x.example.'] } } }) as never,
+  };
+  const r = await pressLineButton(deps, promise, { id: 'tell', label: 'Tell Tomás', answer: { choice_id: 'tell' }, quiet: false } as LineButton);
+  assert.equal(r.ui.said, READ);
+  assert.deepEqual(r.ui.draft?.must_see, ['To Tomás Rivera at t@x.example.']);
+  assert.ok(!r.ui.draft?.lead, 'must_see names it: no line over it');
 });

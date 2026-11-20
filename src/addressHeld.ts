@@ -77,6 +77,11 @@ export type AddressHeldOutcome =
   | { kind: 'wrong'; message: string; tries_left?: number }
   /** 429 after five: the server ends the question (its token is gone), as `expired`: only the way back to the start. */
   | { kind: 'too_many'; message: string }
+  /**
+   * 429 `too_many_tries` with its wait (2026-11-19, the limit on wrong tries): the question stays, to answer again after the wait; the
+   * words are `tooManyTries.ts`'s (written here too, so the copies stay one file; a test holds them alike).
+   */
+  | { kind: 'wait'; message: string; seconds: number }
   /** 410: the token ended; back to the start. */
   | { kind: 'expired'; message: string }
   | { kind: 'failed'; message: string };
@@ -89,6 +94,14 @@ export function addressHeldOutcome(status: number, body: unknown): AddressHeldOu
   if (status === 401) {
     const left = typeof o.tries_left === 'number' && Number.isFinite(o.tries_left) ? o.tries_left : undefined;
     return { kind: 'wrong', message: message ?? ADDRESS_HELD_WORDS.wrong + (left !== undefined ? ' ' + ADDRESS_HELD_WORDS.triesLeft(left) : ''), ...(left !== undefined ? { tries_left: left } : {}) };
+  }
+  if (status === 429 && [o.code, o.error, o.err].includes('too_many_tries')) {
+    const given = [o.retry_after_seconds, o.retry_after, o.seconds, o.wait_seconds]
+      .map((x) => (typeof x === 'string' && x.trim() ? Number(x) : x))
+      .find((x): x is number => typeof x === 'number' && Number.isFinite(x) && x > 0);
+    const seconds = Math.ceil(given ?? 15 * 60);
+    const minutes = Math.max(1, Math.ceil(seconds / 60));
+    return { kind: 'wait', message: message ?? `Too many tries. Try again in ${minutes === 1 ? 'a minute' : `${minutes} minutes`}.`, seconds };
   }
   if (status === 429) return { kind: 'too_many', message: message ?? ADDRESS_HELD_WORDS.tooMany };
   if (status === 410) return { kind: 'expired', message: message ?? ADDRESS_HELD_WORDS.expired };

@@ -147,6 +147,10 @@ export class MockApi implements AskMyuApi {
     });
   }
 
+  async endSignIn(): Promise<ApiResponse> {
+    return ok({ success: true });
+  }
+
   async escrowMDEK(): Promise<ApiResponse> {
     return this.guard() ?? ok<Record<string, unknown>>({});
   }

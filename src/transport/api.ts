@@ -183,6 +183,11 @@ export interface MagicLinkSession {
 export interface AskMyuApi {
   exchangeToken(token: string, deviceId: string): Promise<ApiResponse<ExchangeResult>>;
   escrowMDEK(mdekBase64: string, deviceId: string): Promise<ApiResponse>;
+  /**
+   * This vault's sign-in ended on the server (2026-11-19): while the key is still lent the server saves the journal's search index sealed
+   * with it, then drops the key itself. `POST /account/logout`.
+   */
+  endSignIn(): Promise<ApiResponse>;
 
   storeDeviceKEK(deviceId: string, kekBase64: string, deviceName: string): Promise<ApiResponse>;
   fetchDeviceKEK(deviceId: string): Promise<ApiResponse<{ device_kek: string }>>;
@@ -1147,7 +1152,7 @@ export interface MyuLineLite {
   text?: string;
   needs_you?: boolean;
   ask_kind?: string;
-  choices?: Array<{ id?: string; label?: string; readback?: string }>;
+  choices?: Array<{ id?: string; label?: string; readback?: string; role?: string }>;
   /** Picking several, and a typed name (2026-10-03): see `SpaceAsk` in the wire shapes and `src/pickMany.ts`. */
   select?: 'many';
   send?: string;
@@ -1349,6 +1354,10 @@ export class Api implements AskMyuApi {
       { token, device_id: deviceId, client_version: '0.1.0' },
       { anonymous: true },
     );
+  }
+
+  endSignIn() {
+    return this.transport.post('/account/logout', { reason: 'signed_out' });
   }
 
   escrowMDEK(mdekBase64: string, deviceId: string) {

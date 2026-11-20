@@ -81,7 +81,7 @@ await esbuild.build({
     // "Mail the confirmation again", the one question on the mailed link's 409, the same link once more after an answer.
     'tests/addressHeld.test.ts',
     // A key the server refuses as not the account's (2026-11-18): lent once, dropped here, the device waits for approval; Settings' words.
-    'tests/keyRefused.test.ts',
+    'tests/keyRefused.test.ts', 'tests/disconnectOrder.test.ts',
     // Internal-only test files (tests/internal/, absent from the public
     // source) join the run when present, so both flavors gate identically.
     ...internalTests,
@@ -99,7 +99,7 @@ await esbuild.build({
 
 const result = spawnSync(
   process.execPath,
-  ['--test', `${OUT}/invariants.test.cjs`, `${OUT}/spaceMode.test.cjs`, `${OUT}/todayLines.test.cjs`, `${OUT}/spaceRetro.test.cjs`, `${OUT}/lineAnswers.test.cjs`, `${OUT}/menuMarks.test.cjs`, `${OUT}/linesSeen.test.cjs`, `${OUT}/lastMoments.test.cjs`, `${OUT}/identityLines.test.cjs`, `${OUT}/ceremony.test.cjs`, `${OUT}/coldstart.test.cjs`, `${OUT}/spaceModePane.test.cjs`, `${OUT}/lineAnswersPane.test.cjs`, `${OUT}/debriefPane.test.cjs`, `${OUT}/pastedText.test.cjs`, `${OUT}/todayDots.test.cjs`, `${OUT}/feedbackModal.test.cjs`, `${OUT}/todayPrepList.test.cjs`, `${OUT}/lastMomentsPane.test.cjs`, `${OUT}/identityLinesPane.test.cjs`, `${OUT}/samePerson.test.cjs`, `${OUT}/addressHeld.test.cjs`, `${OUT}/keyRefused.test.cjs`, ...internalTests.map((t) => `${OUT}/${t.replace(/^tests\//, '').replace(/\.ts$/, '.cjs')}`)],
+  ['--test', `${OUT}/invariants.test.cjs`, `${OUT}/spaceMode.test.cjs`, `${OUT}/todayLines.test.cjs`, `${OUT}/spaceRetro.test.cjs`, `${OUT}/lineAnswers.test.cjs`, `${OUT}/menuMarks.test.cjs`, `${OUT}/linesSeen.test.cjs`, `${OUT}/lastMoments.test.cjs`, `${OUT}/identityLines.test.cjs`, `${OUT}/ceremony.test.cjs`, `${OUT}/coldstart.test.cjs`, `${OUT}/spaceModePane.test.cjs`, `${OUT}/lineAnswersPane.test.cjs`, `${OUT}/debriefPane.test.cjs`, `${OUT}/pastedText.test.cjs`, `${OUT}/todayDots.test.cjs`, `${OUT}/feedbackModal.test.cjs`, `${OUT}/todayPrepList.test.cjs`, `${OUT}/lastMomentsPane.test.cjs`, `${OUT}/identityLinesPane.test.cjs`, `${OUT}/samePerson.test.cjs`, `${OUT}/addressHeld.test.cjs`, `${OUT}/keyRefused.test.cjs`, `${OUT}/disconnectOrder.test.cjs`, ...internalTests.map((t) => `${OUT}/${t.replace(/^tests\//, '').replace(/\.ts$/, '.cjs')}`)],
   { stdio: 'inherit' },
 );
 process.exit(result.status ?? 1);

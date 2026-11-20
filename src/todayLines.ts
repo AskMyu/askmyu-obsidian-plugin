@@ -163,15 +163,21 @@ export function foldRows(groups: SubjectGroup[], limit: number = FOR_YOU_ROWS): 
 }
 
 /**
- * Today's lines after a read: the open ones, and those answered here (their readback stays). A question closed elsewhere while it
- * was on screen and pressed here (2026-11-15, "Already answered.") stays too, though the read no longer carries it: the person sees
- * why its buttons went. Any other line the read no longer carries is gone.
+ * Today's lines after a read: the open ones, and those answered here (their readback stays). Since 2026-11-19 the server's read
+ * returns open lines only, so a line answered here that the read no longer carries is kept from what was shown, in its place, with its
+ * readback, for as long as Today shows it. A question closed elsewhere while it was on screen and pressed here (2026-11-15, "Already
+ * answered.") stays too: the person sees why its buttons went. Any other line the read no longer carries is gone.
  */
 export function linesAfterRead(read: MyuLineLite[], before: MyuLineLite[], answeredHere: ReadonlySet<string>, closedHere: ReadonlySet<string> = new Set()): MyuLineLite[] {
-  const open = read.filter((l) => !l.state || l.state === 'queued' || l.state === 'released' || answeredHere.has(l.line_id));
-  const have = new Set(open.map((l) => l.line_id));
+  const out = read.filter((l) => !l.state || l.state === 'queued' || l.state === 'released' || answeredHere.has(l.line_id));
+  const have = new Set(out.map((l) => l.line_id));
+  before.forEach((l, i) => {
+    if (!answeredHere.has(l.line_id) || have.has(l.line_id)) return;
+    out.splice(Math.min(i, out.length), 0, l);
+    have.add(l.line_id);
+  });
   // Kept as closed: it no longer waits for the person, so its row's dot does not say it does.
-  return [...open, ...before.filter((l) => closedHere.has(l.line_id) && !have.has(l.line_id)).map((l) => ({ ...l, state: 'expired', needs_you: false }))];
+  return [...out, ...before.filter((l) => closedHere.has(l.line_id) && !have.has(l.line_id)).map((l) => ({ ...l, state: 'expired', needs_you: false }))];
 }
 
 /**

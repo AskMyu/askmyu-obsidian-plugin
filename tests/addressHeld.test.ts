@@ -312,6 +312,25 @@ test('a wrong password: the server\'s words, and the question stays with its fie
   noCodeWords(texts);
 });
 
+test('too many wrong tries (19 Nov): the server\'s wait; the question, its field as typed and every choice stay, to send again after it', async () => {
+  const REFUSED = { success: false, error: 'too_many_tries', retry_after: 840, message: 'Too many tries. Try again in 14 minutes.', status_code: 429 };
+  const r = heldRig(() => HELD_409('held-1'), () => ({ status: 429, data: REFUSED }));
+  await magicSignin(r.deps, 'link-1');
+  assert.ok(await r.root().click('Enter its password'));
+  r.type('their real password');
+  assert.ok(await r.root().click(ADDRESS_HELD_WORDS.open));
+  await settle();
+  const texts = r.root().visibleTexts();
+  assert.ok(texts.includes(REFUSED.message), texts.join(' | '));
+  assert.ok(!texts.includes(WRONG), 'nothing says the password was wrong: it was not checked');
+  assert.equal(r.passwordField()?.value, 'their real password', 'what he typed stays');
+  assert.ok(texts.includes(ADDRESS_HELD_WORDS.open) && texts.includes('Start my own account') && texts.includes(ADDRESS_HELD_WORDS.back), 'every way still there');
+  assert.ok(await r.root().click(ADDRESS_HELD_WORDS.open));
+  await settle();
+  assert.equal(r.w.of('/auth/address-held').length, 2, 'sent again as it was');
+  noCodeWords(texts);
+});
+
 test('too many: the question ends as an ended one does — the server\'s words and only the way back', async () => {
   const r = heldRig(() => HELD_409('held-1'), () => ({ status: 429, data: { success: false, error: 'too_many_attempts', message: 'Too many tries. Sign in again from the start.' } }));
   await magicSignin(r.deps, 'link-1');

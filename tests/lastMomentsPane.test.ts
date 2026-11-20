@@ -106,7 +106,7 @@ test('a free day picked answers {choice_id: "move", day}; the readback, then "My
   const box = m.host().querySelector('.myu-line-draft-box')!;
   assert.equal(box.value, 'Hi Priya, the pricing sheet will come Monday instead of Thursday.');
   assert.equal(box.attrs['aria-label'], 'Your message to Priya');
-  assert.ok(buttons(m.host()).includes('Copy'));
+  assert.ok(buttons(m.host()).includes('Copy it'));
   assert.ok(!buttons(m.host()).includes('Send'), 'nothing is sent from the vault');
   assert.ok(!texts.includes('Which day?'), 'answered, "Which day?" is gone');
   // Drawn again from scratch (another pane's redraw), the line's day question stays closed.
@@ -189,7 +189,7 @@ test('"Add it?": Add it · No; Add it shows the readback, where it goes, and the
   assert.ok(texts.includes('To prd-review in Slack'));
   assert.ok(!texts.some((t) => t.includes('1731400000')), 'the thread is never shown');
   assert.equal(m.host().querySelector('.myu-line-draft-box')!.value, 'Adding to Monday: Jonah says the export runs nightly.');
-  assert.ok(buttons(m.host()).includes('Copy'));
+  assert.ok(buttons(m.host()).includes('Copy it'));
 });
 
 // ── the drawn parts ─────────────────────────────────────────
@@ -305,19 +305,22 @@ test('a promise someone else’s decision affects: its words with their line bre
     effects: [{ type: 'check_promise_draft', readback: 'Here it is, to send.', draft: { to: ['Priya Raman'], in: 'slack', thread_ref: '1731400000.000200', text: 'About the CSV export: Jonah has decided to drop it from the Q1 release, so this has changed.' } }],
   });
   const m = mount(api, l);
-  // The words as sent, their own line breaks kept by the class that shows them.
+  // Short first (2026-11-19): its first two lines, a quiet "read all", and its choices under them already.
+  // Its second line ends on a heading ("That affects something you promised:"), so its first item comes with it (2026-11-19): with
+  // nothing after that item, the words show whole, nothing to open.
   const words = m.host().find((e) => e.text === text)!;
   assert.ok(words, 'the words as sent, line breaks and all');
   assert.ok(words.classes.has('myu-line-words'));
-  assert.deepEqual(buttons(m.host()), ['Tell Priya', 'Let it go', 'Keep it'], 'no other way out');
-  assert.ok(m.host().find((e) => e.text === 'Let it go')!.classes.has('myu-line-quiet'));
+  assert.deepEqual(buttons(m.host()), ['Tell Priya', 'Let it go', 'Keep it', 'Not now'], '"Let it go" is its way out: "Not now" only (the one rule)');
+  assert.ok(!m.host().find((e) => e.text === 'Let it go')!.classes.has('myu-line-quiet'), 'drawn as every choice is (2026-11-19)');
+  assert.ok(m.host().find((e) => e.text === 'Not now')!.classes.has('myu-line-quiet'));
   assert.ok(await m.host().click('Tell Priya'));
   await settle();
   assert.deepEqual(api.dayAnswered, [{ line_id: 'CP-p1', answer: { choice_id: 'tell' } }]);
   const texts = m.host().visibleTexts();
   assert.deepEqual(texts.slice(0, 2), ['Here it is, to send.', 'To Priya in Slack'], 'the readback, then where it goes');
   assert.equal(m.host().querySelector('.myu-line-draft-box')!.value, 'About the CSV export: Jonah has decided to drop it from the Q1 release, so this has changed.');
-  assert.ok(buttons(m.host()).includes('Copy'));
+  assert.ok(buttons(m.host()).includes('Copy it'));
   assert.ok(!texts.some((t) => t.includes('1731400000')), 'the thread is never shown');
 
   const go = new MockApi();

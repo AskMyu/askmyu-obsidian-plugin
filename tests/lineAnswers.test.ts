@@ -32,12 +32,13 @@ test('buttons, kind by kind, as the web draws them', () => {
   assert.deepEqual(ids(line({ ask_kind: 'assume', choices: [], assumed: { claim: 'x', changeable: true } })), ['change']);
   assert.deepEqual(ids(line({ ask_kind: 'assume', choices: [], assumed: { claim: 'x', changeable: false } })), []);
   assert.deepEqual(ids(line({ ask_kind: 'yes_no', choices: [] })), ['yes', 'no', 'later(quiet)', 'dismiss(quiet)']);
-  assert.deepEqual(ids(line({ ask_kind: 'yes_no', choices: [{ id: 'yes', label: 'Yes, keep it' }, { id: 'later', label: 'Ask me later' }] })), ['yes', 'later'], 'its own "later" is its way out');
+  assert.deepEqual(ids(line({ ask_kind: 'yes_no', choices: [{ id: 'yes', label: 'Yes, keep it' }, { id: 'later', label: 'Ask me later' }] })), ['yes', 'later', 'dismiss(quiet)'], 'its own "later": no "Not now"; no way out of its own: "Don\'t ask again" (the one rule)');
   assert.deepEqual(ids(line({})), ['hold', 'done', 'later(quiet)', 'dismiss(quiet)']);
-  // Four choices with "Leave it": it is the quiet one, and the line's own way out, so no "Not now" is added (2026-09-25).
+  // Four choices with "Leave it": it is the quiet one, and the line's own way out, so no "Don't ask again"; "Not now" stays (the one rule,
+  // 2026-11-19).
   assert.deepEqual(
     ids(line({ choices: [{ id: 'a', label: 'A' }, { id: 'b', label: 'B' }, { id: 'c', label: 'C' }, { id: 'leave', label: 'Leave it' }] })),
-    ['a', 'b', 'c', 'leave(quiet)'],
+    ['a', 'b', 'c', 'leave(quiet)', 'later(quiet)'],
   );
   // R21: a task offer is "take" and "not me" again, with the two quiet ways out after them.
   assert.deepEqual(
@@ -198,9 +199,10 @@ const ruleOnly = (over: Partial<MyuLineLite> = {}): MyuLineLite =>
   });
 const DRAFT_TEXT = 'Hi Sam, could you review my pull request "Queue worker"? It went to you by a rule, so I wanted to ask you myself. https://github.com/o/r/pull/7';
 
-test('the rule-only note: "Write a message to …" and "Leave it" are its buttons, and no "Not now" beside its own "Leave it"', () => {
+test('the rule-only note: "Write a message to …" and "Leave it" are its buttons, then "Not now" (its "Leave it" is its way out, so no "Don\'t ask again")', () => {
   const b = lineButtons(ruleOnly());
-  assert.deepEqual(b.map((x) => [x.label, x.quiet]), [['Write a message to Sam', false], ['Leave it', false]]);
+  // "Leave it" is its way out: no "Don't ask again"; "Not now" stays (the one rule, 2026-11-19).
+  assert.deepEqual(b.map((x) => [x.label, x.quiet]), [['Write a message to Sam', false], ['Leave it', false], ['Not now', true]]);
   assert.deepEqual(b[0].answer, { choice_id: 'write' });
 });
 
@@ -234,7 +236,7 @@ test('pressing "Write a message to …": the readback, then the message to copy'
 });
 
 test('the message words', () => {
-  assert.equal(LINE_ANSWER_WORDS.copy, 'Copy');
+  assert.equal(LINE_ANSWER_WORDS.copy, 'Copy it');
   assert.equal(LINE_ANSWER_WORDS.copied, 'Copied');
   assert.equal(LINE_ANSWER_WORDS.copyFailed, 'It did not copy. Select the message and copy it yourself.');
   assert.equal(LINE_ANSWER_WORDS.draftLink, 'Open the link');
@@ -269,3 +271,24 @@ test('an invitation to connect: the server’s Accept and Not now, nothing more'
   assert.deepEqual(lineButtons(line).map((b) => [b.id, b.label, b.quiet]), [['accept', 'Accept', false], ['not_now', 'Not now', true]]);
 });
 // The connect kinds against shared's: tests/internal/doorAnswersParity.test.ts (the public mirror has no shared).
+
+// Myu's "closed it" line (2026-11-19, as /myu/lines returns it): a tell that carries one choice of its own.
+const CLOSED_IT = {"line_id":"fcc07a8d","dedupe_key":"closed_notice:goal:g-plan","thing":"goal:g-plan","subjects":[],"audience":"person","myus_own":false,"persons_own":false,"text":"You answered Dana on Tuesday 18 November, so I closed “Send Dana the plan”.","needs_you":false,"ask_kind":"tell","choices":[{"id":"keep_open","label":"Not so, keep it open"}],"choices_said":"Not so, keep it open","state":"released","why":{"fired_because":"Myu found that this was done and closed the question","evidence":[{"kind":"reply_sent","count":1,"ref":"reply:msg-42"}]},"conversation":{},"provenance":{"source":"settled","detail":"reply_sent"},"created_at":"2026-11-19T09:00:00.000Z","released_at":"2026-11-19T09:00:00.000Z","significance":0.6} as unknown as MyuLineLite;
+
+test('a tell that carries choices: its own, quiet, and nothing else; pressed, the readback in their place', async () => {
+  assert.deepEqual(lineButtons(CLOSED_IT), [{ id: 'keep_open', label: 'Not so, keep it open', answer: { choice_id: 'keep_open' }, quiet: true }]);
+  assert.deepEqual(lineButtons({ ...CLOSED_IT, choices: [] }), [], 'a tell with none has none');
+  const api = new MockApi();
+  api.dayLines = [{ ...CLOSED_IT }];
+  api.dayAnswers[CLOSED_IT.line_id] = () => ({ success: true, readback: { text: "Kept open. I'll ask about it again." }, effects: [{ type: 'row_updated', entity_type: 'goal', entity_id: 'g-plan' }] });
+  const out = await pressLineButton({ answer: (id, a) => api.answerMyuLine(id, a), apiBase: API }, api.dayLines[0], lineButtons(api.dayLines[0])[0]);
+  assert.deepEqual(api.dayAnswered, [{ line_id: CLOSED_IT.line_id, answer: { choice_id: 'keep_open' } }]);
+  assert.equal(out.settled, true);
+  assert.equal(out.ui.said, "Kept open. I'll ask about it again.");
+});
+
+test('a send line: its two choices only, no "Not now" / "Don\'t ask again" (2026-11-19); any other line keeps them', () => {
+  const send = line({ kind: 'send', ask_kind: 'yes_no', choices: [{ id: 'yes', label: 'Send it' }, { id: 'no', label: 'Don’t send' }] });
+  assert.ok(!ids(send).some((id) => /later|dismiss/.test(id)), ids(send).join(' '));
+  assert.ok(ids(line({})).some((id) => /later/.test(id)) && ids(line({})).some((id) => /dismiss/.test(id)), ids(line({})).join(' '));
+});

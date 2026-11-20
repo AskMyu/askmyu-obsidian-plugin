@@ -217,6 +217,7 @@ which signed-in account asked.
 |---|---|---|
 | `POST /account/plugin-token/exchange` | when you connect, and every time Obsidian starts | this plugin's sign-in token |
 | `POST /account/plugin-token/create` | after you sign in | nothing but the request |
+| `POST /account/logout` | Settings → Disconnect | nothing but the request. The server ends this vault's sign-in |
 | `POST /account/session/escrow-key` | every time the vault unlocks | your key, held by the server for this sign-in only, so Myu can read your content while you use it |
 | `POST /account/device/kek/store` · `kek/get` | when this vault becomes a device · each unlock | the key that protects the copy of your key stored on this device (the server keeps one half, this device the other) |
 | `POST /account/device/transfer-request` · `-approve` · `-deny` | approving this vault from another device | a one-time exchange key; the 4-digit code |

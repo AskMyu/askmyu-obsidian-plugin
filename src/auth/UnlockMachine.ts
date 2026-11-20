@@ -459,8 +459,19 @@ export class UnlockMachine {
     }
   }
 
-  /** Settings: disconnect. Local material goes; the server's KEK is the user's to revoke. */
+  /**
+   * Settings: disconnect. This vault's sign-in ended on the server first (2026-11-19: with the key still lent, the server saves the
+   * journal's search index and drops the key itself; before, the sign-in lived on with its key until it expired); then local material
+   * goes, whatever the server answered. The server's KEK is the user's to revoke.
+   */
   async disconnect(): Promise<void> {
+    if (this.deps.load().session_token) {
+      try {
+        await this.deps.api.endSignIn();
+      } catch {
+        /* the vault's own material goes whatever the server answered */
+      }
+    }
     await this.forget('disconnected_by_user');
   }
 

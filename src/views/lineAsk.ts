@@ -21,10 +21,38 @@ import { eachLinkWords, lineLinks, type ShownLink } from '../lineLinks';
 import { LAST_MOMENTS_WORDS } from '../lastMoments';
 import { LAST_MOMENTS_VAULT_WORDS, freeDaysOf, isDay, moveAnswer, todayIso } from '../lastMomentsVault';
 import { lineWords, type PersonPick } from '../identityLines';
+import { LINE_MORE_WORD, lineShortForm } from '../lineShort';
 import { IDENTITY_WORDS, someoneElseAnswer } from '../personIdentities';
 
 /** Lines whose "Which day?" is open, and the day typed in it, by line id: kept across the pane's redraws until the line is answered. */
 const choosingDay = new Set<string>();
+/** Lines whose words were opened in full with "read all" (2026-11-19): they stay open while the pane redraws. */
+const wordsOpened = new Set<string>();
+
+/**
+ * A line's words, short first (2026-11-19, `lineShort.ts`, one switch there): the first two lines, then a quiet "read all" that opens the
+ * rest in place. Only the words: the choices, links and buttons drawn under them stay; a readback shows whole. `after` adds what sits
+ * at the end of the words (the estimate), each time they are drawn.
+ */
+export function fillLineWords(el: HTMLElement, line: Pick<MyuLineLite, 'line_id'> & { kind?: string | null }, words: string, after?: (into: HTMLElement) => void): void {
+  // The server's short form and what must be seen before a yes (`must_see`, 2026-11-19), where it sends them.
+  const extra = line as { short_text?: string | null; must_see?: unknown[] | null };
+  const shortForm = lineShortForm(words, extra.short_text, extra.must_see, line.kind);
+  const fill = (whole: boolean): void => {
+    el.empty();
+    el.setText(whole || !shortForm.cut ? words : shortForm.short);
+    if (!whole && shortForm.cut) {
+      const more = el.createEl('button', { cls: 'myu-line-more', text: LINE_MORE_WORD });
+      more.onclick = (e?: MouseEvent) => {
+        e?.stopPropagation();
+        wordsOpened.add(line.line_id);
+        fill(true);
+      };
+    }
+    after?.(el);
+  };
+  fill(wordsOpened.has(line.line_id));
+}
 const typedDay = new Map<string, string>();
 /** Lines whose "Who is it?" is open, and the words typed in it, by line id: kept the same way. */
 const choosingWho = new Set<string>();
@@ -190,8 +218,19 @@ export function renderLineDraft(host: HTMLElement, draft: LineDraft): void {
   box.value = draft.text;
   box.setAttr('rows', String(Math.min(9, Math.max(3, Math.ceil(draft.text.length / 45)))));
   box.setAttr('aria-label', draft.to_name ? `Your message to ${draft.to_name}` : 'Your message');
+  // What must be seen with it (2026-11-19), as the server wrote it.
+  for (const s of draft.must_see ?? []) wrap.createDiv({ cls: 'myu-quiet myu-line-note myu-line-draft-must', text: s });
   const acts = wrap.createDiv({ cls: 'myu-mrow-acts myu-line-draft-acts' });
   const copy = acts.createEl('button', { cls: 'myu-aff', text: LINE_ANSWER_WORDS.copy });
+  // A send line's own "Copy it": on the clipboard as the box opens, "Copied" until pressed again or edited; refused, it stays "Copy it".
+  if (draft.copyAtOpen) {
+    void Promise.resolve()
+      .then(() => navigator.clipboard.writeText(draft.text))
+      .then(
+        () => copy.setText(LINE_ANSWER_WORDS.copied),
+        () => undefined,
+      );
+  }
   let failed: HTMLElement | null = null;
   copy.onclick = async () => {
     try {
@@ -248,9 +287,11 @@ export function renderLineAsk(
     // The words carry the line's id: in view for a second, the line is reported as seen (linesSeenWatch.ts). Their own line breaks
     // show (`myu-line-words`, 2026-11-13: a promise someone else's decision affects is several lines, as the server writes them).
     // The assumed tie (2026-11-15) shows its claim; its "Not her?" is the button under it.
-    const el = host.createDiv({ cls: `${cls} myu-line-words`, text: lineWords(line), attr: lineIdAttr(line.line_id) });
+    const el = host.createDiv({ cls: `${cls} myu-line-words`, attr: lineIdAttr(line.line_id) });
     // "One tap to answer." only where a tap answers it.
-    if (showEstimate(line)) el.createSpan({ cls: 'myu-est', text: (line.est ?? '').trim() });
+    fillLineWords(el, line, lineWords(line), (into) => {
+      if (showEstimate(line)) into.createSpan({ cls: 'myu-est', text: (line.est ?? '').trim() });
+    });
     // The Friday line (2026-11-13): "Myu: your week.", then each of the server's sentences on its own line.
     for (const sentence of lineSentences(line)) host.createDiv({ cls: 'myu-line-sentence', text: sentence });
   }

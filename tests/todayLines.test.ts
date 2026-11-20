@@ -211,3 +211,11 @@ test('the Today note: a drafted interview debrief is an item with its words and 
   assert.deepEqual(items.slice(0, 2), [`● *${DRAFT_WORDS}*`, `● **Backend engineer** — *${SECOND_DRAFT}*`]);
   assert.match(items[2], /^\[\[Dana Okafor\]\] — \*You owe Dana a reply\.\* — \[talk ▸\]\(obsidian:\/\/myu-chat\?about=person%3Ap1\)$/);
 });
+
+test('a team’s line that only tells, with its one choice ("Open Door team", 2026-11-19): by the server’s needs_you, not a row that needs you', () => {
+  const teamLine = line(team, 'The door team: three changes went in today.', { kind: 'team_line', needs_you: false, choices: [{ id: 'open_team', label: 'Open Door team' }] });
+  const ask = line(dana, 'Dana asks: is the EU cut still on?', { needs_you: true, choices: [{ id: 'yes', label: 'Yes' }] });
+  const groups = groupBySubject([teamLine, ask]);
+  assert.deepEqual(groups.map((g) => [g.label, g.needsYou]), [['Door team', false], ['Dana Okafor', true]]);
+  assert.deepEqual(foldRows(groups).shown.map((g) => g.label), ['Dana Okafor', 'Door team'], 'what needs you first; the team’s line after it');
+});

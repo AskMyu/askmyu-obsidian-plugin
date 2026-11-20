@@ -647,6 +647,23 @@
 .myu-line-choices { margin-top: 4px; }
 /* The quiet way out (Skip, Not now, Leave it): text like the answers beside it, muted. */
 .workspace-leaf-content .myu-mrow-acts.myu-line-choices button.myu-aff.myu-line-quiet { color: var(--text-muted); }
+/* A line shown short first (2026-11-19): the quiet "more" that opens the rest of its words in place. */
+.workspace-leaf-content .myu-line-words button.myu-line-more {
+  background: none;
+  border: 0;
+  box-shadow: none;
+  padding: 0;
+  margin-left: var(--size-4-1);
+  height: auto;
+  font: inherit;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+  /* A dotted line under "read all" says it opens (never text-decoration: the directory's review flags it, invariant 17b). */
+  border-bottom: 1px dotted currentColor;
+  border-radius: 0;
+  cursor: pointer;
+}
+.workspace-leaf-content .myu-line-words button.myu-line-more:hover { color: var(--text-normal); }
 .myu-line-note { font-size: var(--font-ui-smaller); margin-top: 2px; }
 .myu-line-said { margin-top: 1px; }
 /* A line's words and Myu's answer to it, with their own line breaks (2026-11-13: "Jonah decided, today: …" / "That affects …"). */

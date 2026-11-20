@@ -1072,3 +1072,32 @@ test('From Myu — the pane (F0): the title and the brief, Next and Earlier rows
   assert.deepEqual(events.map((e) => [e.myu_id, e.kind]), [['c-4471', 'tick']], 'ticking ships the same vault interaction the folder watcher does');
   assert.equal(settings.myu_checkbox_state['c-4471'], true, 'resolved → done in Myu');
 });
+
+test('From Myu (2026-11-19): the first today item leads as written; a mail count never; the rest behind "+N more"; with none, what the lines ask', async () => {
+  const { TodayView } = await import('../src/views/TodayView');
+  const { FakeEl } = await import('./ui-stub');
+  const draw = (brief: unknown, lines: unknown[] = [], expanded = false) => {
+    const v = Object.create(TodayView.prototype) as InstanceType<typeof TodayView> & Record<string, unknown>;
+    v['plugin'] = { helpQueue: [] };
+    v['brief'] = brief;
+    v['todayLines'] = lines;
+    v['loadedOnce'] = true;
+    v['briefExpanded'] = expanded;
+    const root = new FakeEl('div');
+    (v as unknown as { renderBrief(r: unknown): void }).renderBrief(root);
+    return [...root.walk()].map((e) => e.text ?? '').filter(Boolean);
+  };
+  const five = { sections: [
+    { section: 'today', visible: true, items: [{ text: '27 new emails since yesterday', type: 'email_activity' }, { text: 'Your revised Q1 budget for Ben Ito (deadline 2026‑11‑17) is still unsent.' }, { text: 'Vendor call at 16:00 with Lena Park.' }] },
+    { section: 'upcoming', visible: true, items: [{ text: 'Quarterly planning on 2026‑11‑23.' }] },
+  ] };
+  const shown = draw(five);
+  assert.ok(shown.includes('Your revised Q1 budget for Ben Ito (deadline 2026‑11‑17) is still unsent.'), shown.join(' | '));
+  assert.ok(!shown.some((t) => /new emails/.test(t)), 'a mail count never');
+  assert.ok(!shown.includes('Vendor call at 16:00 with Lena Park.') && shown.includes('+2 more'), shown.join(' | '));
+  assert.ok(draw(five, [], true).includes('Quarterly planning on 2026‑11‑23.'), 'opened: the rest');
+  // Only the mail count: the lines speak.
+  const mail = { sections: [{ section: 'today', visible: true, items: [{ text: '27 new emails since yesterday', type: 'email_activity' }] }] };
+  assert.ok(draw(mail, [{ line_id: 'a', needs_you: true }, { line_id: 'b', needs_you: true }]).includes('2 things need your answer.'));
+  assert.ok(draw(mail, [{ line_id: 'a', needs_you: false }]).includes('Nothing needs your answer today.'));
+});

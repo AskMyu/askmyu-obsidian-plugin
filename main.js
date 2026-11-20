@@ -6899,9 +6899,14 @@ function foldRows(groups, limit = FOR_YOU_ROWS) {
   return { shown: ordered.slice(0, keep), folded: ordered.slice(keep) };
 }
 function linesAfterRead(read, before, answeredHere, closedHere = /* @__PURE__ */ new Set()) {
-  const open = read.filter((l) => !l.state || l.state === "queued" || l.state === "released" || answeredHere.has(l.line_id));
-  const have = new Set(open.map((l) => l.line_id));
-  return [...open, ...before.filter((l) => closedHere.has(l.line_id) && !have.has(l.line_id)).map((l) => ({ ...l, state: "expired", needs_you: false }))];
+  const out = read.filter((l) => !l.state || l.state === "queued" || l.state === "released" || answeredHere.has(l.line_id));
+  const have = new Set(out.map((l) => l.line_id));
+  before.forEach((l, i) => {
+    if (!answeredHere.has(l.line_id) || have.has(l.line_id)) return;
+    out.splice(Math.min(i, out.length), 0, l);
+    have.add(l.line_id);
+  });
+  return [...out, ...before.filter((l) => closedHere.has(l.line_id) && !have.has(l.line_id)).map((l) => ({ ...l, state: "expired", needs_you: false }))];
 }
 function readsAgainFor(lineId, shown2, answeredHere) {
   return typeof lineId === "string" && !!lineId && !answeredHere.has(lineId) && (shown2 ?? []).some((l) => l.line_id === lineId);
@@ -7054,8 +7059,8 @@ function chartTable(raw) {
   if (Array.isArray(raw.series)) {
     for (const s2 of raw.series) if (isObj(s2) && str3(s2.key) && str3(s2.label)) labels.set(str3(s2.key), str3(s2.label));
   }
-  const heading = (k) => labels.get(k) ?? (k === x && str3(raw.x_label) ? str3(raw.x_label) : k === str3(raw.y_key) && str3(raw.y_label) ? str3(raw.y_label) : chartHeading(k));
-  return { columns: ordered.map(heading), rows: data.map((r) => ordered.map((k) => chartValue(r[k], typeof r[k] === "number" ? unit : void 0))) };
+  const heading2 = (k) => labels.get(k) ?? (k === x && str3(raw.x_label) ? str3(raw.x_label) : k === str3(raw.y_key) && str3(raw.y_label) ? str3(raw.y_label) : chartHeading(k));
+  return { columns: ordered.map(heading2), rows: data.map((r) => ordered.map((k) => chartValue(r[k], typeof r[k] === "number" ? unit : void 0))) };
 }
 function heatmapGrid(raw) {
   const cells = isObj(raw) ? rowsOf(raw.cells) : [];
@@ -7696,15 +7701,15 @@ function buildExportManifest(s2) {
     ""
   ].join("\n");
 }
-function joinBlock(heading, body, rows, bullet = true) {
+function joinBlock(heading2, body, rows, bullet2 = true) {
   const out = [];
-  if (heading) out.push(heading, "");
+  if (heading2) out.push(heading2, "");
   if (body) out.push(body, "");
   let started = false;
   for (const row of rows) {
     if (!started && row === "") continue;
     started = true;
-    out.push(bullet ? `- ${row}` : row);
+    out.push(bullet2 ? `- ${row}` : row);
   }
   return out.join("\n").trimEnd();
 }
@@ -7831,7 +7836,7 @@ function bulletsOf(value) {
   if (!Array.isArray(value)) return [];
   return value.map((v) => v && typeof v === "object" ? readableOf(v) : String(v ?? "").trim()).filter(Boolean).map((t) => `- ${t}`);
 }
-function genericMarkdown(data, heading, opts = {}) {
+function genericMarkdown(data, heading2, opts = {}) {
   const skip = new Set(opts.skip ?? []);
   const blocks = [];
   for (const [key, value] of Object.entries(data)) {
@@ -7859,8 +7864,8 @@ function genericMarkdown(data, heading, opts = {}) {
     blocks.push(text2.length > 80 || text2.includes("\n") ? text2 : `- **${name}** \u2014 ${text2}`, "");
   }
   const body = blocks.join("\n").replace(/\n{3,}/g, "\n\n").replace(/(- \*\*[^\n]+)\n\n(?=- \*\*)/g, "$1\n").trimEnd();
-  if (!body) return heading;
-  return heading ? `${heading}
+  if (!body) return heading2;
+  return heading2 ? `${heading2}
 
 ${body}` : body;
 }
@@ -7894,8 +7899,8 @@ function componentMarkdown(component, depth, resolvePersonName, siblings, mode =
   const h = (text2) => text2 ? `${"#".repeat(Math.min(Math.max(depth, 1), 6))} ${text2}` : "";
   const sub = (text2) => text2 ? `${"#".repeat(Math.min(Math.max(depth + 1, 1), 6))} ${text2}` : "";
   const label2 = (component.label || textOf(data.title) || textOf(data.headline) || textOf(data.statement)).trim();
-  const heading = h(label2);
-  const generic = (skip = []) => genericMarkdown(data, heading, { skip, headingText: label2 });
+  const heading2 = h(label2);
+  const generic = (skip = []) => genericMarkdown(data, heading2, { skip, headingText: label2 });
   const nameOfSibling = (id) => {
     const s2 = typeof id === "string" ? siblings?.find((c) => c.id === id) : void 0;
     const d = s2?.data ?? {};
@@ -7957,24 +7962,24 @@ ${line2}` : ""].join("\n").trimEnd();
       const people = Array.isArray(data.people) ? data.people : [];
       const lines = people.map((p) => componentMarkdown({ ...p, type: "person_card" }, depth + 1, resolvePersonName, siblings)).filter(Boolean);
       const count2 = typeof data.total_count === "number" && data.total_count > people.length ? `*${people.length} of ${data.total_count}*` : "";
-      return joinBlock(heading, count2, lines, false);
+      return joinBlock(heading2, count2, lines, false);
     }
     case "person_disambiguation": {
       const q = textOf(data.query_name);
       const rows = rowsToTable(data.candidates, ["name", "role", "company", "relevance_reason"]);
-      return joinBlock(heading || (q ? h(`Which ${q}?`) : ""), textOf(data.context_hint), rows, false);
+      return joinBlock(heading2 || (q ? h(`Which ${q}?`) : ""), textOf(data.context_hint), rows, false);
     }
     // ── prose-shaped ─────────────────────────────────────────────────────
     case "text_block":
     case "sticky_note":
     case "shape":
-      return joinBlock(heading, textOf(data.text) || textOf(data.content), []);
+      return joinBlock(heading2, textOf(data.text) || textOf(data.content), []);
     case "note_editor": {
       const text2 = textOf(data.initial_text);
       return text2 ? joinBlock(h(textOf(data.context_title) || label2), text2, []) : "";
     }
     case "prepared_content":
-      return joinBlock(heading, textOf(data.content), []);
+      return joinBlock(heading2, textOf(data.content), []);
     case "offer_block": {
       const lead = textOf(data.lead);
       const gap = textOf(data.gap_line);
@@ -7988,7 +7993,7 @@ ${line2}` : ""].join("\n").trimEnd();
         ...options.length ? [...options.map((o) => `- ${o}`), "", "*Connect a calendar under Settings \u2192 askMyu \u2192 Connection.*"] : [],
         ...trust ? ["", `*${trust}*`] : []
       ];
-      return lead || lines.length ? joinBlock(heading, lead, lines, false) : "";
+      return lead || lines.length ? joinBlock(heading2, lead, lines, false) : "";
     }
     case "context_annotation": {
       const anchor = nameOfSibling(data.anchor_id);
@@ -8006,7 +8011,7 @@ ${line2}` : ""].join("\n").trimEnd();
       const desc = textOf(data.description) || textOf(data.detail);
       const rows = listOf(data.evidence);
       const foot = [textOf(data.related_entity) && `re ${personLink(textOf(data.related_entity), resolvePersonName)}`, textOf(data.source) && `via ${textOf(data.source)}`].filter(Boolean).join(" \xB7 ");
-      const block = joinBlock(heading, desc, rows);
+      const block = joinBlock(heading2, desc, rows);
       return foot ? `${block}
 
 *${foot}*` : block;
@@ -8021,7 +8026,7 @@ ${line2}` : ""].join("\n").trimEnd();
     case "advisor_panel": {
       const takes = Array.isArray(data.takes) ? data.takes : [];
       const rows = takes.map((t) => `**${labelOf(textOf(t.persona) || "advisor")}** \u2014 ${textOf(t.text)}`).filter((r) => !r.endsWith("\u2014 "));
-      return joinBlock(heading, textOf(data.triggering_event) && `*on: ${textOf(data.triggering_event)}*`, rows);
+      return joinBlock(heading2, textOf(data.triggering_event) && `*on: ${textOf(data.triggering_event)}*`, rows);
     }
     case "move_node": {
       const who = textOf(data.actor);
@@ -8034,12 +8039,12 @@ ${line2}` : ""].join("\n").trimEnd();
     case "reflection_prompt": {
       const q = textOf(data.question) || textOf(data.prompt) || textOf(data.text);
       const ctx = textOf(data.context);
-      return joinBlock(heading, q ? quote(q) : "", ctx ? [`*${ctx}*`] : [], false);
+      return joinBlock(heading2, q ? quote(q) : "", ctx ? [`*${ctx}*`] : [], false);
     }
     case "seed_follow_up":
     case "inline_chat": {
       const q = textOf(data.prompt);
-      return q ? joinBlock(heading, quote(q), listOf(data.options)) : "";
+      return q ? joinBlock(heading2, quote(q), listOf(data.options)) : "";
     }
     case "decision_frame": {
       const q = textOf(data.question) || textOf(data.prompt);
@@ -8059,12 +8064,12 @@ ${line2}` : ""].join("\n").trimEnd();
       if (prereqs.length) rows.push("", "**Before either**", ...prereqs.map((p) => `- [ ] ${p}`));
       const summary = textOf(data.summary);
       if (summary) rows.push("", `*${summary}*`);
-      return joinBlock(heading, q ? quote(q) : "", rows, false);
+      return joinBlock(heading2, q ? quote(q) : "", rows, false);
     }
     case "action_controls": {
       if (mode === "pane") return "";
       const actions = Array.isArray(data.actions) ? data.actions : [];
-      return joinBlock(heading, "", actions.map((a) => textOf(a.label)).filter(Boolean));
+      return joinBlock(heading2, "", actions.map((a) => textOf(a.label)).filter(Boolean));
     }
     case "trackable": {
       const title = textOf(data.title) || label2;
@@ -8093,7 +8098,7 @@ ${line2}` : ""].join("\n").trimEnd();
         }
       }
       const summary = textOf(data.summary);
-      const block = joinBlock(heading, "", rows, false);
+      const block = joinBlock(heading2, "", rows, false);
       return summary ? `${block}
 
 *${summary}*` : block;
@@ -8101,7 +8106,7 @@ ${line2}` : ""].join("\n").trimEnd();
     case "prediction_table": {
       const framing = [textOf(data.framing), textOf(data.horizon_label) && `*(${textOf(data.horizon_label)})*`].filter(Boolean).join(" ");
       const rows = rowsToTable(data.predictions, ["what", "by_when", "confidence", "who_else_affected", "context"]);
-      const block = joinBlock(heading, framing, rows, false);
+      const block = joinBlock(heading2, framing, rows, false);
       return textOf(data.footer) ? `${block}
 
 *${textOf(data.footer)}*` : block;
@@ -8114,7 +8119,7 @@ ${line2}` : ""].join("\n").trimEnd();
         return when ? `- \`${when.slice(0, 10)}\` ${what}` : `- ${what}`;
       });
       const trend = textOf(data.trend);
-      return joinBlock(heading, trend ? `*${trend}*` : "", lines, false);
+      return joinBlock(heading2, trend ? `*${trend}*` : "", lines, false);
     }
     case "career_position_timeline": {
       const positions = Array.isArray(data.positions) ? data.positions : [];
@@ -8124,13 +8129,13 @@ ${line2}` : ""].join("\n").trimEnd();
       if (parallel.length) rows.push("", "**Alongside**", ...parallel.map((p) => `- \`${span(p)}\` ${textOf(p.title)}, ${textOf(p.company)}`));
       const s2 = data.summary ?? {};
       const summary = [typeof s2.total_years === "number" && `${s2.total_years} years`, typeof s2.companies === "number" && `${s2.companies} companies`, textOf(s2.primary_family), textOf(s2.education)].filter(Boolean).join(" \xB7 ");
-      return joinBlock(heading || h("Career"), summary ? `*${summary}*` : "", rows, false);
+      return joinBlock(heading2 || h("Career"), summary ? `*${summary}*` : "", rows, false);
     }
     case "micro_arc_timeline": {
       const phases = Array.isArray(data.phases) ? data.phases : [];
       const out = [];
       for (const ph of phases) {
-        out.push((heading ? sub : h)(`${textOf(ph.name)}${textOf(ph.status) ? ` *(${textOf(ph.status)})*` : ""}`), "");
+        out.push((heading2 ? sub : h)(`${textOf(ph.name)}${textOf(ph.status) ? ` *(${textOf(ph.status)})*` : ""}`), "");
         const arcs = Array.isArray(ph.micro_arcs) ? ph.micro_arcs : [];
         for (const a of arcs) {
           const when = typeof a.timestamp === "number" ? `\`${new Date(a.timestamp).toISOString().slice(0, 10)}\` ` : "";
@@ -8138,7 +8143,7 @@ ${line2}` : ""].join("\n").trimEnd();
         }
         out.push("");
       }
-      return joinBlock(heading, "", out, false);
+      return joinBlock(heading2, "", out, false);
     }
     case "career_trajectory": {
       const title = textOf(data.pattern_name) || label2;
@@ -8159,7 +8164,7 @@ ${line2}` : ""].join("\n").trimEnd();
   *${textOf(b.contextualized_narrative)}*` : ""}`);
       const lean = textOf(data.current_lean);
       if (lean) rows.push("", `*Leaning: ${lean}${textOf(data.lean_reasoning) ? ` \u2014 ${textOf(data.lean_reasoning)}` : ""}*`);
-      return joinBlock(heading || h(`From ${textOf(data.from_phase) || "here"}`), "", rows, false);
+      return joinBlock(heading2 || h(`From ${textOf(data.from_phase) || "here"}`), "", rows, false);
     }
     case "strategy_sequence": {
       const steps = Array.isArray(data.steps) ? data.steps : [];
@@ -8174,12 +8179,12 @@ ${line2}` : ""].join("\n").trimEnd();
         rows.push(`${typeof s2.step_number === "number" ? s2.step_number : rows.length + 1}. ${textOf(s2.action)}${who}${textOf(s2.timing) ? ` *(${textOf(s2.timing)})*` : ""}${textOf(s2.rationale) ? ` \u2014 ${textOf(s2.rationale)}` : ""}`);
       }
       const body = [textOf(data.context), textOf(data.timing_note) && `*${textOf(data.timing_note)}*`].filter(Boolean).join("\n\n");
-      return joinBlock(heading, body, rows, false);
+      return joinBlock(heading2, body, rows, false);
     }
     case "what_if_scenarios": {
       const rows = rowsToTable(data.scenarios, ["scenario", "conditions", "outcome_phase", "outcome_probability", "timeline_weeks"]);
       const levers = rowsToTable(data.levers, ["lever", "impact", "current_signal", "target_signal"]);
-      return joinBlock(heading, "", [...rows, ...levers.length ? ["", "**Levers**", "", ...levers] : []], false);
+      return joinBlock(heading2, "", [...rows, ...levers.length ? ["", "**Levers**", "", ...levers] : []], false);
     }
     case "possibility_space": {
       const rows = [];
@@ -8187,7 +8192,7 @@ ${line2}` : ""].join("\n").trimEnd();
         const table = rowsToTable(data[key]);
         if (table.length) rows.push(`**${title}**`, "", ...table, "");
       }
-      return joinBlock(heading, "", rows, false);
+      return joinBlock(heading2, "", rows, false);
     }
     case "career_pathway": {
       const from = data.from ?? {};
@@ -8215,7 +8220,7 @@ ${line2}` : ""].join("\n").trimEnd();
       const cmp = Object.entries(uvc);
       if (cmp.length) rows.push("", "| | You | Cohort |", "| --- | --- | --- |", ...cmp.map(([k, v]) => `| **${labelOf(k)}** | ${cellOf("v", v.user)} | ${cellOf("v", v.cohort_avg ?? v.cohort_threshold)} |`));
       if (textOf(data.confidence_note)) rows.push("", `*${textOf(data.confidence_note)}*`);
-      return joinBlock(heading, head, rows, false);
+      return joinBlock(heading2, head, rows, false);
     }
     case "alignment_hierarchy": {
       const tiers = Array.isArray(data.tiers) ? data.tiers : [];
@@ -8230,7 +8235,7 @@ ${line2}` : ""].join("\n").trimEnd();
       }
       const subj = textOf(data.subject_name);
       const head = [typeof data.overall_alignment_score === "number" && `**${Math.round(data.overall_alignment_score * 100)}% aligned**`, typeof data.active_disagreement_count === "number" && `${data.active_disagreement_count} open disagreements`, typeof data.lookback_days === "number" && `last ${data.lookback_days} days`].filter(Boolean).join(" \xB7 ");
-      return joinBlock(heading || (subj ? h(`Alignment with ${personLink(subj, resolvePersonName)}`) : ""), head, rows, false);
+      return joinBlock(heading2 || (subj ? h(`Alignment with ${personLink(subj, resolvePersonName)}`) : ""), head, rows, false);
     }
     case "budget_allocation": {
       const unit = textOf(data.budget_unit);
@@ -8238,7 +8243,7 @@ ${line2}` : ""].join("\n").trimEnd();
       const rows = items.length ? [`| | ${unit || "Value"} |`, "| --- | ---: |", ...items.map((i) => `| ${textOf(i.label)} | ${cellOf("v", i.current_value)} |`)] : [];
       if (typeof data.total_budget === "number" && rows.length) rows.push(`| **Total** | **${data.total_budget}** |`);
       const body = [textOf(data.constraint_text), textOf(data.reflection_text) && `*${textOf(data.reflection_text)}*`].filter(Boolean).join("\n\n");
-      return joinBlock(heading, body, rows, false);
+      return joinBlock(heading2, body, rows, false);
     }
     case "perspective_panel": {
       const side = (key) => {
@@ -8250,7 +8255,7 @@ ${line2}` : ""].join("\n").trimEnd();
       const rows = [...side("left_perspective"), ...side("right_perspective")];
       const asym = rowsToTable(data.asymmetries, ["topic", "left_view", "right_view"]);
       if (asym.length) rows.push("**Where the readings diverge**", "", ...asym);
-      return joinBlock(heading, "", rows, false);
+      return joinBlock(heading2, "", rows, false);
     }
     // ── process & change ─────────────────────────────────────────────────
     case "process_card": {
@@ -8269,10 +8274,10 @@ ${textOf(data.summary)}`.trim() : textOf(data.summary), []);
     // ── drawn structure ──────────────────────────────────────────────────
     case "diagram": {
       const code = textOf(data.source) || textOf(data.mermaid) || textOf(data.definition) || textOf(data.code);
-      if (!code) return joinBlock(heading, textOf(data.fallback_text), []);
+      if (!code) return joinBlock(heading2, textOf(data.fallback_text), []);
       const caption = textOf(data.caption);
       const source = textOf(data.data_source);
-      return joinBlock(heading, "", ["```mermaid", code, "```", ...caption ? ["", `*${caption}*`] : [], ...source ? ["", source] : []], false);
+      return joinBlock(heading2, "", ["```mermaid", code, "```", ...caption ? ["", `*${caption}*`] : [], ...source ? ["", source] : []], false);
     }
     case "chart": {
       const rc = data.recharts_config ?? {};
@@ -8282,8 +8287,8 @@ ${textOf(data.summary)}`.trim() : textOf(data.summary), []);
       const rows = shaped ? tableLines(shaped) : rowsToTable(rc.data ?? vlData.values ?? data.data ?? data.rows);
       const caption = textOf(data.fallback_text) || textOf(data.summary) || textOf(data.caption);
       const src = chartSourceCaption(data.data_source);
-      if (rows.length === 0 && !caption) return joinBlock(heading, "", ["*No data in this chart yet.*"], false);
-      return joinBlock(heading, "", [...rows, ...caption ? ["", caption] : [], ...src ? ["", `*${src}*`] : []], false);
+      if (rows.length === 0 && !caption) return joinBlock(heading2, "", ["*No data in this chart yet.*"], false);
+      return joinBlock(heading2, "", [...rows, ...caption ? ["", caption] : [], ...src ? ["", `*${src}*`] : []], false);
     }
     case "connection_overlay": {
       const from = nameOfSibling(data.from_id);
@@ -8300,7 +8305,7 @@ ${textOf(data.summary)}`.trim() : textOf(data.summary), []);
       const rows = nodes.filter((n) => n.id !== centre.id).map((n) => `- ${textOf(n.type) === "person" ? personLink(textOf(n.name), resolvePersonName) : textOf(n.name)}${textOf(n.health_tier) ? ` *(${textOf(n.health_tier).replace(/_/g, " ")})*` : ""}`);
       const edges = Array.isArray(data.edges) ? data.edges : [];
       if (edges.length) rows.push("", ...edges.map((e) => `- ${nameOf.get(textOf(e.source)) || textOf(e.source)} \u2194 ${nameOf.get(textOf(e.target)) || textOf(e.target)}${textOf(e.label) ? ` \u2014 ${textOf(e.label)}` : ""}`));
-      return joinBlock(heading || (textOf(centre.name) ? h(`Around ${personLink(textOf(centre.name), resolvePersonName)}`) : ""), "", rows, false);
+      return joinBlock(heading2 || (textOf(centre.name) ? h(`Around ${personLink(textOf(centre.name), resolvePersonName)}`) : ""), "", rows, false);
     }
     case "hierarchy": {
       const walk = (node, indent) => {
@@ -8310,7 +8315,7 @@ ${textOf(data.summary)}`.trim() : textOf(data.summary), []);
         return [line2, ...kids.flatMap((k) => walk(k, indent + 1))];
       };
       const root = data.root;
-      return joinBlock(heading, "", root ? walk(root, 0) : [], false);
+      return joinBlock(heading2, "", root ? walk(root, 0) : [], false);
     }
     case "circle_pack": {
       const nodes = Array.isArray(data.nodes) ? data.nodes : [];
@@ -8322,12 +8327,12 @@ ${textOf(data.summary)}`.trim() : textOf(data.summary), []);
         byGroup.set(g, [...byGroup.get(g) ?? [], `- ${personLink(textOf(n.label), resolvePersonName)}${typeof n.value === "number" ? ` (${n.value})` : ""}${textOf(n.health_tier) ? ` *(${textOf(n.health_tier).replace(/_/g, " ")})*` : ""}`]);
       }
       const rows = [...byGroup.entries()].flatMap(([g, lines]) => [`**${g}**`, ...lines, ""]);
-      return joinBlock(heading, "", rows, false);
+      return joinBlock(heading2, "", rows, false);
     }
     case "matrix_view": {
       const entities = Array.isArray(data.entities) ? data.entities : [];
       const cells = Array.isArray(data.cells) ? data.cells : [];
-      if (!entities.length) return heading;
+      if (!entities.length) return heading2;
       const cell2 = new Map(cells.map((c) => [`${textOf(c.row_id)}|${textOf(c.col_id)}`, c]));
       const rows = [
         `| ${textOf(data.value_label) || ""} | ${entities.map((e) => textOf(e.label)).join(" | ")} |`,
@@ -8339,7 +8344,7 @@ ${textOf(data.summary)}`.trim() : textOf(data.summary), []);
           return textOf(v.label) ? `${n} (${textOf(v.label)})` : n;
         }).join(" | ")} |`)
       ];
-      return joinBlock(heading, "", rows, false);
+      return joinBlock(heading2, "", rows, false);
     }
     case "venn_diagram": {
       const sets = Array.isArray(data.sets) ? data.sets : [];
@@ -8354,7 +8359,7 @@ ${textOf(data.summary)}`.trim() : textOf(data.summary), []);
       }
       const source = textOf(data.data_source);
       if (source) rows.push("", source);
-      return joinBlock(heading, "", rows, false);
+      return joinBlock(heading2, "", rows, false);
     }
     case "card_section": {
       const s2 = normalizeSection({ section_type: textOf(data.section_type), title: textOf(data.section_title) || label2, data: data.section_data });
@@ -8398,16 +8403,16 @@ function buildSelfMarkdown(card) {
   }
   const sectionNotes = (card?.sections ?? []).map((raw) => ({ type: raw.section_type, lines: sectionMarkdown(raw) }));
   const headingOf = (type) => {
-    const heading = type ? sectionNotes.find((n) => n.type === type && n.lines)?.lines?.[1]?.replace(/^## /, "") : void 0;
-    return heading && !/[[\]|#^]/.test(heading) ? heading : null;
+    const heading2 = type ? sectionNotes.find((n) => n.type === type && n.lines)?.lines?.[1]?.replace(/^## /, "") : void 0;
+    return heading2 && !/[[\]|#^]/.test(heading2) ? heading2 : null;
   };
   const tiles = (card?.tiles ?? []).filter((t) => t?.label?.trim() && t?.value?.trim());
   if (tiles.length > 0) {
     rendered++;
     parts.push("", "## At a glance", "");
     for (const t of tiles) {
-      const heading = headingOf(t.tap_section_type);
-      const value = heading ? `[[#${heading}|${t.value}]]` : t.value;
+      const heading2 = headingOf(t.tap_section_type);
+      const value = heading2 ? `[[#${heading2}|${t.value}]]` : t.value;
       parts.push(`- **${t.label}** \u2014 ${value}${t.sub_value ? ` (${t.sub_value})` : ""}`);
     }
   }
@@ -8824,7 +8829,7 @@ function vennOverlapLabel(own, setNames, setCount) {
 }
 
 // src/buildStamp.ts
-var BUILD_STAMP = true ? "0.1.4" : "dev";
+var BUILD_STAMP = true ? "0.1.5" : "dev";
 
 // src/calendarMyu.ts
 function isMyuCalendarEntry(e) {
@@ -9186,6 +9191,9 @@ var Api = class {
       { token, device_id: deviceId, client_version: "0.1.0" },
       { anonymous: true }
     );
+  }
+  endSignIn() {
+    return this.transport.post("/account/logout", { reason: "signed_out" });
   }
   escrowMDEK(mdekBase64, deviceId) {
     return this.transport.post("/account/session/escrow-key", { mdek: mdekBase64, device_id: deviceId });
@@ -9914,6 +9922,12 @@ function addressHeldOutcome(status, body) {
     const left = typeof o.tries_left === "number" && Number.isFinite(o.tries_left) ? o.tries_left : void 0;
     return { kind: "wrong", message: message ?? ADDRESS_HELD_WORDS.wrong + (left !== void 0 ? " " + ADDRESS_HELD_WORDS.triesLeft(left) : ""), ...left !== void 0 ? { tries_left: left } : {} };
   }
+  if (status === 429 && [o.code, o.error, o.err].includes("too_many_tries")) {
+    const given = [o.retry_after_seconds, o.retry_after, o.seconds, o.wait_seconds].map((x) => typeof x === "string" && x.trim() ? Number(x) : x).find((x) => typeof x === "number" && Number.isFinite(x) && x > 0);
+    const seconds = Math.ceil(given ?? 15 * 60);
+    const minutes = Math.max(1, Math.ceil(seconds / 60));
+    return { kind: "wait", message: message ?? `Too many tries. Try again in ${minutes === 1 ? "a minute" : `${minutes} minutes`}.`, seconds };
+  }
   if (status === 429) return { kind: "too_many", message: message ?? ADDRESS_HELD_WORDS.tooMany };
   if (status === 410) return { kind: "expired", message: message ?? ADDRESS_HELD_WORDS.expired };
   return { kind: "failed", message: message ?? ADDRESS_HELD_WORDS.failed };
@@ -10013,11 +10027,11 @@ var AskMyuSettingTab = class extends import_obsidian14.PluginSettingTab {
    * to a `control` definition — individually searchable — is the follow-up.)
    */
   getSettingDefinitions() {
-    const section = (heading, aliases, render, visible) => ({
+    const section = (heading2, aliases, render, visible) => ({
       type: "group",
-      heading,
+      heading: heading2,
       ...visible ? { visible } : {},
-      items: [{ name: heading, aliases, render: (setting) => mountInRow(setting, render) }]
+      items: [{ name: heading2, aliases, render: (setting) => mountInRow(setting, render) }]
     });
     return [
       // The brandmark, first — the one brand moment in settings. A render item
@@ -11429,8 +11443,10 @@ function answerDraftOf(reply, line2) {
   const where = str7(d.where) ?? str7(d.channel) ?? str7(d.place) ?? names.find((n) => n.startsWith("#")) ?? null;
   const who = whoFor({ names, where });
   const placed = isBearsOnLine(line2) || isCheckPromiseLine(line2) || !own && !!told;
-  const lead = placed && service ? W.goesTo(who, placeWords(service, where)) : W.messageTo(who);
-  return { text: text2, lead, toName: who, said: !own && told ? str7(told.readback) : null };
+  const mustSee = list5(d.must_see).map(str7).filter((x) => !!x);
+  const saysTo = mustSee.some((x) => /^To\s/.test(x));
+  const lead = saysTo ? "" : placed && service && d.connected !== false ? W.goesTo(who, placeWords(service, where)) : W.messageTo(who);
+  return { text: text2, lead, toName: who, said: !own && told ? str7(told.readback) : null, mustSee };
 }
 var REPEATED_SECTIONS = /* @__PURE__ */ new Set(["noticed", "repeated", "what_has_repeated"]);
 var isRepeatedSection = (s2) => REPEATED_SECTIONS.has(norm(str7(obj2(s2)?.section_type)));
@@ -11786,6 +11802,41 @@ function spaceDoorWords(mine) {
   return ask;
 }
 
+// src/choiceRoles.ts
+var WAY_OUT_IDS = [
+  "no",
+  "skip",
+  "stop",
+  "let_go",
+  "drop",
+  "dropped",
+  "leave",
+  "leave_out",
+  "not_mine",
+  "not_a_goal",
+  "not_promise",
+  "not_that",
+  "not_on_linkedin",
+  "reject",
+  "none",
+  "dismiss"
+];
+var LATER_IDS = ["not_now", "later", "hold_time", "renegotiate"];
+var OWN_ANSWERS_KINDS = ["send", "send_many", "send_batch"];
+function choiceRole(choice) {
+  const role = choice?.role;
+  if (role === "act" || role === "way_out" || role === "later") return role;
+  const id = choice?.id ?? "";
+  if (WAY_OUT_IDS.includes(id)) return "way_out";
+  if (LATER_IDS.includes(id)) return "later";
+  return "act";
+}
+function waysOutOf(line2) {
+  if (line2.kind && OWN_ANSWERS_KINDS.includes(line2.kind)) return { later: false, never: false };
+  const roles = (line2.choices ?? []).map((c) => choiceRole(c));
+  return { later: !roles.includes("later"), never: !roles.includes("way_out") };
+}
+
 // src/identityLines.ts
 var PICK_SHOWN = 6;
 var PICK_WAIT_MS = 250;
@@ -11875,7 +11926,7 @@ var LINE_ANSWER_WORDS = {
   failed: "Could not send this to Myu. Try again in a moment.",
   offline: "You're offline. Try again when you're back online.",
   /** R19: a message Myu wrote for the person to send themselves (mirror of shared `DRAFT_WORDS`). */
-  copy: "Copy",
+  copy: "Copy it",
   copied: "Copied",
   copyFailed: "It did not copy. Select the message and copy it yourself.",
   draftLink: "Open the link",
@@ -11887,18 +11938,12 @@ function answersInConversation(line2) {
   if (!isAsk(line2)) return false;
   return isPickMany(line2) || typedChoiceOf({ typed: line2.typed, choices: known(line2.choices) }) !== null;
 }
-function carriesWayOut(line2) {
-  return (line2.choices ?? []).some((c) => {
-    const label2 = (c?.label ?? "").trim().toLowerCase();
-    return c?.id === "not_now" || c?.id === "later" || c?.id === "leave" || label2 === "not now" || label2 === "leave it";
-  });
-}
 function quietWaysOut(line2) {
-  if (carriesWayOut(line2)) return [];
-  return [
-    { id: "later", label: LINE_ANSWER_WORDS.later, answer: { later: true }, quiet: true },
-    { id: "dismiss", label: LINE_ANSWER_WORDS.never, answer: { dismiss: true }, quiet: true }
-  ];
+  const w = waysOutOf(line2);
+  const out = [];
+  if (w.later) out.push({ id: "later", label: LINE_ANSWER_WORDS.later, answer: { later: true }, quiet: true });
+  if (w.never) out.push({ id: "dismiss", label: LINE_ANSWER_WORDS.never, answer: { dismiss: true }, quiet: true });
+  return out;
 }
 var CONNECT_LINE_KINDS = ["connect_invite", "invite_connect", "connect_invitation", "invitation_connect"];
 function isConnectLine(line2) {
@@ -11918,7 +11963,8 @@ function lineButtons(line2) {
   if (isAsk(line2) && line2.ask_kind !== "assume" && (isFullDayLine(line2) || isBearsOnLine(line2) || isCheckPromiseLine(line2))) {
     if (isCheckPromiseLine(line2)) {
       const own = known(line2.choices);
-      return (own.length ? own : CHECK_PROMISE_CHOICES.map((c) => ({ id: c.id, label: c.label }))).map((c) => ({ id: c.id, label: c.label, answer: { choice_id: c.id }, quiet: c.id === "let_go" || c.id === "keep" }));
+      const chosen = own.length ? own : CHECK_PROMISE_CHOICES.map((c) => ({ id: c.id, label: c.label }));
+      return [...chosen.map((c) => ({ id: c.id, label: c.label, answer: { choice_id: c.id }, quiet: false })), ...quietWaysOut({ ...line2, choices: chosen })];
     }
     const answerFor = (id) => line2.ask_kind === "yes_no" && (id === "yes" || id === "no") ? { yes: id === "yes" } : { choice_id: id };
     if (isFullDayLine(line2)) {
@@ -11928,6 +11974,7 @@ function lineButtons(line2) {
   }
   switch (line2.ask_kind) {
     case "tell":
+      return known(line2.choices).map((c) => ({ id: c.id, label: c.label, answer: { choice_id: c.id }, quiet: true }));
     case "wait":
       return [];
     case "assume":
@@ -12027,7 +12074,14 @@ async function pressLineButton(deps, line2, button) {
   const notes = actions.flatMap((a) => a.kind === "note" ? [a.text] : []);
   const links = actions.flatMap((a) => a.kind === "link" ? [a.link] : []);
   const own = answerDraftOf(res.data, line2);
-  const draft = actions.find((a) => a.kind === "draft")?.draft ?? (own ? { text: own.text, label: LINE_ANSWER_WORDS.draftLink, lead: own.lead, ...own.toName ? { to_name: own.toName } : {} } : void 0);
+  const draft = actions.find((a) => a.kind === "draft")?.draft ?? (own ? {
+    text: own.text,
+    label: LINE_ANSWER_WORDS.draftLink,
+    ...own.lead ? { lead: own.lead } : {},
+    ...own.toName ? { to_name: own.toName } : {},
+    ...own.mustSee.length ? { must_see: own.mustSee } : {},
+    ..."choice_id" in button.answer && button.answer.choice_id === "copy" && OWN_ANSWERS_KINDS.includes(line2.kind ?? "") ? { copyAtOpen: true } : {}
+  } : void 0);
   const conversation = actions.find((a) => a.kind === "conversation")?.conversation;
   const also = conversation ? { conversation } : {};
   const effects = (res.data.effects ?? []).map((e) => ({ type: e.type, text: typeof e.text === "string" ? e.text : void 0, move_id: typeof e.move_id === "string" ? e.move_id : void 0 }));
@@ -12037,7 +12091,8 @@ async function pressLineButton(deps, line2, button) {
   const undo = moveId && said ? { undo: { said, moveId } } : {};
   if (res.data.line_open) return { ui: { note: said, notes, links }, settled: false, open, ...also, ...undo };
   const shown2 = said || own?.said || "";
-  return { ui: { said: shown2, good: !button.answer.dismiss && !button.answer.later, notes, links, ...draft ? { draft } : {} }, settled: true, open, ...also, ...undo };
+  const drawn = draft?.must_see ? { ...draft, must_see: draft.must_see.filter((m) => /^To\s/.test(m) || !shown2.includes(m)) } : draft;
+  return { ui: { said: shown2, good: !button.answer.dismiss && !button.answer.later, notes, links, ...drawn ? { draft: drawn } : {} }, settled: true, open, ...also, ...undo };
 }
 
 // src/debriefPane.ts
@@ -13448,8 +13503,89 @@ function eachLinkWords(byChoice) {
   return byChoice.length > 0 && byChoice.every((l) => l.kind === "linkedin_profile") ? LINE_LINK_WORDS.eachProfile : LINE_LINK_WORDS.eachPage;
 }
 
+// src/lineShort.ts
+var LINE_SHORT_ON = true;
+var LINE_SHORT_LINES = 2;
+var LINE_SHORT_CHARS = 240;
+var LINE_MORE_WORD = "read all";
+var MUST_SEE = [/so this can go\.$/, /^Goes (by mail from Myu|through your)\b/, /^This is a trial setup\b/, /\b(won't get it from here|will not get this here)\b/];
+var LINE_WHOLE_KINDS = ["send", "send_many", "send_batch"];
+function lineShortForm(words, serverShort, mustSee, kind) {
+  const whole2 = (words ?? "").trim();
+  if (!LINE_SHORT_ON || !!kind && LINE_WHOLE_KINDS.includes(kind)) return { short: whole2, cut: false };
+  const own = typeof serverShort === "string" ? serverShort.trim() : "";
+  const shortOf = own && own.length < whole2.length ? own : cutOf(whole2);
+  const rows = whole2.split("\n").map((r) => r.trim()).filter(Boolean);
+  const given = Array.isArray(mustSee) ? mustSee.map((s2) => typeof s2 === "string" ? s2.trim() : "").filter(Boolean) : null;
+  const wanted = given ?? rows.filter((r) => MUST_SEE.some((m) => m.test(r)));
+  const kept = [...new Set(wanted)].filter((r) => !shortOf.includes(r));
+  const short = kept.length ? `${shortOf}
+${kept.join("\n")}` : shortOf;
+  return { short, cut: rows.some((r) => !short.includes(r)) };
+}
+function cutAt(text2, max) {
+  if (text2.length <= max) return text2;
+  const room = text2.slice(0, max);
+  const at = Math.max(room.lastIndexOf(" "), room.lastIndexOf("\n"));
+  return `${(at > max / 2 ? room.slice(0, at) : room).trimEnd()}\u2026`;
+}
+var heading = (row) => row.trim().endsWith(":");
+var bullet = (row) => /^[•·\-*]\s/.test(row.trim());
+var ONE_LINE_CHARS = LINE_SHORT_CHARS / 2;
+var ITEM_ROWS_MAX = 3;
+function cutOf(whole2) {
+  const rows = whole2.split("\n");
+  let seen = 0;
+  let end = rows.length;
+  for (let i = 0; i < rows.length; i++) {
+    if (!rows[i].trim()) continue;
+    seen += 1;
+    if (seen === LINE_SHORT_LINES) {
+      end = i + 1;
+      break;
+    }
+  }
+  const short = rows.slice(0, end).join("\n").trimEnd();
+  if (!short.endsWith(":")) return cutAt(short, LINE_SHORT_CHARS);
+  let first = end;
+  while (first < rows.length && (!rows[first].trim() || heading(rows[first]))) first += 1;
+  if (first >= rows.length) {
+    const kept = [];
+    for (const r of rows.filter((x) => x.trim())) {
+      if (kept.length && [...kept, r].join("\n").length > LINE_SHORT_CHARS) break;
+      kept.push(r);
+    }
+    return cutAt(kept.join("\n").trimEnd(), LINE_SHORT_CHARS);
+  }
+  let last = first + 1;
+  while (last < rows.length && last - first < ITEM_ROWS_MAX && rows[last].trim() && !heading(rows[last]) && !bullet(rows[last])) last += 1;
+  const taken = rows.slice(0, last);
+  const joined = taken.join("\n").trimEnd();
+  if (joined.length <= LINE_SHORT_CHARS) return joined;
+  return taken.map((r, at) => at >= first ? cutAt(r, ONE_LINE_CHARS) : r).join("\n").trimEnd();
+}
+
 // src/views/lineAsk.ts
 var choosingDay = /* @__PURE__ */ new Set();
+var wordsOpened = /* @__PURE__ */ new Set();
+function fillLineWords(el, line2, words, after) {
+  const extra = line2;
+  const shortForm = lineShortForm(words, extra.short_text, extra.must_see, line2.kind);
+  const fill = (whole2) => {
+    el.empty();
+    el.setText(whole2 || !shortForm.cut ? words : shortForm.short);
+    if (!whole2 && shortForm.cut) {
+      const more = el.createEl("button", { cls: "myu-line-more", text: LINE_MORE_WORD });
+      more.onclick = (e) => {
+        e?.stopPropagation();
+        wordsOpened.add(line2.line_id);
+        fill(true);
+      };
+    }
+    after?.(el);
+  };
+  fill(wordsOpened.has(line2.line_id));
+}
 var typedDay = /* @__PURE__ */ new Map();
 var choosingWho = /* @__PURE__ */ new Set();
 var typedWho = /* @__PURE__ */ new Map();
@@ -13579,8 +13715,15 @@ function renderLineDraft(host, draft) {
   box.value = draft.text;
   box.setAttr("rows", String(Math.min(9, Math.max(3, Math.ceil(draft.text.length / 45)))));
   box.setAttr("aria-label", draft.to_name ? `Your message to ${draft.to_name}` : "Your message");
+  for (const s2 of draft.must_see ?? []) wrap.createDiv({ cls: "myu-quiet myu-line-note myu-line-draft-must", text: s2 });
   const acts = wrap.createDiv({ cls: "myu-mrow-acts myu-line-draft-acts" });
   const copy = acts.createEl("button", { cls: "myu-aff", text: LINE_ANSWER_WORDS.copy });
+  if (draft.copyAtOpen) {
+    void Promise.resolve().then(() => navigator.clipboard.writeText(draft.text)).then(
+      () => copy.setText(LINE_ANSWER_WORDS.copied),
+      () => void 0
+    );
+  }
   let failed = null;
   copy.onclick = async () => {
     try {
@@ -13620,8 +13763,10 @@ function renderLineAsk(host, line2, ui, on, opts = {}) {
   }
   if (opts.showText !== false) {
     const cls = line2.ask_kind === "tell" ? "myu-done" : line2.ask_kind === "wait" ? "myu-quiet" : "myu-line";
-    const el = host.createDiv({ cls: `${cls} myu-line-words`, text: lineWords(line2), attr: lineIdAttr(line2.line_id) });
-    if (showEstimate(line2)) el.createSpan({ cls: "myu-est", text: (line2.est ?? "").trim() });
+    const el = host.createDiv({ cls: `${cls} myu-line-words`, attr: lineIdAttr(line2.line_id) });
+    fillLineWords(el, line2, lineWords(line2), (into) => {
+      if (showEstimate(line2)) into.createSpan({ cls: "myu-est", text: (line2.est ?? "").trim() });
+    });
     for (const sentence2 of lineSentences(line2)) host.createDiv({ cls: "myu-line-sentence", text: sentence2 });
   }
   if (ui.closed) {
@@ -14815,20 +14960,25 @@ var TodayView = class extends import_obsidian16.ItemView {
   /**
    * "From Myu — Friday, 12 September", then the brief in Myu's voice. The
    * title is the label that says who is speaking, so the voice needs no
-   * whisper of its own. The first two items lead; the rest sit behind
+   * whisper of its own. The first `today` item leads (2026-11-19); the rest sit behind
    * `+N more` (R7: OUR trimming is disclosed — the server already disclosed
    * its own via suppressed_count).
    */
   renderBrief(root) {
     const zone = root.createDiv({ cls: "myu-zone myu-from-myu" });
     zone.createEl("h2", { cls: "myu-from-myu-title", text: `From Myu \u2014 ${dateTitle(/* @__PURE__ */ new Date())}` });
-    const all = (this.brief?.sections ?? []).filter((s2) => s2.visible && s2.section !== "week").flatMap((s2) => s2.items ?? []);
-    const items = this.briefExpanded ? all : all.slice(0, 2);
-    const held = all.length - 2;
-    if (items.length === 0) {
+    const SKIPPED = ["weekly_movement", "email_activity"];
+    const said = (it) => !!it.text?.trim() && !SKIPPED.includes(it.type ?? "");
+    const visible = (this.brief?.sections ?? []).filter((s2) => s2.visible && s2.section !== "week");
+    const lead = visible.filter((s2) => s2.section === "today").flatMap((s2) => s2.items ?? []).find(said);
+    const all = [...lead ? [lead] : [], ...visible.flatMap((s2) => s2.items ?? []).filter((it) => it !== lead && said(it))];
+    const items = this.briefExpanded ? all : all.slice(0, lead ? 1 : 0);
+    const held = all.length - items.length;
+    if (!lead) {
+      const needs = (this.todayLines ?? []).filter((l) => l.needs_you === true).length;
       zone.createEl("p", {
-        cls: "myu-quiet",
-        text: this.loadedOnce ? "Nothing urgent today." : "Still loading your day\u2026"
+        cls: needs > 0 ? "myu-voice myu-brief-line" : "myu-quiet",
+        text: !this.loadedOnce ? "Still loading your day\u2026" : needs === 1 ? "1 thing needs your answer." : needs > 1 ? `${needs} things need your answer.` : "Nothing needs your answer today."
       });
     }
     for (const item of items) {
@@ -14896,8 +15046,10 @@ var TodayView = class extends import_obsidian16.ItemView {
         return;
       }
       const cls = l.ask_kind === "tell" ? "myu-done" : l.ask_kind === "wait" ? "myu-quiet" : "myu-line";
-      const line2 = body.createDiv({ cls, text: (l.text ?? "").trim(), attr: lineIdAttr(l.line_id) });
-      if (l.est && l.ask_kind !== "tell" && l.ask_kind !== "wait") line2.createSpan({ cls: "myu-est", text: l.est });
+      const line2 = body.createDiv({ cls: `${cls} myu-line-words`, attr: lineIdAttr(l.line_id) });
+      fillLineWords(line2, l, (l.text ?? "").trim(), (into) => {
+        if (l.est && l.ask_kind !== "tell" && l.ask_kind !== "wait") into.createSpan({ cls: "myu-est", text: l.est });
+      });
     };
     saidHere.forEach(say);
     if (stack.top) say(stack.top);
@@ -19275,6 +19427,9 @@ var _MockApi = class _MockApi {
       background_work_consented: false
     });
   }
+  async endSignIn() {
+    return ok({ success: true });
+  }
   async escrowMDEK() {
     return this.guard() ?? ok({});
   }
@@ -21481,8 +21636,18 @@ var UnlockMachine = class {
       this.setState("blocked");
     }
   }
-  /** Settings: disconnect. Local material goes; the server's KEK is the user's to revoke. */
+  /**
+   * Settings: disconnect. This vault's sign-in ended on the server first (2026-11-19: with the key still lent, the server saves the
+   * journal's search index and drops the key itself; before, the sign-in lived on with its key until it expired); then local material
+   * goes, whatever the server answered. The server's KEK is the user's to revoke.
+   */
   async disconnect() {
+    if (this.deps.load().session_token) {
+      try {
+        await this.deps.api.endSignIn();
+      } catch {
+      }
+    }
     await this.forget("disconnected_by_user");
   }
   /** The server ended this account's sessions (admin force-logout): custody is void. */
@@ -24158,8 +24323,8 @@ function renderSpaceRetro(host, panel, on) {
   }
   for (const q of view.questions) {
     const box = page.createDiv({ cls: "myu-space-retro-section" });
-    const heading = box.createDiv({ cls: "myu-space-retro-heading", text: q.title });
-    if (q.from) heading.createSpan({ cls: "myu-space-retro-from", text: `${SPACE_RETRO_WORDS.from} ${q.from}` });
+    const heading2 = box.createDiv({ cls: "myu-space-retro-heading", text: q.title });
+    if (q.from) heading2.createSpan({ cls: "myu-space-retro-from", text: `${SPACE_RETRO_WORDS.from} ${q.from}` });
     if (q.text) box.createDiv({ cls: "myu-space-retro-text", text: q.text });
     if (q.state) box.createDiv({ cls: "myu-quiet myu-space-retro-state", text: q.state });
     if (q.text) {
@@ -28304,7 +28469,7 @@ var AddressHeldModal = class extends import_obsidian57.Modal {
       return;
     }
     this.said = outcome.message;
-    this.password = "";
+    if (outcome.kind !== "wait") this.password = "";
     if (outcome.kind === "too_many" || outcome.kind === "expired") this.ended = true;
     this.render();
   }

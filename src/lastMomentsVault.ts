@@ -239,6 +239,8 @@ export interface AnswerDraft {
   toName: string | null;
   /** The message's own readback, when it came as Tell's effect ("Here it is, to send."): said where the answer has none. */
   said: string | null;
+  /** What must be seen with it, as the server wrote it (2026-11-19). */
+  mustSee: string[];
 }
 
 /** The recipients of `draft.to`: names, or `{name, address}` (an address stands for a name it lacks). */
@@ -255,6 +257,9 @@ function recipients(v: unknown): string[] {
  * Tell, on a promise someone else's decision affects (kind `check_promise`), brings it as an effect instead: `{type:
  * "check_promise_draft", readback: "Here it is, to send.", draft}`, shown as Add it's is, its readback said over it.
  * The thread it goes into is never shown. Null when the answer carries none.
+ * 2026-11-19 (build 18b): a draft carries `must_see` (what must be seen: "I can't send mail for you yet.", "To Carla Diaz at
+ * carla@example.test.") and `connected` (false when nothing can send it). The line over it then never says it goes anywhere: none when
+ * `must_see` says "To …" itself, "Myu's message to Carla:" when it cannot go.
  */
 export function answerDraftOf(reply: unknown, line?: { kind?: string | null } | null): AnswerDraft | null {
   const o = obj(reply);
@@ -268,8 +273,10 @@ export function answerDraftOf(reply: unknown, line?: { kind?: string | null } | 
   const where = str(d.where) ?? str(d.channel) ?? str(d.place) ?? names.find((n) => n.startsWith('#')) ?? null;
   const who = whoFor({ names, where });
   const placed = isBearsOnLine(line) || isCheckPromiseLine(line) || (!own && !!told);
-  const lead = placed && service ? W.goesTo(who, placeWords(service, where)) : W.messageTo(who);
-  return { text, lead, toName: who, said: !own && told ? str(told.readback) : null };
+  const mustSee = list(d.must_see).map(str).filter((x): x is string => !!x);
+  const saysTo = mustSee.some((x) => /^To\s/.test(x));
+  const lead = saysTo ? '' : placed && service && d.connected !== false ? W.goesTo(who, placeWords(service, where)) : W.messageTo(who);
+  return { text, lead, toName: who, said: !own && told ? str(told.readback) : null, mustSee };
 }
 
 // §3 What has repeated.

@@ -12,7 +12,7 @@
  *   (R19c: "Not now" {later: true} rests until tomorrow, "Don't ask again" {dismiss: true} closes it;
  *    a line with its own way out, "Leave it" or its own "Not now", keeps only its own)
  *   choice → its choices ({choice_id}; a fourth "Leave it" sits quiet), then the two quiet ways out,
- *            unless the line carries its own (mirror of shared `quietWaysOut` / `carriesWayOut`)
+ *            by the one rule in `choiceRoles.ts` (mirror of shared `quietWaysOut`)
  *   what else falls on that day (2026-11-13, kind `full_day`) → Keep · Move it · Not a promise, nothing else; "Move it" asks
  *            "Which day?" first and answers {choice_id: "move", day} (`opens: 'day'`; the pane draws the days)
  *   "Add it?" (2026-11-13, kinds `answer_bears_on`, `report_bears_on`) → Add it · No, nothing else
@@ -41,6 +41,7 @@ import { isAsk, layoutChoices, readbackText } from './spaceModeLogic';
 import { isBearsOnLine, isFullDayLine } from './lastMoments';
 import { answerDraftOf, bearsOnChoices, fullDayChoices } from './lastMomentsVault';
 import { CHECK_PROMISE_CHOICES, isCheckPromiseLine } from './checkPromise';
+import { OWN_ANSWERS_KINDS, waysOutOf } from './choiceRoles';
 import { identityChoices, identityLine, isIdentityAsk, isIdentityAssumed, notThemLabel } from './identityLines';
 import { IDENTITY_WORDS, saidBack, saidMoveId } from './personIdentities';
 
@@ -66,7 +67,7 @@ export const LINE_ANSWER_WORDS = {
   failed: 'Could not send this to Myu. Try again in a moment.',
   offline: "You're offline. Try again when you're back online.",
   /** R19: a message Myu wrote for the person to send themselves (mirror of shared `DRAFT_WORDS`). */
-  copy: 'Copy',
+  copy: 'Copy it',
   copied: 'Copied',
   copyFailed: 'It did not copy. Select the message and copy it yourself.',
   draftLink: 'Open the link',
@@ -84,6 +85,10 @@ export interface LineDraft {
   to_name?: string;
   /** The line over the message (2026-11-13): "Myu's message to Priya:" after Move it, "To prd-review in Slack" after Add it. */
   lead?: string;
+  /** What must be seen with it, under the box (2026-11-19): "I can't send mail for you yet.", "To Carla Diaz at carla@…". */
+  must_see?: string[];
+  /** A send line's own "Copy it" (2026-11-19): the words go to the clipboard as the box opens, and its button reads "Copied". */
+  copyAtOpen?: boolean;
 }
 
 export interface LineButton {
@@ -117,21 +122,13 @@ export function answersInConversation(line: Pick<MyuLineLite, 'ask_kind' | 'sele
   return isPickMany(line) || typedChoiceOf({ typed: line.typed, choices: known(line.choices) }) !== null;
 }
 
-/** The line carries its own way out, "Not now" or "Leave it" (mirror of shared `carriesWayOut`): no second one is added. */
-export function carriesWayOut(line: Pick<MyuLineLite, 'choices'>): boolean {
-  return (line.choices ?? []).some((c) => {
-    const label = (c?.label ?? '').trim().toLowerCase();
-    return c?.id === 'not_now' || c?.id === 'later' || c?.id === 'leave' || label === 'not now' || label === 'leave it';
-  });
-}
-
-/** The two quiet ways out after a question's own buttons (mirror of shared `quietWaysOut`). */
-export function quietWaysOut(line: Pick<MyuLineLite, 'choices'>): LineButton[] {
-  if (carriesWayOut(line)) return [];
-  return [
-    { id: 'later', label: LINE_ANSWER_WORDS.later, answer: { later: true }, quiet: true },
-    { id: 'dismiss', label: LINE_ANSWER_WORDS.never, answer: { dismiss: true }, quiet: true },
-  ];
+/** The quiet ways out after a question's own buttons (mirror of shared `quietWaysOut`), by the one rule in `choiceRoles.ts`. */
+export function quietWaysOut(line: Pick<MyuLineLite, 'choices'> & { kind?: string | null }): LineButton[] {
+  const w = waysOutOf(line);
+  const out: LineButton[] = [];
+  if (w.later) out.push({ id: 'later', label: LINE_ANSWER_WORDS.later, answer: { later: true }, quiet: true });
+  if (w.never) out.push({ id: 'dismiss', label: LINE_ANSWER_WORDS.never, answer: { dismiss: true }, quiet: true });
+  return out;
 }
 
 /**
@@ -163,10 +160,12 @@ export function lineButtons(line: MyuLineLite): LineButton[] {
   // What else falls on that day, and "Add it?" (2026-11-13): the person's own to answer, with their own choices and no other way out,
   // as the web and the terminal draw them. A tell, a wait or an assume of these kinds is drawn as every one is.
   if (isAsk(line) && line.ask_kind !== 'assume' && (isFullDayLine(line) || isBearsOnLine(line) || isCheckPromiseLine(line))) {
-    // A promise someone else's decision affects: Tell <name> first, Let it go and Keep it quieter beside it (as the web draws them).
+    // A promise someone else's decision affects: its three choices drawn as every choice line's are, then the quiet ways out by the one
+    // rule (2026-11-19: the same as a check line's, on every surface).
     if (isCheckPromiseLine(line)) {
       const own = known(line.choices);
-      return (own.length ? own : CHECK_PROMISE_CHOICES.map((c) => ({ id: c.id, label: c.label }))).map((c) => ({ id: c.id, label: c.label, answer: { choice_id: c.id }, quiet: c.id === 'let_go' || c.id === 'keep' }));
+      const chosen = own.length ? own : CHECK_PROMISE_CHOICES.map((c) => ({ id: c.id, label: c.label }));
+      return [...chosen.map((c) => ({ id: c.id, label: c.label, answer: { choice_id: c.id }, quiet: false })), ...quietWaysOut({ ...line, choices: chosen })];
     }
     const answerFor = (id: string): SpaceAnswer => (line.ask_kind === 'yes_no' && (id === 'yes' || id === 'no') ? { yes: id === 'yes' } : { choice_id: id });
     if (isFullDayLine(line)) {
@@ -176,6 +175,9 @@ export function lineButtons(line: MyuLineLite): LineButton[] {
   }
   switch (line.ask_kind) {
     case 'tell':
+      // A tell that carries choices of its own (2026-11-19: Myu's "closed it" line, "Not so, keep it open"; a team's "Open ‹team›"):
+      // those, quiet, and nothing else. A tell without any has none.
+      return known(line.choices).map((c) => ({ id: c.id, label: c.label, answer: { choice_id: c.id }, quiet: true }));
     case 'wait':
       return [];
     case 'assume':
@@ -383,7 +385,16 @@ export async function pressLineButton(
   const own = answerDraftOf(res.data, line);
   const draft =
     actions.find((a): a is Extract<LineEffectAction, { kind: 'draft' }> => a.kind === 'draft')?.draft ??
-    (own ? { text: own.text, label: LINE_ANSWER_WORDS.draftLink, lead: own.lead, ...(own.toName ? { to_name: own.toName } : {}) } : undefined);
+    (own
+      ? {
+          text: own.text,
+          label: LINE_ANSWER_WORDS.draftLink,
+          ...(own.lead ? { lead: own.lead } : {}),
+          ...(own.toName ? { to_name: own.toName } : {}),
+          ...(own.mustSee.length ? { must_see: own.mustSee } : {}),
+          ...('choice_id' in button.answer && button.answer.choice_id === 'copy' && OWN_ANSWERS_KINDS.includes(line.kind ?? '') ? { copyAtOpen: true } : {}),
+        }
+      : undefined);
   const conversation = actions.find((a): a is Extract<LineEffectAction, { kind: 'conversation' }> => a.kind === 'conversation')?.conversation;
   const also = conversation ? { conversation } : {};
   // What the answer did, in the server's words (2026-11-15: "Done. 1 thing moved to Tess Colleague." beside the readback's "Okay.").
@@ -396,5 +407,7 @@ export async function pressLineButton(
   if (res.data.line_open) return { ui: { note: said, notes, links }, settled: false, open, ...also, ...undo };
   // Tell, on a promise someone else's decision affects, has no readback of its own: its message's own words say it ("Here it is, to send.").
   const shown = said || own?.said || '';
-  return { ui: { said: shown, good: !button.answer.dismiss && !button.answer.later, notes, links, ...(draft ? { draft } : {}) }, settled: true, open, ...also, ...undo };
+  // "Can't send" said once (2026-11-19, as the web): a must-see sentence the readback already says is not drawn again; "To …" always is.
+  const drawn = draft?.must_see ? { ...draft, must_see: draft.must_see.filter((m) => /^To\s/.test(m) || !shown.includes(m)) } : draft;
+  return { ui: { said: shown, good: !button.answer.dismiss && !button.answer.later, notes, links, ...(drawn ? { draft: drawn } : {}) }, settled: true, open, ...also, ...undo };
 }

@@ -70,7 +70,7 @@ import { foldRows, groupBySubject, lineNeedsYou, linesAfterRead, readsAgainFor, 
 import { SPACE_RETRO_WORDS, foldSpaceRows, isSpaceLine, spaceRows } from '../spaceRetro';
 import { DEBRIEF_PANE_WORDS, isDebriefSpace } from '../debriefPane';
 import { pressLineButton, type LineButton, type LineUi } from '../lineAnswers';
-import { renderLineAsk } from './lineAsk';
+import { fillLineWords, renderLineAsk } from './lineAsk';
 import { peopleFinder } from '../identityLines';
 import { lineIdAttr } from '../linesSeenWatch';
 import { ENTRY_DOT_WORDS, entryDot } from '../menuMarks';
@@ -903,7 +903,7 @@ export class TodayView extends ItemView {
   /**
    * "From Myu — Friday, 12 September", then the brief in Myu's voice. The
    * title is the label that says who is speaking, so the voice needs no
-   * whisper of its own. The first two items lead; the rest sit behind
+   * whisper of its own. The first `today` item leads (2026-11-19); the rest sit behind
    * `+N more` (R7: OUR trimming is disclosed — the server already disclosed
    * its own via suppressed_count).
    */
@@ -911,17 +911,22 @@ export class TodayView extends ItemView {
     const zone = root.createDiv({ cls: 'myu-zone myu-from-myu' });
     zone.createEl('h2', { cls: 'myu-from-myu-title', text: `From Myu — ${dateTitle(new Date())}` });
 
-    const all = (this.brief?.sections ?? [])
-      .filter((s) => s.visible && s.section !== 'week') // the week edition has its own zone
-      .flatMap((s) => s.items ?? []);
-    const items = this.briefExpanded ? all : all.slice(0, 2);
-    const held = all.length - 2;
+    // 2026-11-19 (the web's headline rule): the first `today` item leads, as written; a mail count or the Friday movement line never; the
+    // rest (more `today` items, `your_state`, `upcoming`) behind "+N more". With nothing for today, what the lines ask of the person.
+    const SKIPPED = ['weekly_movement', 'email_activity'];
+    const said = (it: { type?: string; text?: string }) => !!it.text?.trim() && !SKIPPED.includes(it.type ?? '');
+    const visible = (this.brief?.sections ?? []).filter((s) => s.visible && s.section !== 'week'); // the week edition has its own zone
+    const lead = visible.filter((s) => s.section === 'today').flatMap((s) => s.items ?? []).find(said);
+    const all = [...(lead ? [lead] : []), ...visible.flatMap((s) => s.items ?? []).filter((it) => it !== lead && said(it))];
+    const items = this.briefExpanded ? all : all.slice(0, lead ? 1 : 0);
+    const held = all.length - items.length;
 
-    if (items.length === 0) {
+    if (!lead) {
       // Only a fetch that actually landed may call the day empty.
+      const needs = (this.todayLines ?? []).filter((l) => l.needs_you === true).length;
       zone.createEl('p', {
-        cls: 'myu-quiet',
-        text: this.loadedOnce ? 'Nothing urgent today.' : 'Still loading your day…',
+        cls: needs > 0 ? 'myu-voice myu-brief-line' : 'myu-quiet',
+        text: !this.loadedOnce ? 'Still loading your day…' : needs === 1 ? '1 thing needs your answer.' : needs > 1 ? `${needs} things need your answer.` : 'Nothing needs your answer today.',
       });
     }
 
@@ -1023,8 +1028,11 @@ export class TodayView extends ItemView {
         return;
       }
       const cls = l.ask_kind === 'tell' ? 'myu-done' : l.ask_kind === 'wait' ? 'myu-quiet' : 'myu-line';
-      const line = body.createDiv({ cls, text: (l.text ?? '').trim(), attr: lineIdAttr(l.line_id) });
-      if (l.est && l.ask_kind !== 'tell' && l.ask_kind !== 'wait') line.createSpan({ cls: 'myu-est', text: l.est });
+      // Short first, as every line's words (2026-11-19).
+      const line = body.createDiv({ cls: `${cls} myu-line-words`, attr: lineIdAttr(l.line_id) });
+      fillLineWords(line, l, (l.text ?? '').trim(), (into) => {
+        if (l.est && l.ask_kind !== 'tell' && l.ask_kind !== 'wait') into.createSpan({ cls: 'myu-est', text: l.est });
+      });
     };
     saidHere.forEach(say);
     if (stack.top) say(stack.top);

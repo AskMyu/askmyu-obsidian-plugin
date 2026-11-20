@@ -68,7 +68,7 @@ test('a full-day line: Keep · Move it · Not a promise, the server’s own or t
   // The server's own choices, known by id or by words.
   const own = fullDay({ choices: [{ id: 'k', label: 'Keep' }, { id: 'mv', label: 'Move it' }, { id: 'np', label: 'Not a promise' }] });
   assert.deepEqual(ids(own), ['k', 'mv(day)', 'np']);
-  // The older kind name draws the same; a tell of the kind has nothing to press.
+  // The older kind name draws the same; a tell of the kind with no choices of its own has nothing to press.
   assert.deepEqual(ids(fullDay({ kind: 'promise_full_day' })), ['keep', 'move(day)', 'not_promise']);
   assert.deepEqual(ids(fullDay({ ask_kind: 'tell' })), []);
   assert.equal(tapAnswers(fullDay()), true);
@@ -334,11 +334,14 @@ const TOLD = {
   ],
 };
 
-test('a promise someone else’s decision affects: Tell <name> · Let it go · Keep it, the server’s own or shared’s, each {choice_id}; nothing else', () => {
-  assert.deepEqual(ids(checkPromise()), ['tell', 'let_go(quiet)', 'keep(quiet)']);
-  assert.deepEqual(lineButtons(checkPromise()).map((b) => [b.label, b.answer]), [['Tell Priya', { choice_id: 'tell' }], ['Let it go', { choice_id: 'let_go' }], ['Keep it', { choice_id: 'keep' }]]);
-  assert.deepEqual(lineButtons(checkPromise({ choices: [] })).map((b) => b.label), ['Tell them', 'Let it go', 'Keep it']);
-  assert.deepEqual(ids(checkPromise({ ask_kind: 'tell' })), [], 'a tell of the kind has nothing to press');
+test('a promise someone else’s decision affects: Tell <name> · Let it go · Keep it, the server’s own or shared’s, each {choice_id}; then "Not now"', () => {
+  // 2026-11-19: drawn as every choice line's are, then the one rule's ways out ("Let it go" is its way out: "Not now" only).
+  assert.deepEqual(ids(checkPromise()), ['tell', 'let_go', 'keep', 'later(quiet)']);
+  assert.deepEqual(lineButtons(checkPromise()).map((b) => [b.label, b.answer]), [['Tell Priya', { choice_id: 'tell' }], ['Let it go', { choice_id: 'let_go' }], ['Keep it', { choice_id: 'keep' }], ['Not now', { later: true }]]);
+  assert.deepEqual(lineButtons(checkPromise({ choices: [] })).map((b) => b.label), ['Tell them', 'Let it go', 'Keep it', 'Not now']);
+  // A tell of the kind (2026-11-19): a tell that carries choices of its own draws them, quiet, and nothing else; without any, none.
+  assert.deepEqual(ids(checkPromise({ ask_kind: 'tell' })), ['tell(quiet)', 'let_go(quiet)', 'keep(quiet)'], 'a tell of the kind: its own choices, quiet');
+  assert.deepEqual(ids(checkPromise({ ask_kind: 'tell', choices: [] })), [], 'a tell of the kind with none has nothing to press');
   assert.equal(tapAnswers(checkPromise()), true);
 });
 
@@ -356,7 +359,7 @@ test('Tell: its effect’s readback is said, then where it goes and the message;
   assert.equal(out.ui.draft?.to_name, 'Priya');
   // The effect read on its own, wherever the answer comes from; in Slack, to a channel.
   const slack = answerDraftOf({ effects: [{ type: 'check_promise_draft', readback: 'Here it is, to send.', draft: { to: ['#platform'], in: 'slack', text: 'x' } }] });
-  assert.deepEqual(slack, { text: 'x', lead: 'In #platform on Slack', toName: null, said: 'Here it is, to send.' });
+  assert.deepEqual(slack, { text: 'x', lead: 'In #platform on Slack', toName: null, said: 'Here it is, to send.', mustSee: [] });
 
   for (const [id, words] of [['let_go', 'Let go. Nothing was said to anyone.'], ['keep', 'It stays as it is.']] as const) {
     const a = new MockApi();
@@ -376,4 +379,15 @@ test('the check-promise words the vault may show pass the plain-words rule', asy
     assert.doesNotMatch(w, /\b(ledger|entry|kind|in_your_name|border|verdict|batch|noticed|pattern|threshold|skip|gap|lacking|missing|health|promise_id|check_promise)\b/i, w);
     assert.doesNotMatch(w, /[{}_]/, w);
   }
+});
+
+test('a draft from 18b (2026-11-19): its must_see read as written; the line over it never says it goes when it cannot or when must_see says "To …"', () => {
+  const l = checkPromise();
+  const to = [{ name: 'Carla Diaz', id: 'carla@example.test' }];
+  const both = answerDraftOf({ draft: { in: 'mail', to, text: 'x', connected: false, must_see: ["I can't send mail for you yet.", 'To Carla Diaz at carla@example.test.'] } }, l)!;
+  assert.deepEqual(both.mustSee, ["I can't send mail for you yet.", 'To Carla Diaz at carla@example.test.']);
+  assert.equal(both.lead, '', 'must_see names it: no line over it');
+  assert.equal(answerDraftOf({ draft: { in: 'mail', to, text: 'x', connected: false } }, l)!.lead, "Myu's message to Carla:", 'cannot go: never "To Carla by mail"');
+  assert.equal(answerDraftOf({ draft: { in: 'mail', to, text: 'x' } }, l)!.lead, 'To Carla by mail', 'it can go: as before');
+  assert.deepEqual(answerDraftOf({ draft: { in: 'mail', to, text: 'x' } }, l)!.mustSee, []);
 });

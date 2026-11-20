@@ -116,7 +116,8 @@ export class AddressHeldModal extends Modal {
       return;
     }
     this.said = outcome.message;
-    this.password = '';
+    // Too many wrong tries (2026-11-19): the server's wait. The question and the password as typed stay, to send again after the wait.
+    if (outcome.kind !== 'wait') this.password = '';
     // Too many tries ends the question on the server (its token is gone), as an ended one does: only the way back.
     if (outcome.kind === 'too_many' || outcome.kind === 'expired') this.ended = true;
     this.render();

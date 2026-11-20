@@ -327,6 +327,12 @@ test('Today after a read: a question closed elsewhere is gone; one closed under 
   assert.deepEqual(kept.map((l) => [l.line_id, l.state, l.needs_you]), [['T1', 'released', undefined], ['Q1', 'expired', false]]);
   // Answered here: kept while the read carries it, as before.
   assert.deepEqual(linesAfterRead([{ ...q, state: 'answered' }], [q], new Set(['Q1'])).map((l) => l.line_id), ['Q1']);
+  // Answered here and no longer read (2026-11-19: the read returns open lines only): kept from what was shown, in its place, once.
+  const a = served({ line_id: 'A1' });
+  const b = served({ line_id: 'B1' });
+  assert.deepEqual(linesAfterRead([tell, b], [tell, a, b], new Set(['A1'])).map((l) => l.line_id), ['T1', 'A1', 'B1']);
+  assert.deepEqual(linesAfterRead([a, tell], [a, tell], new Set(['A1'])).map((l) => l.line_id), ['A1', 'T1'], 'read still carries it: once');
+  assert.deepEqual(linesAfterRead([tell], [tell, a], new Set()).map((l) => l.line_id), ['T1'], 'not answered here: gone with the read');
   // line_updated: only for a line Today shows and has not answered here.
   assert.equal(readsAgainFor('Q1', [q, tell], new Set()), true);
   assert.equal(readsAgainFor('Q9', [q, tell], new Set()), false);

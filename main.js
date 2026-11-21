@@ -8680,7 +8680,9 @@ function buildMyuLogMarkdown(day, items) {
     const text2 = textOf(it.text);
     const when = it.at ? String(it.at).slice(11, 16) : "";
     const p = it.provenance;
-    const via = p?.agent === "claude_code" ? " \xB7 via your Claude Code session" : p?.surface === "cli" ? " \xB7 via terminal" : "";
+    const how = p?.agent === "claude_code" ? " \xB7 via your Claude Code session" : p?.surface === "cli" ? " \xB7 via terminal" : "";
+    const on = typeof p?.computer === "string" && p.computer.trim() ? ` on ${p.computer.trim()}` : "";
+    const via = how ? `${how}${on}` : "";
     parts.push(`- ${when ? `\`${when}\` ` : ""}${kind ? `**${kind}** ` : ""}${text2}${via}`);
   }
   parts.push("");
@@ -8829,7 +8831,7 @@ function vennOverlapLabel(own, setNames, setCount) {
 }
 
 // src/buildStamp.ts
-var BUILD_STAMP = true ? "0.1.6" : "dev";
+var BUILD_STAMP = true ? "0.1.7" : "dev";
 
 // src/calendarMyu.ts
 function isMyuCalendarEntry(e) {

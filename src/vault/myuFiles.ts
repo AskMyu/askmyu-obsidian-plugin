@@ -1782,7 +1782,7 @@ export function buildTodayLinesSection(lines: MyuLineLite[]): { title: string; i
  *  the grain of the purpose. Provenance rendered per the CLI contract. */
 export function buildMyuLogMarkdown(
   day: string,
-  items: Array<{ kind?: string; text?: string; purpose?: string; at?: string; provenance?: { surface?: string; agent?: string } }>,
+  items: Array<{ kind?: string; text?: string; purpose?: string; at?: string; provenance?: { surface?: string; agent?: string; computer?: string | null } }>,
 ): string {
   const head = frontmatter([
     ['type', 'myu-log'],
@@ -1799,7 +1799,10 @@ export function buildMyuLogMarkdown(
     const text = textOf(it.text);
     const when = it.at ? String(it.at).slice(11, 16) : '';
     const p = it.provenance;
-    const via = p?.agent === 'claude_code' ? ' · via your Claude Code session' : p?.surface === 'cli' ? ' · via terminal' : '';
+    const how = p?.agent === 'claude_code' ? ' · via your Claude Code session' : p?.surface === 'cli' ? ' · via terminal' : '';
+    // " on ‹computer›" when Myu names the computer (20 Nov: only when the person has more than one).
+    const on = typeof p?.computer === 'string' && p.computer.trim() ? ` on ${p.computer.trim()}` : '';
+    const via = how ? `${how}${on}` : '';
     parts.push(`- ${when ? `\`${when}\` ` : ''}${kind ? `**${kind}** ` : ''}${text}${via}`);
   }
   parts.push('');

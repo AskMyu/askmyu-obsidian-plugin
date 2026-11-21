@@ -123,7 +123,7 @@ test('the same words about two different people are two rows', () => {
 
 // ── the same lines, as the vault's Today note writes them ────────────────────
 
-import { buildTodayLinesSection } from '../src/vault/myuFiles';
+import { buildMyuLogMarkdown, buildTodayLinesSection } from '../src/vault/myuFiles';
 
 test('the Today note: one item per subject, with its name, the line that speaks, a count and a talk link', () => {
   const lines = [
@@ -218,4 +218,13 @@ test('a team’s line that only tells, with its one choice ("Open Door team", 20
   const groups = groupBySubject([teamLine, ask]);
   assert.deepEqual(groups.map((g) => [g.label, g.needsYou]), [['Door team', false], ['Dana Okafor', true]]);
   assert.deepEqual(foldRows(groups).shown.map((g) => g.label), ['Dana Okafor', 'Door team'], 'what needs you first; the team’s line after it');
+});
+
+test('the log note: " on ‹computer›" when Myu names the computer (20 Nov); nothing when it does not', () => {
+  const md = buildMyuLogMarkdown('2026-11-20', [
+    { kind: 'did', text: 'Opened the pull request.', at: '2026-11-20T09:10:00Z', provenance: { surface: 'mcp', agent: 'claude_code', computer: 'studio-mac' } },
+    { kind: 'did', text: 'Sent the note.', at: '2026-11-20T09:20:00Z', provenance: { surface: 'mcp', agent: 'claude_code' } },
+  ]);
+  assert.ok(md.includes('Opened the pull request. · via your Claude Code session on studio-mac'), md);
+  assert.ok(md.includes('Sent the note. · via your Claude Code session\n'), md);
 });

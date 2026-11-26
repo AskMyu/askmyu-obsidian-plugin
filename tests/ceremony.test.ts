@@ -458,12 +458,12 @@ test('onboarding — the full LinkedIn arc: current role found → complete, fla
   const root = (modal as unknown as { contentEl: FakeEl }).contentEl;
 
   const inputs = [...root.walk()].filter((e) => e.tag === 'input');
-  (inputs[0] as unknown as { typed: string }).typed = 'https://linkedin.com/in/masumi-dev';
+  (inputs[0] as unknown as { typed: string }).typed = 'https://linkedin.com/in/odile-marchetti';
   assert.ok(await root.click('Share'), 'linkedin share button exists');
   await new Promise((r) => setTimeout(r, 0));
 
   assert.equal(calls.linkedinSeek.length, 1);
-  assert.deepEqual(calls.saveLinkedinId[0], ['acct-1', 'masumi-dev'], 'public identifier extracted and persisted');
+  assert.deepEqual(calls.saveLinkedinId[0], ['acct-1', 'odile-marchetti'], 'public identifier extracted and persisted');
   assert.deepEqual(calls.queryCurrentEmployment[0], ['acct-1', 'linkedin']);
   const completion = calls.updateAccountState[0] as [string, { onboardingComplete?: boolean; myuScripts?: Record<string, unknown> }];
   assert.equal(completion[1].onboardingComplete, true, 'a current role carries onboarding');
@@ -471,7 +471,7 @@ test('onboarding — the full LinkedIn arc: current role found → complete, fla
 
   // The moment is still asked (it seeds the first journal entry).
   const momentInputs = [...root.walk()].filter((e) => e.tag === 'input');
-  (momentInputs[momentInputs.length - 1] as unknown as { typed: string }).typed = 'Running my own company, heads down on the beta.';
+  (momentInputs[momentInputs.length - 1] as unknown as { typed: string }).typed = 'Leading a small platform team, mostly on release work.';
   assert.ok(await root.click('Tell Myu'));
   await new Promise((r) => setTimeout(r, 0));
   // The web's transition: no in-modal reply, no Done click — the moment goes
@@ -480,7 +480,7 @@ test('onboarding — the full LinkedIn arc: current role found → complete, fla
   assert.ok(seed, 'the chat opened');
   assert.equal(seed.send, true, 'the moment is SENT, not just pre-filled');
   assert.equal(seed.templateType, 'onboarding_moment', 'template-routed like the web');
-  assert.ok(String(seed.text).includes('Running my own company'), 'the chat carries their words');
+  assert.ok(String(seed.text).includes('Leading a small platform team'), 'the chat carries their words');
   assert.equal(finished, 1, 'onFinished fired without any further click');
 });
 
@@ -494,7 +494,7 @@ test('onboarding — a dismissed conversation comes back: the transcript survive
   first.open();
   const firstRoot = (first as unknown as { contentEl: FakeEl }).contentEl;
   const inputs = [...firstRoot.walk()].filter((e) => e.tag === 'input');
-  (inputs[0] as unknown as { typed: string }).typed = 'https://linkedin.com/in/masumi-dev';
+  (inputs[0] as unknown as { typed: string }).typed = 'https://linkedin.com/in/odile-marchetti';
   assert.ok(await firstRoot.click('Share'));
   await new Promise((r) => setTimeout(r, 0));
   first.close(); // the glance at the canvas behind
@@ -502,18 +502,18 @@ test('onboarding — a dismissed conversation comes back: the transcript survive
   const second = new OnboardingModal({} as never, plugin as never, () => undefined);
   second.open();
   const text = [...(second as unknown as { contentEl: FakeEl }).contentEl.walk()].map((e) => e.text ?? '').join('\n');
-  assert.ok(text.includes('masumi-dev'), 'their own line is still in the log');
+  assert.ok(text.includes('odile-marchetti'), 'their own line is still in the log');
   assert.equal(text.split("Hey — I'm Myu").length - 1, 1, 'the greeting is not said twice');
 
   // Finishing the moment clears the session for the next account/test.
   const momentInputs = [...(second as unknown as { contentEl: FakeEl }).contentEl.walk()].filter((e) => e.tag === 'input');
-  (momentInputs[momentInputs.length - 1] as unknown as { typed: string }).typed = 'Running my own company, heads down on the beta.';
+  (momentInputs[momentInputs.length - 1] as unknown as { typed: string }).typed = 'Leading a small platform team, mostly on release work.';
   assert.ok(await (second as unknown as { contentEl: FakeEl }).contentEl.click('Tell Myu'));
   await new Promise((r) => setTimeout(r, 0));
   const third = new OnboardingModal({} as never, plugin as never, () => undefined);
   third.open();
   const thirdText = [...(third as unknown as { contentEl: FakeEl }).contentEl.walk()].map((e) => e.text ?? '').join('\n');
-  assert.ok(!thirdText.includes('masumi-dev'), 'the finished conversation is not replayed');
+  assert.ok(!thirdText.includes('odile-marchetti'), 'the finished conversation is not replayed');
 });
 
 test('onboarding — skip + thin moment stays INCOMPLETE; second-attempt borderline is the smart escape', async () => {
@@ -546,7 +546,7 @@ test('onboarding — skip + thin moment stays INCOMPLETE; second-attempt borderl
     const root = (modal as unknown as { contentEl: FakeEl }).contentEl;
     assert.ok(await root.click('Skip for now'));
     const inputs = [...root.walk()].filter((e) => e.tag === 'input');
-    (inputs[inputs.length - 1] as unknown as { typed: string }).typed = 'consulting while I figure out the next thing';
+    (inputs[inputs.length - 1] as unknown as { typed: string }).typed = 'planning the spring release for a small team';
     assert.ok(await root.click('Tell Myu'));
     await new Promise((r) => setTimeout(r, 0));
     const completions = (calls.updateAccountState as Array<[string, { onboardingComplete?: boolean }]>).filter((c) => c[1].onboardingComplete);
@@ -1369,7 +1369,7 @@ test('chat — a reply renders through Obsidian\'s markdown renderer, never as p
 test('chat — the saved note links an offer to its canvas in the vault, never "on the web"', async () => {
   const { renderConversation } = await import('../src/vault/ConversationWriter');
   const text = renderConversation([
-    { role: 'user', text: 'so this whole shopping for a law firm' },
+    { role: 'user', text: 'the release is out, what should I watch this afternoon' },
     { role: 'myu', blocks: [{ type: 'conversational', text: 'Here is your checklist.' }, { type: 'composition_offer', composition_id: 'comp-9', summary_text: '' }] },
   ]);
   assert.ok(text);
@@ -1584,8 +1584,8 @@ test('live notices — the web\'s account/session toasts, word for word, from th
   const { liveNoticeFor, LIVE_NOTICE_EVENTS } = await import('../src/liveNotices');
   const me = 'acct-1';
   // Payload fields from EventService: DEVICE_TRANSFER_PENDING {request_id, device_name, verification_code}.
-  const pending = liveNoticeFor('DEVICE_TRANSFER_PENDING', { request_id: 'r1', device_name: 'Masumi\u2019s MacBook' }, me);
-  assert.deepEqual(pending, { title: 'New Device Request', body: '\u201cMasumi\u2019s MacBook\u201d wants to join your account', kind: 'info', durationMs: 0, action: 'open_devices' });
+  const pending = liveNoticeFor('DEVICE_TRANSFER_PENDING', { request_id: 'r1', device_name: 'Odile\u2019s MacBook' }, me);
+  assert.deepEqual(pending, { title: 'New Device Request', body: '\u201cOdile\u2019s MacBook\u201d wants to join your account', kind: 'info', durationMs: 0, action: 'open_devices' });
   assert.deepEqual(liveNoticeFor('DEVICE_TRANSFER_COMPLETED', { new_device_name: 'iPhone' }, me), { title: 'Transfer Completed', body: '\u201ciPhone\u201d was added by another device', kind: 'info' });
   assert.deepEqual(liveNoticeFor('DEVICE_TRANSFER_DENIED', { request_id: 'r1' }, me), { title: 'Transfer Denied', body: 'The device transfer was denied', kind: 'error' });
   // logout is broadcast with the account id as content; only OURS acts.
@@ -1661,7 +1661,7 @@ test('chat blocks — every type in the web\'s registry renders as markdown; boa
   assert.equal(md({ type: 'suggestion', text: 'Ask Dana first' }), '\u2192 Ask Dana first');
   assert.equal(md({ type: 'insight_card', title: 'Cadence broke', summary: 'Three cancelled.', priority: 'high' }), '**Cadence broke**\n\nThree cancelled.');
   assert.equal(md({ type: 'action_card', title: 'Send the plan', description: 'Before Thursday.', due_date: '2026-09-04', related_people: ['Marcus Webb'] }), '**Send the plan**\nBefore Thursday.\n- due 2026-09-04\n- with Marcus Webb');
-  assert.equal(md({ type: 'data_table', title: 'Firms', columns: [{ key: 'firm', label: 'Firm' }, { key: 'fee', label: 'Fee' }], rows: [{ firm: 'Cooley', fee: 'fixed' }] }), '**Firms**\n\n| Firm | Fee |\n| --- | --- |\n| Cooley | fixed |');
+  assert.equal(md({ type: 'data_table', title: 'Release checks', columns: [{ key: 'check', label: 'Check' }, { key: 'state', label: 'State' }], rows: [{ check: 'Error counts', state: 'steady' }] }), '**Release checks**\n\n| Check | State |\n| --- | --- |\n| Error counts | steady |');
   assert.equal(md({ type: 'quick_stats', stats: [{ label: 'Replies', value: 9, trend_label: 'up' }] }), '- **Replies** \u2014 9 *(up)*');
   assert.equal(md({ type: 'chart', title: 'Latency', data: { labels: ['w1', 'w2'], datasets: [{ label: 'days', data: [1, 9] }] } }), '**Latency**\n\n|  | days |\n| --- | --- |\n| w1 | 1 |\n| w2 | 9 |');
   assert.equal(md({ type: 'diagram', source: 'graph TD; A-->B;', caption: 'the loop' }), '```mermaid\ngraph TD; A-->B;\n```\n\n*the loop*');
@@ -1701,13 +1701,13 @@ test('scenes — the pane and the note read a scened composition the way the web
 test('related entries — a first reply\'s similar journal entries are carried and rendered as openable rows', async () => {
   const { parseChatTurn } = await import('../src/transport/api');
   const { renderRelatedEntries } = await import('../src/views/chatBlocks');
-  const parsed = parseChatTurn({ journal_id: 'j9', content: [{ type: 'conversational', text: 'x' }], similar_entries: [{ journal_id: 'j1', content_preview: 'the law firm search' }, { nope: true }] });
-  assert.deepEqual(parsed.similar_entries, [{ journal_id: 'j1', content_preview: 'the law firm search' }], 'rows without an id are dropped');
+  const parsed = parseChatTurn({ journal_id: 'j9', content: [{ type: 'conversational', text: 'x' }], similar_entries: [{ journal_id: 'j1', content_preview: 'the release checklist' }, { nope: true }] });
+  assert.deepEqual(parsed.similar_entries, [{ journal_id: 'j1', content_preview: 'the release checklist' }], 'rows without an id are dropped');
   const opened: string[] = [];
   const el = new FakeEl('div');
   renderRelatedEntries(el as never, parsed.similar_entries, (id) => opened.push(id));
-  assert.match(el.visibleTexts().join(' '), /Related entries.*the law firm search/);
-  assert.ok(await el.click('the law firm search'));
+  assert.match(el.visibleTexts().join(' '), /Related entries.*the release checklist/);
+  assert.ok(await el.click('the release checklist'));
   assert.deepEqual(opened, ['j1'], 'opens that conversation in place — no browser');
 });
 
@@ -1716,9 +1716,9 @@ test('notes — people carry last_interaction for the Base; companies drop title
   const person = buildPersonMarkdown({ entity_type: 'person', entity_id: 'r1', display_name: 'Adam Rosen', item_count: 0, top_urgency: 'low', last_contact: '2026-08-02T10:00:00Z' }, null, [], () => false, null, []);
   assert.match(person, /^last_interaction: 2026-08-02$/m, 'People.base\'s "Days quiet" reads this — it was never written before');
   const company = buildCompanyMarkdown(
-    { entity_type: 'company', entity_id: 'Ally', display_name: 'Ally', item_count: 0, top_urgency: 'low' },
+    { entity_type: 'company', entity_id: 'Fernbrook', display_name: 'Fernbrook', item_count: 0, top_urgency: 'low' },
     { sections: [{ title: "What's happening", narrative: 'Quiet quarter.' }, { title: "What's happening here" }, { title: 'Your people here', items: [] }] } as never,
-    ['Jenny'],
+    ['Mira'],
   );
   assert.match(company, /## What's happening\n\nQuiet quarter\./);
   assert.ok(!/What's happening here|Your people here/.test(company), 'empty titled sections are not bare headings');
@@ -1726,7 +1726,7 @@ test('notes — people carry last_interaction for the Base; companies drop title
   assert.match(company, /## People\n\n```base\n/, 'an embedded base');
   assert.match(company, /company == this/, 'filtered to the people whose company links HERE');
   assert.match(company, /file\.inFolder\("Myu\/People"\)/);
-  assert.ok(!/- \[\[Jenny\]\]/.test(company), 'no hand-written list to go stale');
+  assert.ok(!/- \[\[Mira\]\]/.test(company), 'no hand-written list to go stale');
 });
 
 test('notes — company is a QUOTED wikilink in person frontmatter; people with nothing known say so once; Companies.base exists', async () => {
@@ -1752,7 +1752,7 @@ test('person actions — "Same person" candidates follow the web\'s rule; the wi
   const people = [
     { entity_type: 'person', entity_id: 'p1', display_name: 'Marcus Webb', item_count: 0, top_urgency: 'low' },
     { entity_type: 'person', entity_id: 'p2', display_name: 'Marcus W.', item_count: 0, top_urgency: 'low' },
-    { entity_type: 'self', entity_id: 'me', display_name: 'Masumi', item_count: 0, top_urgency: 'low' },
+    { entity_type: 'self', entity_id: 'me', display_name: 'Odile', item_count: 0, top_urgency: 'low' },
     { entity_type: 'company', entity_id: 'c1', display_name: 'Acme', item_count: 0, top_urgency: 'low' },
   ] as never[];
   assert.deepEqual(mergeCandidates(people, 'p2').map((e: { entity_id: string }) => e.entity_id), ['p1'], 'persons only, never self, never the source');
@@ -1789,7 +1789,7 @@ test('conversations — one loader for the browser and the export: heads newest 
   const backend = {
     getJournalEntries: async () => ({ ok: true, status: 200, data: { entries: [
       { journal_id: 'j-old', content: 'the older one', created_at: '2026-08-01T10:00:00Z' },
-      { journal_id: 'j-new', content: 'so this whole shopping for a law firm', created_at: '2026-08-20T10:00:00Z' },
+      { journal_id: 'j-new', content: 'the release went out at noon and the error counts look steady', created_at: '2026-08-20T10:00:00Z' },
       { journal_id: 'j-empty', content: '   ', created_at: '2026-08-21T10:00:00Z' },
       { content: 'no id at all', created_at: '2026-08-22T10:00:00Z' },
     ] } }),
@@ -1804,7 +1804,7 @@ test('conversations — one loader for the browser and the export: heads newest 
   assert.equal(heads[0]!.day, '2026-08-20');
   const turns = await loadConversation(deps, 'j-new', heads[0]);
   assert.equal(turns.length, 3);
-  assert.equal(turns[0]!.role, 'user'); assert.match(turns[0]!.text ?? '', /^\(2026-08-20\) so this whole/);
+  assert.equal(turns[0]!.role, 'user'); assert.match(turns[0]!.text ?? '', /^\(2026-08-20\) the release went/);
   assert.equal(turns[1]!.role, 'user'); assert.equal(turns[1]!.text, 'tell me more');
   assert.equal(turns[2]!.role, 'myu'); assert.equal(turns[2]!.blocks?.[0]?.type, 'conversational');
   assert.equal(turns[2]!.references?.[0]?.title, 'Your note', 'citations survive the resume path');
@@ -2250,14 +2250,14 @@ test('connection wires — credential-level disconnect / set-primary, Slack OAut
   const api = new Api({ get: async (p: string) => { calls.push(['GET', p]); return { ok: true, status: 200, data: {} }; }, post: async (p: string, b: unknown) => { calls.push(['POST', p, b]); return { ok: true, status: 200, data: {} }; } } as never);
   await api.googleOAuthDisconnect('g1'); await api.googleSetPrimaryCredential('g2'); await api.microsoftOAuthDisconnect('m1'); await api.microsoftSetPrimaryCredential('m2');
   await api.slackConnect(); await api.slackDisconnect('s1'); await api.zulipConnect('https://org.zulipchat.com', 'me@org.com', 'KEY'); await api.zulipDisconnect('z1');
-  await api.updateAccountName('acct', 'Masumi'); await api.getAccountCareer('acct'); await api.getPersonalLoop();
+  await api.updateAccountName('acct', 'Odile'); await api.getAccountCareer('acct'); await api.getPersonalLoop();
   await api.submitFeedbackSignal({ subject_type: 'personal_loop', subject_id: 'loop-1', rating: 1, subject_text: 'x', surface: 'personal_loop_strip', context: { loop_state: 'mirrored' } });
   assert.deepEqual(calls, [
     ['POST', '/oauth/google/disconnect', { credential_id: 'g1' }], ['POST', '/oauth/google/credential/set-primary', { credential_id: 'g2' }],
     ['POST', '/oauth/microsoft/disconnect', { credential_id: 'm1' }], ['POST', '/oauth/microsoft/credential/set-primary', { credential_id: 'm2' }],
     ['POST', '/slack/connect', {}], ['POST', '/slack/disconnect', { connection_id: 's1' }],
     ['POST', '/zulip/connect', { realm_url: 'https://org.zulipchat.com', email: 'me@org.com', api_key: 'KEY' }], ['POST', '/zulip/disconnect', { connection_id: 'z1' }],
-    ['POST', '/account/update', { account_id: 'acct', name: 'Masumi' }], ['GET', '/account/career?account_id=acct'], ['GET', '/personal_loop/get'],
+    ['POST', '/account/update', { account_id: 'acct', name: 'Odile' }], ['GET', '/account/career?account_id=acct'], ['GET', '/personal_loop/get'],
     ['POST', '/feedback/signal', { subject_type: 'personal_loop', subject_id: 'loop-1', rating: 1, subject_text: 'x', surface: 'personal_loop_strip', context: { loop_state: 'mirrored' } }],
   ]);
 });
@@ -2336,8 +2336,8 @@ test('reply rating — the web\'s modal: the thumb sets the rating, a note is op
   const { ReplyRatingModal } = await import('../src/views/ReplyRatingModal');
   const { formatConversationAttachment } = await import('../src/views/feedbackAttachment');
   // The opening turn carries its time and a pasted block (2026-10-06); Myu's turn has no time, so it takes the attachment's.
-  const letter = { id: 'p1', text: 'Engagement letter, draft 2\n\nFees: capped for the first phase.', chars: 61, lines: 3, source: 'paste' };
-  const turns = [{ role: 'user', text: 'so this whole shopping for a law firm', at: '2026-08-30T09:59:00.000Z', pasted: [letter] }, { role: 'myu', blocks: [{ type: 'conversational', text: 'Ask for a **capped** first engagement.' }] }] as never[];
+  const letter = { id: 'p1', text: 'Release notes, second pass\n\nScope: the sign-in fix and the export.', chars: 66, lines: 3, source: 'paste' };
+  const turns = [{ role: 'user', text: 'release notes for Friday, does the scope read right', at: '2026-08-30T09:59:00.000Z', pasted: [letter] }, { role: 'myu', blocks: [{ type: 'conversational', text: 'Ask Dana to **confirm** the scope first.' }] }] as never[];
   const att = formatConversationAttachment(turns as never, 'j1', new Date('2026-08-30T10:00:00Z'));
   assert.equal(
     att.attached_content,
@@ -2346,18 +2346,18 @@ test('reply rating — the web\'s modal: the thumb sets the rating, a note is op
       'ID: j1',
       'Timestamp: 2026-08-30T09:59:00.000Z',
       '',
-      '  so this whole shopping for a law firm',
-      '  [pasted text 1 · 61 chars · 3 lines · paste]',
-      '  | Engagement letter, draft 2',
+      '  release notes for Friday, does the scope read right',
+      '  [pasted text 1 · 66 chars · 3 lines · paste]',
+      '  | Release notes, second pass',
       '  |',
-      '  | Fees: capped for the first phase.',
+      '  | Scope: the sign-in fix and the export.',
       '',
       '--- Journal Chat ---',
-      '[agent 2026-08-30T10:00:00.000Z] Ask for a **capped** first engagement.',
+      '[agent 2026-08-30T10:00:00.000Z] Ask Dana to **confirm** the scope first.',
     ].join('\n'),
     'the shared conversation.txt shape: timestamped turns, labelled blocks',
   );
-  assert.match(att.attached_summary, /^Journal entry \(.+\):\nso this whole shopping for a law firm\n\n1 chat turn attached in full\.$/);
+  assert.match(att.attached_summary, /^Journal entry \(.+\):\nrelease notes for Friday, does the scope read right\n\n1 chat turn attached in full\.$/);
 
   const sent: unknown[] = [];
   const plugin = {
@@ -2410,12 +2410,12 @@ test('remove everything Myu wrote — frontmatter handle ∪ the written-path re
   const { findEverythingMyuWrote, trashEverythingMyuWrote } = await import('../src/vault/removeEverything');
   const { TFile } = await import('obsidian');
   const mk = (path: string, fm?: Record<string, unknown>) => { const f = Object.assign(new TFile(), { path }); (f as unknown as { fm?: unknown }).fm = fm; return f; };
-  const files = [mk('Myu/People/Marcus Webb.md', { 'myu-generated': true }), mk('Journal/2026-08-30.md'), mk('Myu/Conversations/2026-08-20 law firm.md', { 'myu-generated': true }), mk('Notes/mine.md', { 'myu-generated': false })];
+  const files = [mk('Myu/People/Marcus Webb.md', { 'myu-generated': true }), mk('Journal/2026-08-30.md'), mk('Myu/Conversations/2026-08-20 release day.md', { 'myu-generated': true }), mk('Notes/mine.md', { 'myu-generated': false })];
   const byPath = new Map(files.map((f) => [f.path, f]));
   byPath.set('Myu/People.base', mk('Myu/People.base'));
   const app = { vault: { getMarkdownFiles: () => files, getAbstractFileByPath: (p: string) => byPath.get(p) ?? null }, metadataCache: { getFileCache: (f: { fm?: unknown }) => ({ frontmatter: f.fm }) }, fileManager: { trashFile: async () => undefined } } as never;
   const found = findEverythingMyuWrote(app, ['Myu/People.base', 'Myu/People/Marcus Webb.md', 'Myu/gone.md']);
-  assert.deepEqual(found.files.map((f) => f.path).sort(), ['Myu/Conversations/2026-08-20 law firm.md', 'Myu/People.base', 'Myu/People/Marcus Webb.md'], 'generated md by frontmatter, the base by registry, nothing of the user\'s, nothing twice');
+  assert.deepEqual(found.files.map((f) => f.path).sort(), ['Myu/Conversations/2026-08-20 release day.md', 'Myu/People.base', 'Myu/People/Marcus Webb.md'], 'generated md by frontmatter, the base by registry, nothing of the user\'s, nothing twice');
   assert.equal(found.byFrontmatter, 2); assert.equal(found.byRegistry, 1);
   assert.equal(await trashEverythingMyuWrote(app, found.files), 3);
   const fs = await import('node:fs/promises');
@@ -2623,7 +2623,7 @@ test('settings — the Account section keeps its reading order whatever answers 
     backend: {
       listDevices: () => later(ok({ devices: [{ device_id: 'dev-this', device_name: 'Obsidian — Vault' }, { device_id: 'dev-2', device_name: 'Chrome on Linux' }] }), 12),
       listAccountEmails: () => later(ok({ emails: [{ email: 'you@example.com', is_primary: true, verified: true }] }), 8),
-      getSelfCard: () => later(ok({ card: { header: { display_name: 'Masumi' } } }), 15), // slowest
+      getSelfCard: () => later(ok({ card: { header: { display_name: 'Odile' } } }), 15), // slowest
       getAccountCareer: () => later(ok({ status: 'no_data' }), 1),
       getAccountPreferences: () => later(ok({ preferences: { preferred_address: 'Boss', coaching_preference: 'auto' } }), 1), // fastest
     },
@@ -2641,7 +2641,7 @@ test('settings — the Account section keeps its reading order whatever answers 
   const order = ['Devices', 'Chrome on Linux', 'Email addresses', 'you@example.com', 'Your name', 'What Myu calls you', 'How directly Myu speaks', 'Delete my account'].map(at);
   assert.deepEqual([...order].sort((x, y) => x - y), order, `reading order held: ${texts.join(' | ')}`);
   assert.ok(!texts.some((t) => /that is above/.test(t)), 'no row points at another by position');
-  assert.ok(root.find((e) => e.tag === 'input' && e.value === 'Masumi'), 'the saved name is in its field');
+  assert.ok(root.find((e) => e.tag === 'input' && e.value === 'Odile'), 'the saved name is in its field');
   assert.ok(root.find((e) => e.tag === 'input' && e.value === 'Boss'), 'the saved address is in its field');
 });
 
@@ -3418,4 +3418,170 @@ test('a Venn overlap in words, as the web says it; where it came from under a di
   assert.equal(vennOverlapLabel('', ['Migration', 'Hiring', 'Launch'], 3), 'In all three');
   assert.equal(vennOverlapLabel('', ['Migration', 'Hiring'], 3), 'In Migration and Hiring');
   assert.equal(vennOverlapLabel('On both teams', ['Platform', 'Hiring'], 2), 'On both teams');
+});
+
+// ── Myu/Log/<day>.md over the change from UTC days to his own (the read's findings, 25 Nov) ──
+
+async function logVault(zone: string, oldFiles: Record<string, string>, rows: Array<{ id: string; at: string; text: string }>, startZone?: string, failSince?: string) {
+  const { MaterializationService } = await import('../src/vault/MaterializationService');
+  const { TFile } = await import('./ui-stub');
+  const { hashContent } = await import('../src/capture/noteMeta');
+  const files = new Map<string, string>(Object.entries(oldFiles));
+  const tfile = (path: string) => Object.assign(new TFile(), { path });
+  const trashed: string[] = [];
+  const app = {
+    vault: {
+      getAbstractFileByPath: (p: string) => (files.has(p) ? tfile(p) : null),
+      cachedRead: async (f: { path: string }) => files.get(f.path) ?? '',
+      process: async (f: { path: string }, fn: (s: string) => string) => { files.set(f.path, fn(files.get(f.path) ?? '')); },
+      create: async (p: string, c: string) => { files.set(p, c); },
+      createFolder: async () => undefined,
+      getMarkdownFiles: () => [...files.keys()].map(tfile),
+    },
+    metadataCache: { getFileCache: () => ({ frontmatter: {} }) },
+    fileManager: { trashFile: async (f: { path: string }) => { trashed.push(f.path); files.delete(f.path); } },
+  };
+  // The old notes are ours as written: their hashes are the baseline.
+  const hashes: Record<string, string> = {};
+  for (const [p, c] of files) hashes[p] = await hashContent(c);
+  const settings: Record<string, unknown> = { account_id: 'acc', materialize_folder: 'Myu', materialize_consented: true, materialize_enabled: true, myu_file_hashes: hashes, myu_log_zone: startZone };
+  const asked: Array<{ since?: string; cursor?: string }> = [];
+  // As the door reads its bounds (GetMyuLog:52-53): `since` inclusive, `cursor` exclusive, each an instant (ISO, or ms as text); a bare
+  // day would read as UTC's midnight, so the stand-in refuses one. Two rows a page, newest first, `next_cursor` as ms text.
+  const instant = (v: string) => (/^\d+$/.test(v) ? Number(v) : /^\d{4}-\d{2}-\d{2}$/.test(v) ? NaN : Date.parse(v));
+  const api = {
+    getMyuLog: async (o: { since?: string; cursor?: string }) => {
+      asked.push(o);
+      if (failSince && o.since === failSince) return { ok: false, status: 503, data: null, error: 'unavailable' };
+      const since = o.since ? instant(o.since) : 0;
+      const before = o.cursor ? instant(o.cursor) : Infinity;
+      if (Number.isNaN(since) || Number.isNaN(before)) return { ok: false, status: 400, data: null, error: 'a bare day is not an instant' };
+      const all = rows.filter((r) => Date.parse(r.at) >= since && Date.parse(r.at) < before).sort((x, y) => Date.parse(y.at) - Date.parse(x.at));
+      const page = all.slice(0, 2);
+      const items = page.map((r) => ({ receipt_id: r.id, at: r.at, group: 'did_for_you', kind: 'did', text: r.text }));
+      const next_cursor = all.length > 2 ? String(Date.parse(page[1].at)) : undefined;
+      return { ok: true, status: 200, data: { success: true, zone, groups: [{ id: 'did_for_you', title: 'What Myu did for you' }], items, next_cursor }, error: null };
+    },
+  };
+  const svc = new MaterializationService({
+    app: app as never, api: () => api as never, settings: () => settings as never, save: async () => undefined, canRun: () => true,
+    findTheirPage: () => null, onProgress: () => undefined, contentKey: () => ({}) as CryptoKey,
+    flags: () => ({ today_bundle: true, vault_changes: true, entities_changed_ids: true, entity_changed_at: true, retry_after_header: true }), paceMs: 0,
+  });
+  const write = (now: Date) => (svc as unknown as { writeMyuLog(now: Date): Promise<void> }).writeMyuLog(now);
+  return { files, trashed, settings, asked, write };
+}
+
+const logNote = (rows: string[]) => `---\ntype: myu-log\n---\n\n# What Myu did\n\n${rows.map((r) => `- ${r}`).join('\n')}\n`;
+/** Every bound sent is an instant (ISO) or the server's own cursor (ms as text), never a bare day (UTC's midnight at the door). */
+const onlyInstants = (asked: Array<{ since?: string; cursor?: string }>) => {
+  for (const o of asked) for (const v of [o.since, o.cursor]) if (v !== undefined) assert.match(v, /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z|\d+)$/, `a bound sent as ${v}`);
+};
+
+test('the log over the change to his days, west of UTC (New York, in the evening): nothing leaves his vault, no note for a day not begun', async () => {
+  // Rows by UTC instant. In New York (UTC-5): r0 Sun 22 Nov 20:00, r1 Mon 23 Nov 18:30, r2 Mon 23 Nov 21:00, r3 Tue 24 Nov 10:00, r4 Tue 24 Nov 19:30.
+  const rows = [
+    { id: 'r0', at: '2026-11-23T01:00:00Z', text: 'Row zero, Sunday evening.' },
+    { id: 'r1', at: '2026-11-23T23:30:00Z', text: 'Row one, Monday before seven.' },
+    { id: 'r2', at: '2026-11-24T02:00:00Z', text: 'Row two, Monday evening.' },
+    { id: 'r3', at: '2026-11-24T15:00:00Z', text: 'Row three, Tuesday morning.' },
+    { id: 'r4', at: '2026-11-25T00:30:00Z', text: 'Row four, Tuesday evening.' },
+  ];
+  // The old rule's notes, by UTC day: the 23rd held r0 and r1; the 24th held r2 and r3; the 25th (tomorrow here) held r4.
+  const v = await logVault('America/New_York', {
+    'Myu/Log/2026-11-23.md': logNote(['Row zero, Sunday evening.', 'Row one, Monday before seven.']),
+    'Myu/Log/2026-11-24.md': logNote(['Row two, Monday evening.', 'Row three, Tuesday morning.']),
+    'Myu/Log/2026-11-25.md': logNote(['Row four, Tuesday evening.']),
+  }, rows, 'America/New_York');
+  await v.write(new Date('2026-11-25T01:00:00Z')); // Tue 24 Nov 20:00 in New York
+  for (const r of rows) assert.equal([...v.files.values()].some((c) => c.includes(r.text)), true, `${r.id} is still in his vault`);
+  assert.deepEqual(v.trashed, ['Myu/Log/2026-11-25.md'], 'the note named for tomorrow, its row in today\'s');
+  assert.equal(v.files.has('Myu/Log/2026-11-25.md'), false, 'no note for a day not begun');
+  const mon = v.files.get('Myu/Log/2026-11-23.md') ?? '';
+  assert.equal(mon.includes('Row one, Monday before seven.') && mon.includes('Row two, Monday evening.'), true, 'Monday, whole');
+  assert.equal(mon.includes('- `Yesterday 20:00` Row zero, Sunday evening.'), true, 'the evening the UTC note held stays, with its day');
+  const tue = v.files.get('Myu/Log/2026-11-24.md') ?? '';
+  assert.equal(tue.includes('- `10:00` Row three, Tuesday morning.') && tue.includes('- `19:30` Row four, Tuesday evening.'), true, tue);
+  assert.equal(tue.includes('Row two'), false, 'Tuesday from his midnight');
+  assert.equal(v.settings.myu_log_local_days, true);
+  onlyInstants(v.asked);
+  assert.equal(v.asked.some((o) => /^\d+$/.test(o.cursor ?? '')), true, 'pages followed by the server\'s own cursor');
+  // The next run writes today's note only.
+  const before = v.asked.length;
+  await v.write(new Date('2026-11-25T02:00:00Z'));
+  assert.equal(v.asked.length - before, 1, 'once changed, yesterday is not read again');
+});
+
+test('the log over the change to his days, east of UTC (Tokyo, in the morning): yesterday whole, today from his midnight, nothing lost', async () => {
+  // Rows by UTC instant. In Tokyo (UTC+9): e1 Tue 24 Nov 05:00, e2 Tue 24 Nov 19:00, e3 Wed 25 Nov 01:00.
+  const rows = [
+    { id: 'e1', at: '2026-11-23T20:00:00Z', text: 'East one, Tuesday early.' },
+    { id: 'e2', at: '2026-11-24T10:00:00Z', text: 'East two, Tuesday evening.' },
+    { id: 'e3', at: '2026-11-24T16:00:00Z', text: 'East three, Wednesday at one.' },
+  ];
+  // The old rule's notes, by UTC day: the 23rd held e1; the 24th held e2 and e3.
+  // He starts with no zone kept: this computer's is asked first, and the answer's (Tokyo) is asked again from his own midnight.
+  const v = await logVault('Asia/Tokyo', {
+    'Myu/Log/2026-11-23.md': logNote(['East one, Tuesday early.']),
+    'Myu/Log/2026-11-24.md': logNote(['East two, Tuesday evening.', 'East three, Wednesday at one.']),
+  }, rows);
+  await v.write(new Date('2026-11-24T23:00:00Z')); // Wed 25 Nov 08:00 in Tokyo
+  for (const r of rows) assert.equal([...v.files.values()].some((c) => c.includes(r.text)), true, `${r.id} is still in his vault`);
+  const tue = v.files.get('Myu/Log/2026-11-24.md') ?? '';
+  assert.equal(tue.includes('- `05:00` East one, Tuesday early.') && tue.includes('- `19:00` East two, Tuesday evening.'), true, tue);
+  assert.equal(tue.includes('East three'), false, 'Tuesday ends at his midnight');
+  assert.equal((v.files.get('Myu/Log/2026-11-25.md') ?? '').includes('- `01:00` East three, Wednesday at one.'), true);
+  assert.deepEqual(v.trashed, []);
+  assert.equal([...v.files.keys()].some((p) => p > 'Myu/Log/2026-11-25.md'), false, 'no note for a day not begun');
+  assert.equal(v.settings.myu_log_zone, 'Asia/Tokyo');
+  onlyInstants(v.asked);
+});
+
+test('the log over the change, west of UTC, when he had edited yesterday\'s note: it stays byte for byte, and today\'s keeps the evening with its day', async () => {
+  // In New York (UTC-5): r0 Sun 22 Nov 20:00, r1 Mon 23 Nov 18:30, r2 Mon 23 Nov 21:00, r3 Tue 24 Nov 10:00, r4 Tue 24 Nov 19:30.
+  const rows = [
+    { id: 'r0', at: '2026-11-23T01:00:00Z', text: 'Row zero, Sunday evening.' },
+    { id: 'r1', at: '2026-11-23T23:30:00Z', text: 'Row one, Monday before seven.' },
+    { id: 'r2', at: '2026-11-24T02:00:00Z', text: 'Row two, Monday evening.' },
+    { id: 'r3', at: '2026-11-24T15:00:00Z', text: 'Row three, Tuesday morning.' },
+    { id: 'r4', at: '2026-11-25T00:30:00Z', text: 'Row four, Tuesday evening.' },
+  ];
+  const v = await logVault('America/New_York', {
+    'Myu/Log/2026-11-23.md': logNote(['Row zero, Sunday evening.', 'Row one, Monday before seven.']),
+    'Myu/Log/2026-11-24.md': logNote(['Row two, Monday evening.', 'Row three, Tuesday morning.']),
+    'Myu/Log/2026-11-25.md': logNote(['Row four, Tuesday evening.']),
+  }, rows, 'America/New_York');
+  // He wrote in Monday's note after Myu did.
+  const his = logNote(['Row zero, Sunday evening.', 'Row one, Monday before seven.', 'My own words about Monday.']);
+  v.files.set('Myu/Log/2026-11-23.md', his);
+  await v.write(new Date('2026-11-25T01:00:00Z')); // Tue 24 Nov 20:00 in New York
+  assert.equal(v.files.get('Myu/Log/2026-11-23.md'), his, 'his note of yesterday, byte for byte');
+  for (const r of rows) assert.equal([...v.files.values()].some((c) => c.includes(r.text)), true, `${r.id} is still in his vault`);
+  const tue = v.files.get('Myu/Log/2026-11-24.md') ?? '';
+  assert.equal(tue.includes('- `Yesterday 21:00` Row two, Monday evening.'), true, 'the evening the old note held, with its day: ' + tue);
+  assert.equal(tue.includes('- `Yesterday 18:30` Row one, Monday before seven.'), true);
+  assert.equal(tue.includes('- `10:00` Row three, Tuesday morning.') && tue.includes('- `19:30` Row four, Tuesday evening.'), true);
+  assert.equal(v.files.has('Myu/Log/2026-11-25.md'), false, 'no note for a day not begun');
+  // The rest of that day, today's note keeps starting from the same bound; the next day starts from its own midnight.
+  await v.write(new Date('2026-11-25T03:00:00Z')); // Tue 24 Nov 22:00
+  assert.equal((v.files.get('Myu/Log/2026-11-24.md') ?? '').includes('Row two, Monday evening.'), true, 'still there later that day');
+  await v.write(new Date('2026-11-25T15:00:00Z')); // Wed 25 Nov 10:00
+  assert.equal((v.files.get('Myu/Log/2026-11-24.md') ?? '').includes('Row two, Monday evening.'), true, 'the past day\'s note stays');
+  assert.equal((v.files.get('Myu/Log/2026-11-25.md') ?? '').includes('Row two'), false, 'a new day from its own midnight');
+  onlyInstants(v.asked);
+});
+
+test('the log over the change: a note for tomorrow he wrote in stays; a read that fails changes nothing', async () => {
+  const rows = [{ id: 'r4', at: '2026-11-25T00:30:00Z', text: 'Row four, Tuesday evening.' }];
+  const v = await logVault('America/New_York', { 'Myu/Log/2026-11-25.md': logNote(['Row four, Tuesday evening.']) }, rows, 'America/New_York');
+  v.files.set('Myu/Log/2026-11-25.md', logNote(['Row four, Tuesday evening.', 'My own words.']));
+  await v.write(new Date('2026-11-25T01:00:00Z'));
+  assert.equal((v.files.get('Myu/Log/2026-11-25.md') ?? '').includes('My own words.'), true, 'his words stay');
+  assert.deepEqual(v.trashed, []);
+  // Yesterday's read fails: today's note is not replaced, and the change waits for the next run.
+  const old = logNote(['Row two, Monday evening.', 'Row three, Tuesday morning.']);
+  const f = await logVault('America/New_York', { 'Myu/Log/2026-11-24.md': old }, rows, 'America/New_York', '2026-11-23T00:00:00.000Z');
+  await f.write(new Date('2026-11-25T01:00:00Z'));
+  assert.equal(f.files.get('Myu/Log/2026-11-24.md'), old, 'nothing replaced');
+  assert.equal(f.settings.myu_log_local_days, undefined);
 });

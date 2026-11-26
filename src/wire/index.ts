@@ -853,6 +853,10 @@ export interface Commitment {
   space?: { space_id: string; name: string };
   due?: string;
   next_check?: string;
+  /** 2026-11-25: on a promise due at a time of day, that time ("15:00", 24-hour, in his zone); absent on a day-only promise. */
+  due_time?: string | null;
+  /** 2026-11-25: the meeting a promise is tied to (`title` null when it has none). */
+  due_event?: { event_id?: string | null; title?: string | null; starts_at?: string | null } | null;
   status: MyuCommitmentStatus;
   counts?: { kept: number; missed: number };
   how_myu_knows: string;
@@ -867,4 +871,6 @@ export interface Commitment {
 export interface GetCommitmentsResponse {
   success: boolean;
   items: Commitment[];
+  /** 2026-11-25: his zone (IANA), the account's: every due day and time of his is reckoned in it. Absent from an older server. */
+  zone?: string | null;
 }

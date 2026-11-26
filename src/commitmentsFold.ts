@@ -5,7 +5,8 @@
 
 import type { Commitment } from './wire';
 import { isLockedText } from './spaceModeLogic';
-import { DAY_FIELDS, dayNoonMs, sentDay } from './dueDay';
+import { DAY_FIELDS, dayInZone, dayNoonMs, sentDay, todayIn } from './dueDay';
+import { promiseDueDay, promiseDueWords } from './promiseDue';
 
 export const COMMITMENTS_FOLD_WORDS = {
   title: 'What you owe',
@@ -31,7 +32,10 @@ export interface CommitmentRow {
   text: string;
   what: string;
   name: string;
+  /** Null too where the due time below stands for it (its day is the check's). */
   check: string | null;
+  /** 2026-11-25: a promise due at a time, or tied to a meeting, in the server's forms (`promiseDue.ts`); absent otherwise. */
+  due?: string;
   status: string | null;
   open: CommitmentOpen | null;
 }
@@ -69,18 +73,25 @@ const WEEKDAY_LONG = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'F
 const MONTH_LONG = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const longDayWords = (d: Date, now: Date): string => `${WEEKDAY_LONG[d.getDay()]} ${d.getDate()} ${MONTH_LONG[d.getMonth()]}${d.getFullYear() === now.getFullYear() ? '' : ` ${d.getFullYear()}`}`;
 
-export function commitmentRow(c: Commitment, now: Date = new Date()): CommitmentRow {
+export function commitmentRow(c: Commitment, now: Date = new Date(), zone?: string): CommitmentRow {
   const what = isLockedText(c.what) ? COMMITMENTS_FOLD_WORDS.locked : (c.what ?? '').trim();
   const name = c.counterparty?.name?.trim() || c.space?.name?.trim() || COMMITMENTS_FOLD_WORDS.someone;
   // The check's day (19b3: `next_check_day`, else `next_check`); with no check of its own, its due day; a passed day: "the check was …".
   const checkDay = sentDay(c, DAY_FIELDS.nextCheck) ?? (c.next_check ? null : sentDay(c, DAY_FIELDS.deadline));
   const instant = c.next_check ?? c.due ?? null;
-  const at = checkDay ? new Date(dayNoonMs(checkDay)) : instant ? new Date(instant) : null;
+  // In his zone (2026-11-25): the check's day as he reckons it, against his today, each read as that day's noon here, so the words name them.
+  const day = checkDay ?? (instant ? dayInZone(instant, zone) : null);
+  const at = day ? new Date(dayNoonMs(day)) : null;
+  const today = new Date(dayNoonMs(todayIn(zone, now.getTime())));
   const check = !at || Number.isNaN(at.getTime())
     ? null
-    : startOfDay(at) < startOfDay(now)
-      ? COMMITMENTS_FOLD_WORDS.checkWas(longDayWords(at, now))
-      : COMMITMENTS_FOLD_WORDS.nextCheck(dayWords(at, now));
+    : startOfDay(at) < startOfDay(today)
+      ? COMMITMENTS_FOLD_WORDS.checkWas(longDayWords(at, today))
+      : COMMITMENTS_FOLD_WORDS.nextCheck(dayWords(at, today));
+  // Its due time (2026-11-25), in the check's place where the check falls on the day it names; a check on another day of its own stays.
+  const due = promiseDueWords(c, now.getTime(), zone);
+  const checkOwn = sentDay(c, DAY_FIELDS.nextCheck) ?? (c.next_check ? dayInZone(c.next_check, zone) : null);
+  const checkShown = due && (checkOwn === null || checkOwn === promiseDueDay(c, now.getTime(), zone)) ? null : check;
   const status = c.status && c.status !== 'open' ? String(c.status) : null;
   const relId = c.counterparty?.relationship_id ?? (c.counterparty?.type === 'person' ? c.counterparty.id : undefined);
   const spaceId = c.counterparty?.type === 'space' ? c.counterparty.id : c.space?.space_id;
@@ -89,10 +100,10 @@ export function commitmentRow(c: Commitment, now: Date = new Date()): Commitment
     : spaceId
       ? { subject_type: 'space', subject_id: spaceId, label: c.space?.name ?? c.counterparty?.name ?? undefined }
       : null;
-  return { commitment_id: c.commitment_id, text: [what, name, check, status].filter(Boolean).join(' · '), what, name, check, status, open };
+  return { commitment_id: c.commitment_id, text: [what, name, due, checkShown, status].filter(Boolean).join(' · '), what, name, check: checkShown, ...(due ? { due } : {}), status, open };
 }
 
-export function commitmentsFold(items: Commitment[] | null | undefined, opts: { now?: Date; limit?: number } = {}): CommitmentsFold {
+export function commitmentsFold(items: Commitment[] | null | undefined, opts: { now?: Date; limit?: number; zone?: string } = {}): CommitmentsFold {
   const now = opts.now ?? new Date();
   const limit = opts.limit ?? 5;
   const running = (items ?? []).filter((c) => !FINISHED_COMMITMENT_STATUSES.includes(String(c.status)));
@@ -100,8 +111,8 @@ export function commitmentsFold(items: Commitment[] | null | undefined, opts: { 
   const mine = sorted(running.filter((c) => c.owner !== 'them'));
   const theirs = sorted(running.filter((c) => c.owner === 'them'));
   return {
-    youOwe: mine.slice(0, limit).map((c) => commitmentRow(c, now)),
-    owedToYou: theirs.slice(0, limit).map((c) => commitmentRow(c, now)),
+    youOwe: mine.slice(0, limit).map((c) => commitmentRow(c, now, opts.zone)),
+    owedToYou: theirs.slice(0, limit).map((c) => commitmentRow(c, now, opts.zone)),
     moreYouOwe: Math.max(0, mine.length - limit),
     moreOwedToYou: Math.max(0, theirs.length - limit),
     empty: mine.length + theirs.length === 0,

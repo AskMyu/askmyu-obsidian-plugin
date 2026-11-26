@@ -276,7 +276,7 @@ export interface AskMyuApi {
    */
   updateCommitment(commitmentId: string, change: { status?: string }): Promise<ApiResponse<{ success?: boolean }>>;
   /** `GET /myu/log?...` — everything Myu read/assumed/said/did/waited (the Days log). */
-  getMyuLog(opts?: { since?: string; kind?: string; subjectType?: string; subjectId?: string; limit?: number }): Promise<ApiResponse<MyuLogResult>>;
+  getMyuLog(opts?: { since?: string; kind?: string; subjectType?: string; subjectId?: string; limit?: number; cursor?: string }): Promise<ApiResponse<MyuLogResult>>;
   /** `GET /card/person?level=deep_dive` — the full view with the four new sections. */
   getCardDeep(entityType: CardEntityType, entityId: string): Promise<ApiResponse<{ card?: CardSpecLite; response_type?: string }>>;
   /** `GET /retro?space_id=` — the team's retro: where it stands, the questions with what people wrote, the tasks. */
@@ -1239,12 +1239,22 @@ export interface MyuLogItemLite {
   text?: string;
   purpose?: string;
   subject?: { type?: string; id?: string; label?: string };
-  provenance?: { surface?: string; agent?: string; client?: string };
+  provenance?: { surface?: string; agent?: string; client?: string; computer?: string | null };
+  // The redrawn log (the release after 0.5.5; shared `types/myuLog.ts`): its heading, the one folded row a day, a quiet check, the row it answers.
+  group?: string;
+  fold?: { count?: number; day?: string };
+  quiet?: boolean;
+  answers?: string;
 }
 export interface MyuLogResult {
   success?: boolean;
   items?: MyuLogItemLite[];
   next_cursor?: string;
+  /** The redrawn log's headings, in their order; absent from today's server, whose rows are drawn as before. */
+  groups?: Array<{ id: string; title: string }>;
+  all?: boolean;
+  /** His zone (an IANA name), by which the note's day and times are read; without it, the one last named, else this computer's. */
+  zone?: string;
 }
 
 /** `GET /retro` — the room pin + threads (F3 links out; the vault renders the pin/state). */
@@ -1522,13 +1532,15 @@ export class Api implements AskMyuApi {
     return this.transport.get<GetCommitmentsResponse>('/commitments');
   }
 
-  getMyuLog(opts?: { since?: string; kind?: string; subjectType?: string; subjectId?: string; limit?: number }) {
+  getMyuLog(opts?: { since?: string; kind?: string; subjectType?: string; subjectId?: string; limit?: number; cursor?: string }) {
     const q: string[] = [];
     if (opts?.since) q.push(`since=${encodeURIComponent(opts.since)}`);
     if (opts?.kind) q.push(`kind=${encodeURIComponent(opts.kind)}`);
     if (opts?.subjectType) q.push(`subject_type=${encodeURIComponent(opts.subjectType)}`);
     if (opts?.subjectId) q.push(`subject_id=${encodeURIComponent(opts.subjectId)}`);
     if (opts?.limit) q.push(`limit=${opts.limit}`);
+    // The page before this one (the server's `next_cursor`, or an instant: rows written before it).
+    if (opts?.cursor) q.push(`cursor=${encodeURIComponent(opts.cursor)}`);
     return this.transport.get<MyuLogResult>(`/myu/log${q.length ? `?${q.join('&')}` : ''}`);
   }
 

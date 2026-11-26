@@ -4,7 +4,8 @@
 //
 // A line's words show their first two lines, and no more than about 240 characters (cut at a word, with "…"); a quiet "read all"
 // opens the rest in place. A line already that short shows whole, with nothing to open. Only the words are cut: the choices, and anything to press,
-// stay under the short form. The server may later send a short form of its own; given, it is preferred.
+// stay under the short form. The server may later send a short form of its own; given, it is preferred. A question in the words is never
+// cut (2026-11-24): only the words around it.
 
 /** The one switch: false shows every line whole, as before. */
 export const LINE_SHORT_ON = true;
@@ -46,19 +47,49 @@ export const LINE_WHOLE_KINDS: readonly string[] = ['send', 'send_many', 'send_b
 /**
  * A line's words, short: the server's own short form where it gives one, else the first two lines, at most about 240 characters; then
  * what must be seen before a yes (`mustSee`, the server's; else matched on the words). `cut`: some of the words are still not shown.
+ * Its question is never cut (2026-11-24, the operator: a question shown short was not one he could answer): a row of the short form cut
+ * inside a question runs on to the question's end, and a question past the short form comes right after it, before what must be seen.
+ * Only the words around a question are cut; the choices under the words are not these words, and stay whole on every surface.
  */
 export function lineShortForm(words: string | null | undefined, serverShort?: string | null, mustSee?: readonly unknown[] | null, kind?: string | null): LineShort {
   const whole = (words ?? '').trim();
   if (!LINE_SHORT_ON || (!!kind && LINE_WHOLE_KINDS.includes(kind))) return { short: whole, cut: false };
   const own = typeof serverShort === 'string' ? serverShort.trim() : '';
-  const shortOf = own && own.length < whole.length ? own : cutOf(whole);
   const rows = whole.split('\n').map((r) => r.trim()).filter(Boolean);
-  // What must be seen before a yes stays in sight, right after the short form, before "read all": the server's, in its order; else matched.
+  const shortOf = (own && own.length < whole.length ? own : cutOf(whole))
+    .split('\n')
+    .map((r) => toQuestionEnd(r, rows))
+    .join('\n');
+  // Each question not yet in sight, in the words' order; then what must be seen before a yes, right after the short form, before "read
+  // all": the server's, in its order; else matched.
+  const asking = rows.map(questionOf).filter((q): q is string => !!q);
   const given = Array.isArray(mustSee) ? mustSee.map((s) => (typeof s === 'string' ? s.trim() : '')).filter(Boolean) : null;
   const wanted = given ?? rows.filter((r) => MUST_SEE.some((m) => m.test(r)));
-  const kept = [...new Set(wanted)].filter((r) => !shortOf.includes(r));
+  const kept = [...new Set([...asking, ...wanted])].filter((r) => !shortOf.includes(r));
   const short = kept.length ? `${shortOf}\n${kept.join('\n')}` : shortOf;
   return { short, cut: rows.some((r) => !short.includes(r)) };
+}
+
+/**
+ * A row's question: the row up to the end of its last sentence that asks, one that ends with a bare "?" ("“Ready?”" is someone's words,
+ * quoted, not a question to him). What follows it in the same row is words like any other: a line parked for another day ends "… or drop
+ * it? Three things need you today already; Myu will check this with you tomorrow.", and that last sentence may be cut. Null: it asks nothing.
+ */
+function questionOf(row: string): string | null {
+  const t = row.trim();
+  for (let i = t.length - 1; i >= 0; i--) if (t[i] === '?' && (i === t.length - 1 || /\s/.test(t[i + 1]))) return t.slice(0, i + 1);
+  return null;
+}
+
+/** A row of the short form cut inside a question ("… tell James, or…"): run on to the question's end, "…" after it where its row goes on. */
+function toQuestionEnd(row: string, rows: readonly string[]): string {
+  if (!row.endsWith('…')) return row;
+  const stem = row.slice(0, -1).trim();
+  const from = rows.find((r) => r.length > stem.length && r.startsWith(stem));
+  const question = from ? questionOf(from) : null;
+  if (!from || !question || question.length <= stem.length) return row;
+  const lead = /^\s*/.exec(row)?.[0] ?? '';
+  return `${lead}${question}${from.length > question.length ? '…' : ''}`;
 }
 
 /** One row, or the first two rows of an item past the limit, cut at a word with "…" to `max` characters. */

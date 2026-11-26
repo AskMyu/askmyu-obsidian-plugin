@@ -151,7 +151,7 @@ test('space mode: "Change something" puts the cursor back in the box', async () 
 test('space mode: "Take it there" opens the journal with the text in the box, unsent', async () => {
   const { space, calls, api } = setup();
   await space.open();
-  await space.send('this is bigger than the team, it is my whole career');
+  await space.send('this is bigger than the team, it is the whole quarter plan');
   assert.deepEqual(space.screen().ask?.choices.map((c) => c.label), ['Take it there', 'Not now']);
   api.spaceMode.own.push('I keep saying yes to dates I doubt.');
   await space.choose('journal');

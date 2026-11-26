@@ -90,11 +90,11 @@ const READ: RetroReadResult = {
       position: 1,
       kind: 'question',
       author_kind: 'team_myu',
-      text: 'What steps can we take to increase the number of parties?',
+      text: 'What would make the Friday demo easier to run?',
       state_text: 'Everyone accepts this.',
       replies: [
-        { participant: { name: 'Masumi Nakamura' }, text: 'i disagree- we need more parties it helps with morale' },
-        { participant: { name: 'Masumi Testtesttest' }, text: 'I need to find a better balance.' },
+        { participant: { name: 'Mira Okonjo' }, text: 'keep it short and send the notes after' },
+        { participant: { name: 'Odile Marchetti' }, text: 'I need the build ready an hour earlier.' },
       ],
       merged: { text: 'Review capacity, not engineering capacity, is what slips the release.' },
     },
@@ -111,7 +111,7 @@ test('the retro reads as the web shows it: one line on top, the fold, questions 
   assert.equal(v.how, READ.how_it_works, 'the fold holds the backend\'s words as sent');
   assert.deepEqual(v.questions.map((q) => [q.title, q.from]), [['Question 1', 'Myu, for the team'], ['Question 2', 'Dana Okafor']]);
   assert.equal(v.questions[0].state, 'Everyone accepts this.');
-  assert.deepEqual(v.questions[0].replies.map((r) => r.name), ['Masumi Nakamura', 'Masumi Testtesttest']);
+  assert.deepEqual(v.questions[0].replies.map((r) => r.name), ['Mira Okonjo', 'Odile Marchetti']);
   assert.equal(v.questions[0].summary, 'Review capacity, not engineering capacity, is what slips the release.');
   // R21: the server's sentence as sent, with its own short count; the page adds no count of its own.
   assert.equal(v.questions[1].state, 'Answer in your own words, whenever you like. 1 of 2 done.');

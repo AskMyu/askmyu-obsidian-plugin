@@ -76,6 +76,7 @@ import { lineIdAttr } from '../linesSeenWatch';
 import { ENTRY_DOT_WORDS, entryDot } from '../menuMarks';
 import { decryptWithKey } from '../crypto/primitives';
 import { COMMITMENTS_FOLD_WORDS, commitmentsFold, type CommitmentRow } from '../commitmentsFold';
+import { promiseZone } from '../promiseDue';
 import type { Commitment, LinesMeeting, LinesWaiting, LinesYesterday, PrepListItem } from '../wire';
 import { MEETING_POST_WORDS, yesterdayCount } from '../meetingPost';
 import type { PrepMeetingRef } from '../transport/api';
@@ -158,6 +159,8 @@ export class TodayView extends ItemView {
   private commitments: VaultCommitment[] = [];
   /** "what you owe ▸" (terminal parity, 2026-09-26): the commitments between people, `GET /commitments`. */
   private owed: Commitment[] = [];
+  /** His zone, as `/commitments` names it (2026-11-25): a promise's time is drawn in it; the computer's when it names none. */
+  private owedZone: string | undefined;
   private owedOpen = false;
   private mirror: MirrorEdition | null = null;
   private weekly: WeeklyEdition | null = null;
@@ -345,7 +348,10 @@ export class TodayView extends ItemView {
       safe(() => this.plugin.backend.listSpaces()),
       safe(() => this.plugin.backend.getCommitments()),
     ]);
-    if (owedRes?.ok) this.owed = owedRes.data?.items ?? [];
+    if (owedRes?.ok) {
+      this.owed = owedRes.data?.items ?? [];
+      this.owedZone = promiseZone(owedRes.data);
+    }
     if (spacesRes?.ok) this.spaces = spacesRes.data?.spaces ?? [];
     // The read keeps a line answered today on today's list until tomorrow but
     // sends no readback for it; only open lines are drawn here.
@@ -1514,7 +1520,7 @@ export class TodayView extends ItemView {
    * opens the other person's conversation. Nothing running either way: nothing is drawn.
    */
   private renderWhatYouOwe(root: HTMLElement): void {
-    const fold = commitmentsFold(this.owed);
+    const fold = commitmentsFold(this.owed, { zone: this.owedZone });
     if (fold.empty) return;
     const zone = root.createDiv({ cls: 'myu-zone myu-owed' });
     const head = zone.createEl('button', {

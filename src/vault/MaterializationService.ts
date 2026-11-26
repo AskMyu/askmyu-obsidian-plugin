@@ -22,7 +22,7 @@
  */
 
 import { normalizePath, TFile, type App } from 'obsidian';
-import type { AskMyuApi, BackendFlags, CardSpecLite, EntityHeadline, VaultChangeCard, VaultChangesPage, VaultCommitment } from '../transport/api';
+import type { AskMyuApi, BackendFlags, CardSpecLite, EntityHeadline, MyuLogItemLite, VaultChangeCard, VaultChangesPage, VaultCommitment } from '../transport/api';
 import type { ApiResponse } from '../transport';
 import type { AskMyuSettings } from '../settings';
 import { hashContent } from '../capture/noteMeta';
@@ -34,6 +34,7 @@ import { isWeeklyEditionFresh } from './WeeklyReviewWriter';
 import { WEAVE_NOTE } from './weaveRecipes';
 import type { MeetingRecordLite } from '../wire';
 import { meetingRecordCounts } from '../meetingPost';
+import { dayShift, logZone, zoneDay, zoneMidnight } from '../myuLogView';
 import { firstPresent, parseWhen, flattenMemoryPayload, buildSelfMarkdown, type JournalDayEntry, type DayMeetingLink, buildDayMarkdown, buildMonthCalendarMarkdown, buildMeetingHistoryMarkdown, buildJournalDayMarkdown, buildCompanyMarkdown,
   buildCommitmentsMarkdown,
   buildPeopleBase,
@@ -832,14 +833,88 @@ export class MaterializationService {
     await this.writeHeld(`${this.folder}/Today.md`, buildTodayMarkdown(date, sections));
   }
 
-  /** Myu/Log/<day>.md — the Days log (slice 15). What Myu read/assumed/said/did/waited. */
-  private async writeMyuLog(): Promise<void> {
-    const day = new Date().toISOString().slice(0, 10);
-    const since = `${day}T00:00:00Z`;
-    const res = await this.deps.api().getMyuLog({ since, limit: 100 }).catch(() => null);
-    if (!res?.ok) return;
-    const items = res.data?.items ?? [];
-    await this.writeHeld(`${this.folder}/Log/${day}.md`, buildMyuLogMarkdown(day, items));
+  /**
+   * Myu/Log/<day>.md — the Days log (slice 15). What Myu read/assumed/said/did/waited. The day is his own, from its midnight: the zone
+   * the answer names, else the one it last named, else this computer's; an answer in another zone is read again from his midnight.
+   *
+   * Once, at the first run after the change from UTC days to his own (the read's findings, 25 Nov): nothing may leave his vault, and no
+   * note may stand for a day that has not begun. So before today's note is replaced, yesterday's is written whole by his day, from the
+   * earlier of its two midnights (his and UTC's), so the evening the UTC note held stays; then today's; then a note the old rule named
+   * for tomorrow (west of UTC, in the evening) goes to the trash, its rows being in today's; one he wrote in stays, under the edit-hold.
+   * When he had edited yesterday's note, it stays as he left it, and today's note starts from that same earlier bound for the rest of
+   * the day (planning, 25 Nov), so the evening the old today's note held is still in his vault, its rows showing their day.
+   * A read or a write that fails leaves everything as it was, to be done on the next run.
+   */
+  private async writeMyuLog(now: Date = new Date()): Promise<void> {
+    const s = this.deps.settings();
+    // Where today's note starts: his midnight; on the day of the change, after a held note of yesterday, the earlier bound.
+    const startOf = (z: string): Date => {
+      const d = zoneDay(now, z);
+      return new Date(s.myu_log_start?.day === d ? s.myu_log_start.from : zoneMidnight(d, z).getTime());
+    };
+    let zone = logZone(s.myu_log_zone);
+    let today = await this.readLog(startOf(zone), null);
+    if (!today) return;
+    if (today.zone && logZone(today.zone) !== zone) {
+      zone = logZone(today.zone);
+      today = await this.readLog(startOf(zone), null);
+      if (!today) return;
+    }
+    if (s.myu_log_zone !== zone) {
+      s.myu_log_zone = zone;
+      await this.deps.save();
+    }
+    const day = zoneDay(now, zone);
+    const changing = !s.myu_log_local_days;
+    if (changing) {
+      const yesterday = dayShift(day, -1);
+      const from = Math.min(zoneMidnight(yesterday, zone).getTime(), Date.parse(`${yesterday}T00:00:00Z`));
+      const before = await this.readLog(new Date(from), zoneMidnight(day, zone));
+      if (!before) return;
+      const out = await this.writeHeld(`${this.folder}/Log/${yesterday}.md`, buildMyuLogMarkdown(yesterday, before.items, before.groups, zone));
+      if (out === 'error') return;
+      if (out === 'held') {
+        // He edited yesterday's note: it stays as he left it, and today's note keeps what it cannot hold, from the same bound.
+        s.myu_log_start = { day, from };
+        today = await this.readLog(new Date(from), null);
+        if (!today) return;
+      }
+    }
+    const out = await this.writeHeld(`${this.folder}/Log/${day}.md`, buildMyuLogMarkdown(day, today.items, today.groups, zone));
+    if (out === 'error' || !changing) return;
+    const unbegun = this.deps.app.vault.getAbstractFileByPath(normalizePath(`${this.folder}/Log/${dayShift(day, 1)}.md`));
+    if (unbegun instanceof TFile) {
+      const path = normalizePath(unbegun.path);
+      // A note he wrote in stays (nothing of his leaves the vault); the edit-hold has it, as any note he edited.
+      const ours = s.myu_file_hashes[path] === (await hashContent(await this.deps.app.vault.cachedRead(unbegun)));
+      if (ours) {
+        await this.deps.app.fileManager.trashFile(unbegun);
+        delete s.myu_file_hashes[path];
+      }
+    }
+    s.myu_log_local_days = true;
+    await this.deps.save();
+  }
+
+  /** The log from an instant, and before another (none: to now), every page (at most 20 of 100); null when any page fails. */
+  private async readLog(since: Date, before: Date | null): Promise<{ items: MyuLogItemLite[]; groups?: Array<{ id: string; title: string }>; zone?: string } | null> {
+    const items: MyuLogItemLite[] = [];
+    let groups: Array<{ id: string; title: string }> | undefined;
+    let zone: string | undefined;
+    // cursor: an instant, exclusive (GetMyuLog:52-53); never a bare day, which reads as UTC's midnight. `since` is an instant too.
+    let cursor = before ? before.toISOString() : undefined;
+    for (let page = 0; page < 20; page++) {
+      const res = await this.deps.api().getMyuLog({ since: since.toISOString(), limit: 100, cursor }).catch(() => null);
+      if (!res?.ok) return null;
+      if (page === 0) {
+        groups = res.data?.groups;
+        zone = res.data?.zone;
+      }
+      items.push(...(res.data?.items ?? []));
+      cursor = res.data?.next_cursor;
+      if (!cursor) break;
+    }
+    return { items, groups, zone };
   }
 
   private async writeWeek(): Promise<void> {

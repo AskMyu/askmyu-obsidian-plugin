@@ -11,7 +11,8 @@
  * Tasks plugin, and the join key between a vault edit and a server object.
  */
 
-import type { CardSpecLite, EntityHeadline, MyuLineLite, VaultCommitment, WeeklyEdition } from '../transport/api';
+import type { CardSpecLite, EntityHeadline, MyuLineLite, MyuLogItemLite, VaultCommitment, WeeklyEdition } from '../transport/api';
+import { MYU_LOG_WORDS, isGroupedLog, logDayOfDay, logViewOf, logZone, noteText, zoneDay, zoneTime } from '../myuLogView';
 import type { CompositionComponentLite, CompositionSpecLite, PastedBlockWire } from '../wire';
 import { cardLabel } from '../pastedText';
 import { normalizeSection, sectionBlocks } from '../views/cardSections';
@@ -1779,10 +1780,20 @@ export function buildTodayLinesSection(lines: MyuLineLite[]): { title: string; i
 }
 
 /** Myu/Log/<day>.md — everything Myu read, assumed, said, did and waited on, at
- *  the grain of the purpose. Provenance rendered per the CLI contract. */
+ *  the grain of the purpose. Provenance rendered per the CLI contract. Times and
+ *  days are his (the answer's zone, else this computer's), never UTC; a row from
+ *  another day than the note's says its day (the note written once over the
+ *  change to his own days holds the evening before). Every row is one line, and
+ *  words from someone's message can never make a heading, a rule, a fence or an
+ *  embed in his vault (`noteText`); the server's headings neither. With the
+ *  server's `groups` (the redrawn log): its headings, its rows' words as sent
+ *  with no kind tag and no «via …» of its own, the folded row quieter, an answer
+ *  under the row it answers; without them, as before. */
 export function buildMyuLogMarkdown(
   day: string,
-  items: Array<{ kind?: string; text?: string; purpose?: string; at?: string; provenance?: { surface?: string; agent?: string; computer?: string | null } }>,
+  items: Array<MyuLogItemLite | { receipt_id?: string; kind?: string; text?: string; purpose?: string; at?: string; provenance?: { surface?: string; agent?: string; computer?: string | null } }>,
+  groups?: Array<{ id: string; title: string }> | null,
+  zone: string = logZone(),
 ): string {
   const head = frontmatter([
     ['type', 'myu-log'],
@@ -1791,17 +1802,40 @@ export function buildMyuLogMarkdown(
   ]);
   const parts: string[] = [head, '', `# What Myu did — ${day}`];
   if (items.length === 0) {
-    parts.push('', '*Nothing yet today.*', '');
+    parts.push('', `*${MYU_LOG_WORDS.emptyToday}*`, '');
+    return parts.join('\n');
+  }
+  // A row's time, and its day when it is not the note's.
+  const whenOf = (at: string | undefined): string => {
+    const d = new Date(at ?? '');
+    if (Number.isNaN(d.getTime())) return '';
+    const rowDay = zoneDay(d, zone);
+    return `${rowDay === day ? '' : `${logDayOfDay(rowDay, day)} `}${zoneTime(d, zone)}`;
+  };
+  if (isGroupedLog({ groups })) {
+    const rows = items.map((it, i): MyuLogItemLite => ({ ...it, receipt_id: it.receipt_id ?? String(i) }));
+    const byId = new Map(rows.map((r) => [r.receipt_id, r]));
+    for (const s of logViewOf({ groups: groups ?? [], items: rows, zone }, { oneDay: true, zone })) {
+      parts.push('', `## ${noteText(s.title)}`);
+      for (const r of s.rows) {
+        const text = noteText(r.text);
+        const it = byId.get(r.id);
+        const foldDay = r.folded && typeof it?.fold?.day === 'string' && it.fold.day !== day ? logDayOfDay(it.fold.day, day) : '';
+        const when = r.folded ? foldDay : whenOf(it?.at);
+        parts.push(`${r.under ? '  ' : ''}- ${when ? `\`${when}\` ` : ''}${r.quiet ? `*${text}*` : text}`);
+      }
+    }
+    parts.push('');
     return parts.join('\n');
   }
   for (const it of items) {
-    const kind = textOf(it.kind);
-    const text = textOf(it.text);
-    const when = it.at ? String(it.at).slice(11, 16) : '';
+    const kind = noteText(textOf(it.kind));
+    const text = noteText(textOf(it.text));
+    const when = whenOf(it.at);
     const p = it.provenance;
     const how = p?.agent === 'claude_code' ? ' · via your Claude Code session' : p?.surface === 'cli' ? ' · via terminal' : '';
     // " on ‹computer›" when Myu names the computer (20 Nov: only when the person has more than one).
-    const on = typeof p?.computer === 'string' && p.computer.trim() ? ` on ${p.computer.trim()}` : '';
+    const on = typeof p?.computer === 'string' && p.computer.trim() ? ` on ${noteText(p.computer)}` : '';
     const via = how ? `${how}${on}` : '';
     parts.push(`- ${when ? `\`${when}\` ` : ''}${kind ? `**${kind}** ` : ''}${text}${via}`);
   }

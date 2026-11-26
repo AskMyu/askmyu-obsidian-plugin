@@ -5935,6 +5935,122 @@ var AddAccountEmailModal = class extends import_obsidian12.Modal {
   }
 };
 
+// src/myuLogView.ts
+var MYU_LOG_WORDS = {
+  today: "Today",
+  yesterday: "Yesterday",
+  emptyToday: "Nothing yet today.",
+  /** The heading over rows whose heading the answer did not name. */
+  other: "Other"
+};
+var WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+var MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+var pad2 = (n) => String(n).padStart(2, "0");
+function logZone(answerZone) {
+  const z = typeof answerZone === "string" ? answerZone.trim() : "";
+  if (z) {
+    try {
+      new Intl.DateTimeFormat("en-US", { timeZone: z });
+      return z;
+    } catch {
+    }
+  }
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  } catch {
+    return "UTC";
+  }
+}
+var zoneFormats = /* @__PURE__ */ new Map();
+function zoneParts(at, zone) {
+  let f = zoneFormats.get(zone);
+  if (!f) {
+    f = new Intl.DateTimeFormat("en-US", { timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+    zoneFormats.set(zone, f);
+  }
+  const p = {};
+  for (const x of f.formatToParts(at)) p[x.type] = x.value;
+  return { y: Number(p.year), m: Number(p.month), d: Number(p.day), h: Number(p.hour) % 24, min: Number(p.minute) };
+}
+function zoneDay(at, zone) {
+  const p = zoneParts(at, zone);
+  return `${p.y}-${pad2(p.m)}-${pad2(p.d)}`;
+}
+function zoneTime(at, zone) {
+  const p = zoneParts(at, zone);
+  return `${pad2(p.h)}:${pad2(p.min)}`;
+}
+function dayShift(day, n) {
+  const [y, m, d] = day.split("-").map(Number);
+  const t = new Date(Date.UTC(y, m - 1, d + n));
+  return `${t.getUTCFullYear()}-${pad2(t.getUTCMonth() + 1)}-${pad2(t.getUTCDate())}`;
+}
+function zoneMidnight(day, zone) {
+  const [y, m, d] = day.split("-").map(Number);
+  const wall = Date.UTC(y, m - 1, d);
+  let t = wall;
+  for (let i = 0; i < 3; i++) {
+    const p = zoneParts(new Date(t), zone);
+    const off = Date.UTC(p.y, p.m - 1, p.d, p.h, p.min) - wall;
+    if (off === 0) break;
+    t -= off;
+  }
+  return new Date(t);
+}
+var isDay = (s2) => typeof s2 === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s2);
+function logDayOfDay(day, today) {
+  if (!isDay(day) || !isDay(today)) return "";
+  const [y, m, d] = day.split("-").map(Number);
+  const [ty, tm, td] = today.split("-").map(Number);
+  const gap = Math.round((Date.UTC(y, m - 1, d) - Date.UTC(ty, tm - 1, td)) / 864e5);
+  if (gap === 0) return MYU_LOG_WORDS.today;
+  if (gap === -1) return MYU_LOG_WORDS.yesterday;
+  const year = y === ty ? "" : ` ${y}`;
+  return `${WEEKDAYS[new Date(Date.UTC(y, m - 1, d)).getUTCDay()]} ${d} ${MONTHS[m - 1]}${year}`;
+}
+function noteText(s2) {
+  let t = (typeof s2 === "string" ? s2 : "").replace(/[\u0000-\u001f\u007f-\u009f‎‏‪-‮⁦-⁩]/g, " ").replace(/\s+/g, " ").trim();
+  t = t.replace(/</g, "&lt;").replace(/!\[/g, "!\\[").replace(/%%/g, "%\\%").replace(/\$\$/g, "$\\$").replace(/#(?=[^\s#]|$)/g, "\\#");
+  if (/^[#>*+\-=_~`|]/.test(t)) t = `\\${t}`;
+  else t = t.replace(/^(\d+)([.)])(\s|$)/, "$1\\$2$3");
+  return t;
+}
+function isGroupedLog(res) {
+  return !!res && Array.isArray(res.groups);
+}
+function logViewOf(res, opts = {}) {
+  const now = opts.now ?? /* @__PURE__ */ new Date();
+  const zone = logZone(opts.zone ?? res.zone);
+  const time = opts.time ?? zoneTime;
+  const today = zoneDay(now, zone);
+  const sections = (res.groups ?? []).map((g) => ({ id: g.id, title: g.title, rows: [] }));
+  const byId = new Map(sections.map((s2) => [s2.id, s2]));
+  const other = { id: "", title: MYU_LOG_WORDS.other, rows: [] };
+  const folds = /* @__PURE__ */ new Set();
+  for (const it of res.items ?? []) {
+    if (it.fold) {
+      if (folds.has(it.receipt_id)) continue;
+      folds.add(it.receipt_id);
+    }
+    const at = new Date(it.at ?? "");
+    const folded = !!it.fold;
+    const section = byId.get(it.group ?? "") ?? other;
+    const above = section.rows[section.rows.length - 1];
+    const foldDay = it.fold?.day;
+    const day = opts.oneDay ? "" : folded && isDay(foldDay) ? logDayOfDay(foldDay, today) : Number.isNaN(at.getTime()) ? "" : logDayOfDay(zoneDay(at, zone), today);
+    section.rows.push({
+      id: it.receipt_id,
+      day,
+      time: folded || Number.isNaN(at.getTime()) ? "" : time(at, zone),
+      text: it.text ?? "",
+      folded,
+      quiet: folded || !!it.quiet,
+      under: !!it.answers && !!above && above.id === it.answers
+    });
+  }
+  return [...sections, other].filter((s2) => s2.rows.length > 0);
+}
+
 // src/pastedText.ts
 var CHAT_MESSAGE_MAX_CHARS = 1e4;
 var PASTE_CHIP_MIN_CHARS = 1e3;
@@ -6368,7 +6484,7 @@ var CHECK_WORDS = {
   listTold: "You were told",
   listYouTold: (name) => `You told ${name}`
 };
-var MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+var MONTHS2 = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 var DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 var dayStart = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
 function checkWhen(ms, now) {
@@ -6379,7 +6495,7 @@ function checkWhen(ms, now) {
   if (ago2 === 0) return "today";
   if (ago2 === 1) return "yesterday";
   if (ago2 > 1 && ago2 < 7) return DAYS[day.getDay()];
-  const dm = `${day.getDate()} ${MONTHS[day.getMonth()]}`;
+  const dm = `${day.getDate()} ${MONTHS2[day.getMonth()]}`;
   return day.getFullYear() === today.getFullYear() ? dm : `${dm} ${day.getFullYear()}`;
 }
 function checkRecordRow(r, now) {
@@ -6447,7 +6563,7 @@ var SOURCE_WORDS2 = {
 };
 var str2 = (v) => typeof v === "string" ? v.trim() : "";
 var list2 = (v) => Array.isArray(v) ? v : [];
-var MONTHS2 = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+var MONTHS3 = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 var DAYS2 = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 function dayMoment(s2) {
   const day = /^(\d{4}-\d{2}-\d{2})(?:T00:00(?::00(?:\.0+)?)?Z)?$/.exec(s2);
@@ -6459,14 +6575,14 @@ function postDate(v) {
   const t = dayMoment(s2);
   if (!Number.isFinite(t)) return s2;
   const d = new Date(t);
-  return `${d.getDate()} ${MONTHS2[d.getMonth()]}`;
+  return `${d.getDate()} ${MONTHS3[d.getMonth()]}`;
 }
 function postDay(v) {
   const s2 = str2(v);
   const t = dayMoment(s2);
   if (!Number.isFinite(t)) return s2;
   const d = new Date(t);
-  return `${DAYS2[d.getDay()]} ${d.getDate()} ${MONTHS2[d.getMonth()]}`;
+  return `${DAYS2[d.getDay()]} ${d.getDate()} ${MONTHS3[d.getMonth()]}`;
 }
 function sourceWords(source) {
   if (!source) return null;
@@ -7178,8 +7294,8 @@ function prepTimeWords(d) {
   const m = String(d.getMinutes()).padStart(2, "0");
   return `${h % 12 === 0 ? 12 : h % 12}:${m} ${h < 12 ? "am" : "pm"}`;
 }
-var WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-var MONTHS3 = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+var WEEKDAYS2 = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+var MONTHS4 = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 var startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
 function prepDayWord(startsAt, now = /* @__PURE__ */ new Date()) {
   const t = Date.parse(str4(startsAt));
@@ -7188,14 +7304,14 @@ function prepDayWord(startsAt, now = /* @__PURE__ */ new Date()) {
   const days = Math.round((startOfDay(d) - startOfDay(now)) / 864e5);
   if (days === 0) return "today";
   if (days === 1) return "tomorrow";
-  if (days > 1 && days < 7) return WEEKDAYS[d.getDay()];
-  return `${d.getDate()} ${MONTHS3[d.getMonth()]}`;
+  if (days > 1 && days < 7) return WEEKDAYS2[d.getDay()];
+  return `${d.getDate()} ${MONTHS4[d.getMonth()]}`;
 }
 function prepWhenWords(startsAt) {
   const t = Date.parse(str4(startsAt));
   if (!Number.isFinite(t)) return "";
   const d = new Date(t);
-  return `${WEEKDAYS[d.getDay()]} ${d.getDate()} ${MONTHS3[d.getMonth()]} \xB7 ${prepTimeWords(d)}`;
+  return `${WEEKDAYS2[d.getDay()]} ${d.getDate()} ${MONTHS4[d.getMonth()]} \xB7 ${prepTimeWords(d)}`;
 }
 function todayRowItems(items, count2) {
   const all = [...list3(items)].sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
@@ -7313,7 +7429,7 @@ function prepSuggestionTarget(meeting, suggestion) {
 function prepHistoryRowWords(row) {
   const t = Date.parse(str4(row.starts_at));
   const d = Number.isFinite(t) ? new Date(t) : null;
-  const day = d ? `${WEEKDAYS[d.getDay()].slice(0, 3)} ${d.getDate()} ${MONTHS3[d.getMonth()].slice(0, 3)}` : "";
+  const day = d ? `${WEEKDAYS2[d.getDay()].slice(0, 3)} ${d.getDate()} ${MONTHS4[d.getMonth()].slice(0, 3)}` : "";
   const total = row.items_total ?? 0;
   const covered = total > 0 ? PREP_LIST_WORDS.coveredAfter(row.items_done ?? 0, total) : "";
   return [day, covered].filter(Boolean).join(" \xB7 ");
@@ -8664,7 +8780,7 @@ function buildTodayLinesSection(lines) {
   }
   return { title: "What needs your attention today", items };
 }
-function buildMyuLogMarkdown(day, items) {
+function buildMyuLogMarkdown(day, items, groups, zone = logZone()) {
   const head = frontmatter([
     ["type", "myu-log"],
     [MYU_GENERATED_KEY, true],
@@ -8672,16 +8788,38 @@ function buildMyuLogMarkdown(day, items) {
   ]);
   const parts = [head, "", `# What Myu did \u2014 ${day}`];
   if (items.length === 0) {
-    parts.push("", "*Nothing yet today.*", "");
+    parts.push("", `*${MYU_LOG_WORDS.emptyToday}*`, "");
+    return parts.join("\n");
+  }
+  const whenOf4 = (at) => {
+    const d = new Date(at ?? "");
+    if (Number.isNaN(d.getTime())) return "";
+    const rowDay2 = zoneDay(d, zone);
+    return `${rowDay2 === day ? "" : `${logDayOfDay(rowDay2, day)} `}${zoneTime(d, zone)}`;
+  };
+  if (isGroupedLog({ groups })) {
+    const rows = items.map((it, i) => ({ ...it, receipt_id: it.receipt_id ?? String(i) }));
+    const byId = new Map(rows.map((r) => [r.receipt_id, r]));
+    for (const s2 of logViewOf({ groups: groups ?? [], items: rows, zone }, { oneDay: true, zone })) {
+      parts.push("", `## ${noteText(s2.title)}`);
+      for (const r of s2.rows) {
+        const text2 = noteText(r.text);
+        const it = byId.get(r.id);
+        const foldDay = r.folded && typeof it?.fold?.day === "string" && it.fold.day !== day ? logDayOfDay(it.fold.day, day) : "";
+        const when = r.folded ? foldDay : whenOf4(it?.at);
+        parts.push(`${r.under ? "  " : ""}- ${when ? `\`${when}\` ` : ""}${r.quiet ? `*${text2}*` : text2}`);
+      }
+    }
+    parts.push("");
     return parts.join("\n");
   }
   for (const it of items) {
-    const kind = textOf(it.kind);
-    const text2 = textOf(it.text);
-    const when = it.at ? String(it.at).slice(11, 16) : "";
+    const kind = noteText(textOf(it.kind));
+    const text2 = noteText(textOf(it.text));
+    const when = whenOf4(it.at);
     const p = it.provenance;
     const how = p?.agent === "claude_code" ? " \xB7 via your Claude Code session" : p?.surface === "cli" ? " \xB7 via terminal" : "";
-    const on = typeof p?.computer === "string" && p.computer.trim() ? ` on ${p.computer.trim()}` : "";
+    const on = typeof p?.computer === "string" && p.computer.trim() ? ` on ${noteText(p.computer)}` : "";
     const via = how ? `${how}${on}` : "";
     parts.push(`- ${when ? `\`${when}\` ` : ""}${kind ? `**${kind}** ` : ""}${text2}${via}`);
   }
@@ -8831,7 +8969,7 @@ function vennOverlapLabel(own, setNames, setCount) {
 }
 
 // src/buildStamp.ts
-var BUILD_STAMP = true ? "0.1.7" : "dev";
+var BUILD_STAMP = true ? "0.1.8" : "dev";
 
 // src/calendarMyu.ts
 function isMyuCalendarEntry(e) {
@@ -9313,6 +9451,7 @@ var Api = class {
     if (opts?.subjectType) q.push(`subject_type=${encodeURIComponent(opts.subjectType)}`);
     if (opts?.subjectId) q.push(`subject_id=${encodeURIComponent(opts.subjectId)}`);
     if (opts?.limit) q.push(`limit=${opts.limit}`);
+    if (opts?.cursor) q.push(`cursor=${encodeURIComponent(opts.cursor)}`);
     return this.transport.get(`/myu/log${q.length ? `?${q.join("&")}` : ""}`);
   }
   getRetro(spaceId) {
@@ -11223,7 +11362,7 @@ function sourceFrom(raw) {
   return o && quote2 ? { quote: quote2, whenMs: num2(o.when_ms) ?? num2(o.at_ms), link: str6(o.link) ?? str6(o.url) } : null;
 }
 var sources = (v) => list4(v).map(sourceFrom).filter((s2) => !!s2);
-var MONTHS4 = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+var MONTHS5 = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 function weekRangeWords(fromDay, toDay) {
   const day = (v) => {
     const m = typeof v === "string" ? /^(\d{4})-(\d{2})-(\d{2})$/.exec(v.trim()) : null;
@@ -11233,9 +11372,9 @@ function weekRangeWords(fromDay, toDay) {
   const a = day(fromDay);
   const b = day(toDay);
   if (!a || !b) return null;
-  const end = `${b.d} ${MONTHS4[b.m - 1]}`;
-  if (a.y !== b.y) return `${a.d} ${MONTHS4[a.m - 1]} ${a.y} to ${end} ${b.y}`;
-  return a.m === b.m ? `${a.d} to ${end}` : `${a.d} ${MONTHS4[a.m - 1]} to ${end}`;
+  const end = `${b.d} ${MONTHS5[b.m - 1]}`;
+  if (a.y !== b.y) return `${a.d} ${MONTHS5[a.m - 1]} ${a.y} to ${end} ${b.y}`;
+  return a.m === b.m ? `${a.d} to ${end}` : `${a.d} ${MONTHS5[a.m - 1]} to ${end}`;
 }
 function yourWeekFrom(res) {
   const o = obj(res);
@@ -11302,7 +11441,7 @@ var CHECK_PROMISE_CHOICES = [
 var CHECK_PROMISE_DRAFT_EFFECT = "check_promise_draft";
 
 // src/lastMomentsVault.ts
-var MONTHS5 = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+var MONTHS6 = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 var DAYS3 = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 var dayStart2 = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
 function draftWhen(ms, now) {
@@ -11313,7 +11452,7 @@ function draftWhen(ms, now) {
   if (ago2 === 0) return "today";
   if (ago2 === 1) return "yesterday";
   if (ago2 > 1 && ago2 < 7) return DAYS3[day.getDay()];
-  const dm = `${day.getDate()} ${MONTHS5[day.getMonth()]}`;
+  const dm = `${day.getDate()} ${MONTHS6[day.getMonth()]}`;
   return day.getFullYear() === today.getFullYear() ? dm : `${dm} ${day.getFullYear()}`;
 }
 var clockWords = (at) => {
@@ -11384,17 +11523,17 @@ function fullDayChoices(line2) {
   ];
 }
 var DAY_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
-function isDay(v) {
+function isDay2(v) {
   const m = typeof v === "string" ? DAY_RE.exec(v.trim()) : null;
   if (!m) return false;
   const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
   return d.getFullYear() === Number(m[1]) && d.getMonth() === Number(m[2]) - 1 && d.getDate() === Number(m[3]);
 }
 function dayLabel(day) {
-  if (!isDay(day)) return day;
+  if (!isDay2(day)) return day;
   const [y, m, d] = day.trim().split("-").map(Number);
   const date = new Date(y, m - 1, d);
-  return `${DAYS3[date.getDay()]} ${d} ${MONTHS5[m - 1]}`;
+  return `${DAYS3[date.getDay()]} ${d} ${MONTHS6[m - 1]}`;
 }
 function todayIso(now = /* @__PURE__ */ new Date()) {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
@@ -11408,7 +11547,7 @@ function freeDaysOf(line2) {
   for (const d of list5(raw)) {
     const r = obj2(d);
     const day = typeof d === "string" ? d.trim() : r ? str7(r.day) ?? str7(r.date) : null;
-    if (!day || !isDay(day) || out.some((x) => x.day === day)) continue;
+    if (!day || !isDay2(day) || out.some((x) => x.day === day)) continue;
     out.push({ day, label: (r ? str7(r.label) ?? str7(r.words) : null) ?? dayLabel(day) });
   }
   return out;
@@ -12278,10 +12417,10 @@ var PREP_VIEW_WORDS = {
   historyEmpty: "No past meetings with a list yet.",
   historyFailed: "Your past meetings didn\u2019t open. Try again in a moment."
 };
-var MONTHS6 = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+var MONTHS7 = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 function prepShortDate(iso) {
   const d = new Date(iso ?? "");
-  return Number.isNaN(d.getTime()) ? "" : `${d.getDate()} ${MONTHS6[d.getMonth()]}`;
+  return Number.isNaN(d.getTime()) ? "" : `${d.getDate()} ${MONTHS7[d.getMonth()]}`;
 }
 function evidenceOpening(ev) {
   const open = ev.open;
@@ -13584,14 +13723,29 @@ function lineShortForm(words, serverShort, mustSee, kind) {
   const whole2 = (words ?? "").trim();
   if (!LINE_SHORT_ON || !!kind && LINE_WHOLE_KINDS.includes(kind)) return { short: whole2, cut: false };
   const own = typeof serverShort === "string" ? serverShort.trim() : "";
-  const shortOf = own && own.length < whole2.length ? own : cutOf(whole2);
   const rows = whole2.split("\n").map((r) => r.trim()).filter(Boolean);
+  const shortOf = (own && own.length < whole2.length ? own : cutOf(whole2)).split("\n").map((r) => toQuestionEnd(r, rows)).join("\n");
+  const asking = rows.map(questionOf).filter((q) => !!q);
   const given = Array.isArray(mustSee) ? mustSee.map((s2) => typeof s2 === "string" ? s2.trim() : "").filter(Boolean) : null;
   const wanted = given ?? rows.filter((r) => MUST_SEE.some((m) => m.test(r)));
-  const kept = [...new Set(wanted)].filter((r) => !shortOf.includes(r));
+  const kept = [.../* @__PURE__ */ new Set([...asking, ...wanted])].filter((r) => !shortOf.includes(r));
   const short = kept.length ? `${shortOf}
 ${kept.join("\n")}` : shortOf;
   return { short, cut: rows.some((r) => !short.includes(r)) };
+}
+function questionOf(row) {
+  const t = row.trim();
+  for (let i = t.length - 1; i >= 0; i--) if (t[i] === "?" && (i === t.length - 1 || /\s/.test(t[i + 1]))) return t.slice(0, i + 1);
+  return null;
+}
+function toQuestionEnd(row, rows) {
+  if (!row.endsWith("\u2026")) return row;
+  const stem = row.slice(0, -1).trim();
+  const from = rows.find((r) => r.length > stem.length && r.startsWith(stem));
+  const question = from ? questionOf(from) : null;
+  if (!from || !question || question.length <= stem.length) return row;
+  const lead = /^\s*/.exec(row)?.[0] ?? "";
+  return `${lead}${question}${from.length > question.length ? "\u2026" : ""}`;
 }
 function cutAt(text2, max) {
   if (text2.length <= max) return text2;
@@ -13762,13 +13916,13 @@ function renderWhichDay(host, line2, move, busy, press) {
   const go = other.createEl("button", { cls: "myu-aff myu-lm-move", text: move.label });
   const typed = () => {
     typedDay.set(line2.line_id, field.value);
-    go.disabled = busy || !isDay(field.value);
+    go.disabled = busy || !isDay2(field.value);
   };
   field.addEventListener("input", typed);
   field.addEventListener("change", typed);
   typed();
   go.onclick = () => {
-    if (isDay(field.value)) press(answerWith(field.value.trim()));
+    if (isDay2(field.value)) press(answerWith(field.value.trim()));
   };
 }
 function renderLinks(host, links, lead) {
@@ -13906,6 +14060,26 @@ function plainDay(raw) {
   const s2 = typeof raw === "string" ? raw.trim() : "";
   return DAY.test(s2) ? s2 : null;
 }
+function dayInZone(instant, zone) {
+  const own = plainDay(instant);
+  if (own) return own;
+  const ms = typeof instant === "number" ? instant : typeof instant === "string" && instant.trim() ? Date.parse(instant.trim()) : NaN;
+  if (!Number.isFinite(ms)) return null;
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(ms);
+  const part = (t) => parts.find((p) => p.type === t)?.value ?? "";
+  const day = `${part("year")}-${part("month")}-${part("day")}`;
+  return DAY.test(day) ? day : null;
+}
+function todayIn(zone, now = Date.now()) {
+  return dayInZone(now, zone) ?? new Date(now).toISOString().slice(0, 10);
+}
+function daysFromToday(day, today) {
+  const at = (d) => {
+    const m = DAY.exec(d);
+    return m ? Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : NaN;
+  };
+  return Math.round((at(day) - at(today)) / 864e5);
+}
 function dayNoonMs(day) {
   const m = DAY.exec((day ?? "").trim());
   return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 12).getTime() : NaN;
@@ -13913,6 +14087,96 @@ function dayNoonMs(day) {
 var DAY_FIELDS = { deadline: "due_day", nextCheck: "next_check_day" };
 function sentDay(obj3, dayField) {
   return obj3 && typeof obj3 === "object" ? plainDay(obj3[dayField]) : null;
+}
+
+// src/promiseDue.ts
+var PROMISE_DUE_WORDS = {
+  /** Due at a time, still ahead: «by 15:00 today». */
+  by: (time, day) => `by ${time} ${day}`,
+  /** Due at a time that has passed: «was due at 15:00 yesterday». */
+  wasDue: (time, day) => `was due at ${time} ${day}`,
+  /** Tied to a meeting still ahead: «at Daily Sync (10:00 today)». */
+  at: (meeting, time, day) => `at ${meeting} (${time} ${day})`,
+  /** Tied to a meeting that has started: «was due at Daily Sync (10:00 today)». */
+  wasDueAt: (meeting, time, day) => `was due at ${meeting} (${time} ${day})`,
+  today: "today",
+  tomorrow: "tomorrow",
+  yesterday: "yesterday",
+  /** Within seven days, either way: «on Friday». */
+  onWeekday: (weekday) => `on ${weekday}`,
+  /** Further: «on 2 Dec»; in another year, «on 2 Dec 2027». */
+  onDate: (day, month, year) => `on ${day} ${month}${year === null ? "" : ` ${year}`}`,
+  /** A meeting served with no title of its own (`title` null): the server's own word, settled with it on 25 Nov. */
+  aMeeting: "your meeting"
+};
+var WEEKDAYS3 = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+var MONTHS8 = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+function promiseDayWords(day, today) {
+  const W3 = PROMISE_DUE_WORDS;
+  const n = daysFromToday(day, today);
+  if (n === 0) return W3.today;
+  if (n === 1) return W3.tomorrow;
+  if (n === -1) return W3.yesterday;
+  const [y, m, d] = day.split("-").map(Number);
+  if (Math.abs(n) < 7) return W3.onWeekday(WEEKDAYS3[new Date(Date.UTC(y, m - 1, d)).getUTCDay()]);
+  return W3.onDate(d, MONTHS8[m - 1], day.slice(0, 4) === today.slice(0, 4) ? null : y);
+}
+function timeOfDay(raw) {
+  const m = typeof raw === "string" ? /^(\d{1,2}):(\d{2})$/.exec(raw.trim()) : null;
+  if (!m || Number(m[1]) > 23 || Number(m[2]) > 59) return null;
+  return `${m[1].padStart(2, "0")}:${m[2]}`;
+}
+function clockIn(ms, zone) {
+  const parts = new Intl.DateTimeFormat("en-GB", { timeZone: zone, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(ms);
+  const part = (t) => parts.find((p) => p.type === t)?.value ?? "";
+  return timeOfDay(`${part("hour")}:${part("minute")}`);
+}
+var CENTURY_MS = [Date.UTC(2e3, 0, 1), Date.UTC(2100, 0, 1)];
+var instantMs = (raw) => {
+  const ms = typeof raw === "number" ? raw : typeof raw === "string" && raw.trim() ? Date.parse(raw.trim()) : NaN;
+  return Number.isFinite(ms) && ms >= CENTURY_MS[0] && ms < CENTURY_MS[1] ? ms : null;
+};
+function isZone(zone) {
+  if (typeof zone !== "string" || !zone.trim()) return false;
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: zone });
+    return true;
+  } catch {
+    return false;
+  }
+}
+function promiseZone(served2, set) {
+  const zone = served2 && typeof served2 === "object" ? served2.zone : null;
+  if (isZone(zone)) return zone;
+  return isZone(set) ? set : void 0;
+}
+function dueAt(c, now, zone) {
+  if (!c) return null;
+  const at = instantMs(c.due_event?.starts_at);
+  const clock = at === null ? null : clockIn(at, zone);
+  const meetingDay = at === null ? null : dayInZone(at, zone);
+  if (at !== null && clock && meetingDay) {
+    const title = typeof c.due_event?.title === "string" && c.due_event.title.trim() ? c.due_event.title.trim() : PROMISE_DUE_WORDS.aMeeting;
+    return { meeting: title, time: clock, day: meetingDay, past: at <= now };
+  }
+  const time = timeOfDay(c.due_time);
+  const day = time ? plainDay(c.due_day) ?? dayInZone(c.due, zone) : null;
+  if (!time || !day) return null;
+  const due = instantMs(c.due);
+  const today = todayIn(zone, now);
+  const past = due !== null ? due <= now : day < today || day === today && (clockIn(now, zone) ?? "") >= time;
+  return { meeting: null, time, day, past };
+}
+function promiseDueDay(c, now = Date.now(), zone) {
+  return dueAt(c, now, zone)?.day ?? null;
+}
+function promiseDueWords(c, now = Date.now(), zone) {
+  const d = dueAt(c, now, zone);
+  if (!d) return null;
+  const W3 = PROMISE_DUE_WORDS;
+  const day = promiseDayWords(d.day, todayIn(zone, now));
+  if (d.meeting !== null) return d.past ? W3.wasDueAt(d.meeting, d.time, day) : W3.at(d.meeting, d.time, day);
+  return d.past ? W3.wasDue(d.time, day) : W3.by(d.time, day);
 }
 
 // src/commitmentsFold.ts
@@ -13948,18 +14212,23 @@ var startOfDay2 = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).ge
 var WEEKDAY_LONG = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 var MONTH_LONG = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 var longDayWords = (d, now) => `${WEEKDAY_LONG[d.getDay()]} ${d.getDate()} ${MONTH_LONG[d.getMonth()]}${d.getFullYear() === now.getFullYear() ? "" : ` ${d.getFullYear()}`}`;
-function commitmentRow(c, now = /* @__PURE__ */ new Date()) {
+function commitmentRow(c, now = /* @__PURE__ */ new Date(), zone) {
   const what = isLockedText(c.what) ? COMMITMENTS_FOLD_WORDS.locked : (c.what ?? "").trim();
   const name = c.counterparty?.name?.trim() || c.space?.name?.trim() || COMMITMENTS_FOLD_WORDS.someone;
   const checkDay = sentDay(c, DAY_FIELDS.nextCheck) ?? (c.next_check ? null : sentDay(c, DAY_FIELDS.deadline));
   const instant = c.next_check ?? c.due ?? null;
-  const at = checkDay ? new Date(dayNoonMs(checkDay)) : instant ? new Date(instant) : null;
-  const check = !at || Number.isNaN(at.getTime()) ? null : startOfDay2(at) < startOfDay2(now) ? COMMITMENTS_FOLD_WORDS.checkWas(longDayWords(at, now)) : COMMITMENTS_FOLD_WORDS.nextCheck(dayWords2(at, now));
+  const day = checkDay ?? (instant ? dayInZone(instant, zone) : null);
+  const at = day ? new Date(dayNoonMs(day)) : null;
+  const today = new Date(dayNoonMs(todayIn(zone, now.getTime())));
+  const check = !at || Number.isNaN(at.getTime()) ? null : startOfDay2(at) < startOfDay2(today) ? COMMITMENTS_FOLD_WORDS.checkWas(longDayWords(at, today)) : COMMITMENTS_FOLD_WORDS.nextCheck(dayWords2(at, today));
+  const due = promiseDueWords(c, now.getTime(), zone);
+  const checkOwn = sentDay(c, DAY_FIELDS.nextCheck) ?? (c.next_check ? dayInZone(c.next_check, zone) : null);
+  const checkShown = due && (checkOwn === null || checkOwn === promiseDueDay(c, now.getTime(), zone)) ? null : check;
   const status = c.status && c.status !== "open" ? String(c.status) : null;
   const relId = c.counterparty?.relationship_id ?? (c.counterparty?.type === "person" ? c.counterparty.id : void 0);
   const spaceId = c.counterparty?.type === "space" ? c.counterparty.id : c.space?.space_id;
   const open = relId ? { subject_type: "person", subject_id: relId, label: c.counterparty?.name ?? void 0 } : spaceId ? { subject_type: "space", subject_id: spaceId, label: c.space?.name ?? c.counterparty?.name ?? void 0 } : null;
-  return { commitment_id: c.commitment_id, text: [what, name, check, status].filter(Boolean).join(" \xB7 "), what, name, check, status, open };
+  return { commitment_id: c.commitment_id, text: [what, name, due, checkShown, status].filter(Boolean).join(" \xB7 "), what, name, check: checkShown, ...due ? { due } : {}, status, open };
 }
 function commitmentsFold(items, opts = {}) {
   const now = opts.now ?? /* @__PURE__ */ new Date();
@@ -13969,8 +14238,8 @@ function commitmentsFold(items, opts = {}) {
   const mine = sorted(running.filter((c) => c.owner !== "them"));
   const theirs = sorted(running.filter((c) => c.owner === "them"));
   return {
-    youOwe: mine.slice(0, limit).map((c) => commitmentRow(c, now)),
-    owedToYou: theirs.slice(0, limit).map((c) => commitmentRow(c, now)),
+    youOwe: mine.slice(0, limit).map((c) => commitmentRow(c, now, opts.zone)),
+    owedToYou: theirs.slice(0, limit).map((c) => commitmentRow(c, now, opts.zone)),
     moreYouOwe: Math.max(0, mine.length - limit),
     moreOwedToYou: Math.max(0, theirs.length - limit),
     empty: mine.length + theirs.length === 0
@@ -14550,7 +14819,10 @@ var TodayView = class extends import_obsidian16.ItemView {
       safe(() => this.plugin.backend.listSpaces()),
       safe(() => this.plugin.backend.getCommitments())
     ]);
-    if (owedRes?.ok) this.owed = owedRes.data?.items ?? [];
+    if (owedRes?.ok) {
+      this.owed = owedRes.data?.items ?? [];
+      this.owedZone = promiseZone(owedRes.data);
+    }
     if (spacesRes?.ok) this.spaces = spacesRes.data?.spaces ?? [];
     if (linesRes?.ok) this.takeLines(linesRes.data);
     const debriefs = new Set((this.spaces ?? []).filter(isDebriefSpace).map((sp) => sp.space_id));
@@ -15584,7 +15856,7 @@ var TodayView = class extends import_obsidian16.ItemView {
    * opens the other person's conversation. Nothing running either way: nothing is drawn.
    */
   renderWhatYouOwe(root) {
-    const fold = commitmentsFold(this.owed);
+    const fold = commitmentsFold(this.owed, { zone: this.owedZone });
     if (fold.empty) return;
     const zone = root.createDiv({ cls: "myu-zone myu-owed" });
     const head = zone.createEl("button", {
@@ -19262,7 +19534,7 @@ var _MockApi = class _MockApi {
     /** People who were only on some emails: out of the list, in the fold (most recently seen first) and in search, marked. */
     this.mapPeople = [
       { relationship_id: "map-1", primary_name: "Carla Moss", email_primary: "carla@brightpath.io", company_name: "Brightpath Recruiting", last_seen: "2026-10-02 09:12:00", on_map: true, times_seen: 1 },
-      { relationship_id: "map-2", primary_name: "Wen Li", email_primary: "wenli.design@gmail.com", last_seen: "2026-09-11 08:00:00", on_map: true, times_seen: 1 },
+      { relationship_id: "map-2", primary_name: "Wen Li", email_primary: "wen.li@example.test", last_seen: "2026-09-11 08:00:00", on_map: true, times_seen: 1 },
       { relationship_id: "map-3", primary_name: "Mark Delaney", email_primary: "mark.d@datastream.io", company_name: "Datastream", last_seen: "2026-05-14 16:40:00", on_map: true, times_seen: 2 }
     ];
     /** The pronouns the person card's header carries for them, when known (the card's sentence reads them). */
@@ -20389,7 +20661,7 @@ Once the questions are up, a no-name question can't be taken back.`, [
           {
             section_type: "threads",
             title: "open threads",
-            items: [{ text: "The headcount proposal you owe him", date: "2026-08-04" }]
+            items: [{ text: "The headcount proposal you owe Marcus", date: "2026-08-04" }]
           }
         ]
       }
@@ -20549,7 +20821,7 @@ Once the questions are up, a no-name question can't be taken back.`, [
           stance: "In 4 of 6 emails Marcus wrote as the one deciding.",
           last_time: "You last met Sep 25.",
           evidence_ids: ["email:e1"],
-          line: "You owe him the headcount numbers, due Friday.",
+          line: "You owe Marcus the headcount numbers, due Friday.",
           line_kind: "open",
           changed: [],
           open: [{ kind: "you_owe", text: "The headcount numbers", when: "due Friday" }],
@@ -20561,7 +20833,7 @@ Once the questions are up, a no-name question can't be taken back.`, [
       room: { team: null, lines: [], summary: null },
       // The prep as Myu's brief (2026-10-29): Myu's words first, the person's list under its question.
       brief: {
-        paragraphs: ["Thursday with Marcus is about the headcount proposal. He asked for the numbers by Friday.", "You owe him the numbers. I\u2019d raise the reorg only if he does."],
+        paragraphs: ["Thursday with Marcus is about the headcount proposal. Marcus asked for the numbers by Friday.", "You owe Marcus the numbers. I\u2019d raise the reorg only if Marcus does."],
         question: "What do you want to cover?",
         suggestions: [{ text: "the headcount numbers", evidence_ids: ["email:e1"] }]
       },
@@ -20868,7 +21140,7 @@ Once the questions are up, a no-name question can't be taken back.`, [
     return this.guard() ?? ok({ success: true, message: "Account updated successfully" });
   }
   async getAccountCareer() {
-    return this.guard() ?? ok({ status: "ok", summary: "Engineering leader; platform teams; two companies.", linkedin_data_id: "masumi-example" });
+    return this.guard() ?? ok({ status: "ok", summary: "Engineering leader; platform teams; two companies.", linkedin_data_id: "odile-marchetti-example" });
   }
   async getPersonalLoop() {
     return this.guard() ?? ok({ loop: { loop_id: "loop-1", statement: "You take on the hard conversation yourself rather than hand it off, and then run out of week.", state: "mirrored", confidence: 0.7, domain: "career" }, coupled_loops: [{ to_loop_id: "loop-2", type: "drains", confidence: 0.6, other_statement: "Evenings go to catching up instead of resting.", other_domain: "energy" }] });
@@ -20922,7 +21194,7 @@ Once the questions are up, a no-name question can't be taken back.`, [
     if (journalId.includes("bare")) return ok({ success: true, count: 0, compositions: [] });
     if (journalId === "mock-j-1") {
       return ok({ success: true, count: 2, compositions: [
-        { composition_id: "comp-for-mock-j-1-a", turn_number: 1, summary_text: "What to ask each firm", is_expired: true, component_count: 5 },
+        { composition_id: "comp-for-mock-j-1-a", turn_number: 1, summary_text: "What to check after the release", is_expired: true, component_count: 5 },
         { composition_id: "comp-for-mock-j-1", turn_number: 2, summary_text: "Team read \u2014 platform group", is_expired: false, component_count: 5 }
       ] });
     }
@@ -21192,7 +21464,7 @@ Once the questions are up, a no-name question can't be taken back.`, [
         {
           advisor_id: "relationship_counsel",
           advisor_name: "The counsel",
-          take_text: "He has flagged workload twice without being asked once. That pattern usually precedes a resignation, not a complaint."
+          take_text: "They have flagged workload twice without being asked once. That pattern usually precedes a resignation, not a complaint."
         }
       ],
       full_deliberation_available: true
@@ -21238,9 +21510,9 @@ Once the questions are up, a no-name question can't be taken back.`, [
   // Past conversations, so the chat browser and the export have rows to show.
   async getJournalEntries() {
     return this.guard() ?? ok({ entries: [
-      { journal_id: "mock-j-1", content: "so this whole shopping for a corporate law firm is very new to me. Jenny has been helping", created_at: "2026-08-28T15:10:00Z" },
-      { journal_id: "mock-j-2", content: "How it went with Francesca: it was a good conversation. To provide more context, I am", created_at: "2026-08-27T09:00:00Z" },
-      { journal_id: "mock-j-3", content: "so today i have a bunch of meetings. i feel like i am not quite prepared for any of them.", created_at: "2026-08-25T08:30:00Z" }
+      { journal_id: "mock-j-1", content: "Release went out at noon. Dana Wells is watching the error counts and I check back with Dana at four.", created_at: "2026-08-28T15:10:00Z" },
+      { journal_id: "mock-j-2", content: "Planning meeting with Mira Okonjo: we cut two items from the quarter and moved the review to Tuesday.", created_at: "2026-08-27T09:00:00Z" },
+      { journal_id: "mock-j-3", content: "Garden club meets Saturday. Odile Marchetti is bringing seedlings and I offered to set up the tables.", created_at: "2026-08-25T08:30:00Z" }
     ] });
   }
   async getJournalChats(journalId) {
@@ -21249,7 +21521,7 @@ Once the questions are up, a no-name question can't be taken back.`, [
     if (journalId === "mock-j-2") {
       return ok({
         chats: [
-          { content: "After the meeting with Priya: she pushed back on the timeline, I agreed to send the revised plan Friday." },
+          { content: "After the meeting with Priya: Priya pushed back on the timeline, I agreed to send the revised plan Friday." },
           { content: JSON.stringify({ content: [{ type: "conversational", text: "Captured. The commitment to Priya is on the board." }] }) }
         ],
         offer: {
@@ -21269,9 +21541,9 @@ Once the questions are up, a no-name question can't be taken back.`, [
     }
     if (journalId !== "mock-j-1") return ok({ chats: [] });
     return ok({ chats: [
-      { content: JSON.stringify({ content: [{ type: "conversational", text: "Shopping for counsel is mostly shopping for **judgement**. Three things to ask each firm:\n\n1. Who actually does the work\n2. How they bill the first call\n3. What they would *not* take on" }] }) },
-      { content: "what should I ask about fees?" },
-      { content: JSON.stringify({ content: [{ type: "conversational", text: "Ask for a *capped* first engagement. See [1]." }], references: [{ id: "1", title: "Your note: law firm shortlist", url: "obsidian://open?file=law" }] }) }
+      { content: JSON.stringify({ content: [{ type: "conversational", text: "A release day is mostly about **watching**. Three things to check with Dana Wells:\n\n1. Error counts against last week\n2. Sign-ins in the first hour\n3. What the support inbox says by four" }] }) },
+      { content: "what should I ask Dana at four?" },
+      { content: JSON.stringify({ content: [{ type: "conversational", text: "Ask whether the error counts *settled* after noon. See [1]." }], references: [{ id: "1", title: "Your note: release checklist", url: "obsidian://open?file=release" }] }) }
     ] });
   }
   async setBackgroundWorkConsent(consented) {
@@ -27692,14 +27964,83 @@ var MaterializationService = class {
     }
     await this.writeHeld(`${this.folder}/Today.md`, buildTodayMarkdown(date, sections));
   }
-  /** Myu/Log/<day>.md — the Days log (slice 15). What Myu read/assumed/said/did/waited. */
-  async writeMyuLog() {
-    const day = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
-    const since = `${day}T00:00:00Z`;
-    const res = await this.deps.api().getMyuLog({ since, limit: 100 }).catch(() => null);
-    if (!res?.ok) return;
-    const items = res.data?.items ?? [];
-    await this.writeHeld(`${this.folder}/Log/${day}.md`, buildMyuLogMarkdown(day, items));
+  /**
+   * Myu/Log/<day>.md — the Days log (slice 15). What Myu read/assumed/said/did/waited. The day is his own, from its midnight: the zone
+   * the answer names, else the one it last named, else this computer's; an answer in another zone is read again from his midnight.
+   *
+   * Once, at the first run after the change from UTC days to his own (the read's findings, 25 Nov): nothing may leave his vault, and no
+   * note may stand for a day that has not begun. So before today's note is replaced, yesterday's is written whole by his day, from the
+   * earlier of its two midnights (his and UTC's), so the evening the UTC note held stays; then today's; then a note the old rule named
+   * for tomorrow (west of UTC, in the evening) goes to the trash, its rows being in today's; one he wrote in stays, under the edit-hold.
+   * When he had edited yesterday's note, it stays as he left it, and today's note starts from that same earlier bound for the rest of
+   * the day (planning, 25 Nov), so the evening the old today's note held is still in his vault, its rows showing their day.
+   * A read or a write that fails leaves everything as it was, to be done on the next run.
+   */
+  async writeMyuLog(now = /* @__PURE__ */ new Date()) {
+    const s2 = this.deps.settings();
+    const startOf = (z) => {
+      const d = zoneDay(now, z);
+      return new Date(s2.myu_log_start?.day === d ? s2.myu_log_start.from : zoneMidnight(d, z).getTime());
+    };
+    let zone = logZone(s2.myu_log_zone);
+    let today = await this.readLog(startOf(zone), null);
+    if (!today) return;
+    if (today.zone && logZone(today.zone) !== zone) {
+      zone = logZone(today.zone);
+      today = await this.readLog(startOf(zone), null);
+      if (!today) return;
+    }
+    if (s2.myu_log_zone !== zone) {
+      s2.myu_log_zone = zone;
+      await this.deps.save();
+    }
+    const day = zoneDay(now, zone);
+    const changing = !s2.myu_log_local_days;
+    if (changing) {
+      const yesterday = dayShift(day, -1);
+      const from = Math.min(zoneMidnight(yesterday, zone).getTime(), Date.parse(`${yesterday}T00:00:00Z`));
+      const before = await this.readLog(new Date(from), zoneMidnight(day, zone));
+      if (!before) return;
+      const out2 = await this.writeHeld(`${this.folder}/Log/${yesterday}.md`, buildMyuLogMarkdown(yesterday, before.items, before.groups, zone));
+      if (out2 === "error") return;
+      if (out2 === "held") {
+        s2.myu_log_start = { day, from };
+        today = await this.readLog(new Date(from), null);
+        if (!today) return;
+      }
+    }
+    const out = await this.writeHeld(`${this.folder}/Log/${day}.md`, buildMyuLogMarkdown(day, today.items, today.groups, zone));
+    if (out === "error" || !changing) return;
+    const unbegun = this.deps.app.vault.getAbstractFileByPath((0, import_obsidian53.normalizePath)(`${this.folder}/Log/${dayShift(day, 1)}.md`));
+    if (unbegun instanceof import_obsidian53.TFile) {
+      const path = (0, import_obsidian53.normalizePath)(unbegun.path);
+      const ours = s2.myu_file_hashes[path] === await hashContent(await this.deps.app.vault.cachedRead(unbegun));
+      if (ours) {
+        await this.deps.app.fileManager.trashFile(unbegun);
+        delete s2.myu_file_hashes[path];
+      }
+    }
+    s2.myu_log_local_days = true;
+    await this.deps.save();
+  }
+  /** The log from an instant, and before another (none: to now), every page (at most 20 of 100); null when any page fails. */
+  async readLog(since, before) {
+    const items = [];
+    let groups;
+    let zone;
+    let cursor = before ? before.toISOString() : void 0;
+    for (let page = 0; page < 20; page++) {
+      const res = await this.deps.api().getMyuLog({ since: since.toISOString(), limit: 100, cursor }).catch(() => null);
+      if (!res?.ok) return null;
+      if (page === 0) {
+        groups = res.data?.groups;
+        zone = res.data?.zone;
+      }
+      items.push(...res.data?.items ?? []);
+      cursor = res.data?.next_cursor;
+      if (!cursor) break;
+    }
+    return { items, groups, zone };
   }
   async writeWeek() {
     const res = await this.deps.api().getWeeklyReview().catch(() => null);

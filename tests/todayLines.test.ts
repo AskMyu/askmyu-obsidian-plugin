@@ -228,3 +228,90 @@ test('the log note: " on ‹computer›" when Myu names the computer (20 Nov); n
   assert.ok(md.includes('Opened the pull request. · via your Claude Code session on studio-mac'), md);
   assert.ok(md.includes('Sent the note. · via your Claude Code session\n'), md);
 });
+
+// ── Myu's log, redrawn (the release after 0.5.5): the day's note from the server's headings, in his own zone ──
+
+const LOG_GROUPS = [
+  { id: 'did_for_you', title: 'What Myu did for you' },
+  { id: 'told_you', title: 'What Myu told you' },
+  { id: 'holding', title: 'What Myu is holding' },
+];
+// Local times, so the note reads the same in any zone.
+const logAt = (h: number, m = 0) => new Date(2026, 10, 25, h, m).toISOString();
+const LOG_ITEMS = [
+  { receipt_id: 'rc-31', at: logAt(14, 20), group: 'did_for_you', kind: 'did', text: 'Your Claude Code session in askmyu-web did this for you: opened the pull request for the import fix.', provenance: { surface: 'mcp', agent: 'claude code' } },
+  { receipt_id: 'fold-2026-11-25-github', at: logAt(14, 10), group: 'did_for_you', kind: 'read', text: 'Checked GitHub 40 times; nothing new.', quiet: true, fold: { count: 40, day: '2026-11-25' } },
+  { receipt_id: 'rc-29', at: logAt(9, 14), group: 'told_you', kind: 'told', text: 'Told you in Claude Code, in askmyu-web, at 09:14: “Send the release notes” hasn\'t moved.' },
+  { receipt_id: 'rc-30', at: logAt(9, 20), group: 'told_you', kind: 'answered', text: 'You answered: Give it another week.', answers: 'rc-29' },
+  { receipt_id: 'rc-27', at: logAt(8, 5), group: 'holding', kind: 'waited', text: 'Held for tomorrow: “Ask Ines Varga who owns the sizing.”' },
+];
+
+test('the log note, redrawn: the server\'s headings, the time here, the words as sent with no tag, the folded row quiet, the answer under it, no «via»', () => {
+  const md = buildMyuLogMarkdown('2026-11-25', LOG_ITEMS, LOG_GROUPS);
+  const body = md.slice(md.indexOf('# What Myu did — 2026-11-25'));
+  assert.equal(
+    body,
+    [
+      '# What Myu did — 2026-11-25',
+      '',
+      '## What Myu did for you',
+      '- `14:20` Your Claude Code session in askmyu-web did this for you: opened the pull request for the import fix.',
+      '- *Checked GitHub 40 times; nothing new.*',
+      '',
+      '## What Myu told you',
+      '- `09:14` Told you in Claude Code, in askmyu-web, at 09:14: “Send the release notes” hasn\'t moved.',
+      '  - `09:20` You answered: Give it another week.',
+      '',
+      '## What Myu is holding',
+      '- `08:05` Held for tomorrow: “Ask Ines Varga who owns the sizing.”',
+      '',
+    ].join('\n'),
+  );
+  assert.equal(md.includes('via your'), false);
+  assert.equal(buildMyuLogMarkdown('2026-11-25', [], LOG_GROUPS).includes('*Nothing yet today.*'), true);
+});
+
+test('the log note from today\'s server (no headings): as before, but the time is his, in a zone west and one east, never UTC\'s', () => {
+  const ny = buildMyuLogMarkdown('2026-11-25', [{ kind: 'did', text: 'Sent the note.', at: '2026-11-26T02:07:00Z', provenance: { surface: 'cli' } }], null, 'America/New_York');
+  assert.equal(ny.includes('- `21:07` **did** Sent the note. · via terminal'), true, ny);
+  const tokyo = buildMyuLogMarkdown('2026-11-25', [{ kind: 'did', text: 'Sent the note.', at: '2026-11-25T12:07:00Z', provenance: { surface: 'cli' } }], null, 'Asia/Tokyo');
+  assert.equal(tokyo.includes('- `21:07` **did** Sent the note. · via terminal'), true, tokyo);
+  assert.equal(ny.includes('## '), false, 'no headings from a server that sends none');
+});
+
+test('the log note: a row from another day than the note\'s says its day; an answer is under only the row it answers; «Other» for no heading', () => {
+  const md = buildMyuLogMarkdown('2026-11-24', [
+    { receipt_id: 'e', at: '2026-11-24T02:00:00Z', group: 'told_you', kind: 'told', text: 'Told you: the notes.' },
+    { receipt_id: 'f', at: '2026-11-24T15:00:00Z', group: 'told_you', kind: 'told', text: 'Told you: the review.' },
+    { receipt_id: 'g', at: '2026-11-24T15:05:00Z', group: 'told_you', kind: 'answered', text: 'You answered: Give it another week.', answers: 'e' },
+    { receipt_id: 'h', at: '2026-11-24T16:00:00Z', group: 'not_a_heading', kind: 'did', text: 'A row of a kind still to come.' },
+  ], LOG_GROUPS, 'America/New_York');
+  assert.equal(md.includes('- `Yesterday 21:00` Told you: the notes.'), true, 'the evening before, held by the note over the change: its day said');
+  assert.equal(md.includes('- `10:05` You answered: Give it another week.'), true, 'not just under its own: a row of its own');
+  assert.equal(md.includes('  - '), false);
+  assert.equal(md.includes('## Other\n- `11:00` A row of a kind still to come.'), true, md);
+});
+
+test('the log note: words from someone\'s message are one line and never a heading, a rule, a fence, an embed, a comment or a tag', () => {
+  const md = buildMyuLogMarkdown('2026-11-25', [
+    { receipt_id: 'a', at: '2026-11-25T14:00:00Z', group: 'told_you', kind: 'told', text: '# Not a heading' },
+    { receipt_id: 'b', at: '2026-11-25T14:00:00Z', group: 'told_you', kind: 'told', text: '---' },
+    { receipt_id: 'c', at: '2026-11-25T14:00:00Z', group: 'told_you', kind: 'told', text: '```js\nalert(1)' },
+    { receipt_id: 'd', at: '2026-11-25T14:00:00Z', group: 'told_you', kind: 'told', text: 'See ![[Secret plan]] and ![x](https://example.test/p.png)' },
+    { receipt_id: 'e', at: '2026-11-25T14:00:00Z', group: 'told_you', kind: 'told', text: 'Hide %% everything after' },
+    { receipt_id: 'f', at: '2026-11-25T14:00:00Z', group: 'told_you', kind: 'told', text: '1. a list #urgent <img src=x>' },
+    { receipt_id: 'g', at: '2026-11-25T14:00:00Z', group: 'told_you', kind: 'told', text: '> [!note] a quote' },
+  ], [{ id: 'told_you', title: '## Told\nyou' }], 'America/New_York');
+  const body = md.slice(md.indexOf('# What Myu did — 2026-11-25')).split('\n');
+  assert.deepEqual(body.slice(2), [
+    '## \\## Told you',
+    '- `09:00` \\# Not a heading',
+    '- `09:00` \\---',
+    '- `09:00` \\```js alert(1)',
+    '- `09:00` See !\\[[Secret plan]] and !\\[x](https://example.test/p.png)',
+    '- `09:00` Hide %\\% everything after',
+    '- `09:00` 1\\. a list \\#urgent &lt;img src=x>',
+    '- `09:00` \\> [!note] a quote',
+    '',
+  ]);
+});

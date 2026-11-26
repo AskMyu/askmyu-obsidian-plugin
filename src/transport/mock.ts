@@ -352,7 +352,7 @@ export class MockApi implements AskMyuApi {
   /** People who were only on some emails: out of the list, in the fold (most recently seen first) and in search, marked. */
   mapPeople: MapPersonRow[] = [
     { relationship_id: 'map-1', primary_name: 'Carla Moss', email_primary: 'carla@brightpath.io', company_name: 'Brightpath Recruiting', last_seen: '2026-10-02 09:12:00', on_map: true, times_seen: 1 },
-    { relationship_id: 'map-2', primary_name: 'Wen Li', email_primary: 'wenli.design@gmail.com', last_seen: '2026-09-11 08:00:00', on_map: true, times_seen: 1 },
+    { relationship_id: 'map-2', primary_name: 'Wen Li', email_primary: 'wen.li@example.test', last_seen: '2026-09-11 08:00:00', on_map: true, times_seen: 1 },
     { relationship_id: 'map-3', primary_name: 'Mark Delaney', email_primary: 'mark.d@datastream.io', company_name: 'Datastream', last_seen: '2026-05-14 16:40:00', on_map: true, times_seen: 2 },
   ];
   /** The pronouns the person card's header carries for them, when known (the card's sentence reads them). */
@@ -1275,7 +1275,7 @@ export class MockApi implements AskMyuApi {
           {
             section_type: 'threads',
             title: 'open threads',
-            items: [{ text: 'The headcount proposal you owe him', date: '2026-08-04' }],
+            items: [{ text: 'The headcount proposal you owe Marcus', date: '2026-08-04' }],
           },
         ],
       },
@@ -1473,7 +1473,7 @@ export class MockApi implements AskMyuApi {
           stance: 'In 4 of 6 emails Marcus wrote as the one deciding.',
           last_time: 'You last met Sep 25.',
           evidence_ids: ['email:e1'],
-          line: 'You owe him the headcount numbers, due Friday.',
+          line: 'You owe Marcus the headcount numbers, due Friday.',
           line_kind: 'open',
           changed: [],
           open: [{ kind: 'you_owe', text: 'The headcount numbers', when: 'due Friday' }],
@@ -1485,7 +1485,7 @@ export class MockApi implements AskMyuApi {
       room: { team: null, lines: [], summary: null },
       // The prep as Myu's brief (2026-10-29): Myu's words first, the person's list under its question.
       brief: {
-        paragraphs: ['Thursday with Marcus is about the headcount proposal. He asked for the numbers by Friday.', 'You owe him the numbers. I’d raise the reorg only if he does.'],
+        paragraphs: ['Thursday with Marcus is about the headcount proposal. Marcus asked for the numbers by Friday.', 'You owe Marcus the numbers. I’d raise the reorg only if Marcus does.'],
         question: 'What do you want to cover?',
         suggestions: [{ text: 'the headcount numbers', evidence_ids: ['email:e1'] }],
       },
@@ -1759,7 +1759,7 @@ export class MockApi implements AskMyuApi {
   async zulipConnect(realmUrl: string): Promise<ApiResponse<{ success?: boolean; connection_id?: string; realm_name?: string }>> { return this.guard<{ success?: boolean }>() ?? ok({ success: true, connection_id: 'zc-1', realm_name: realmUrl.replace(/^https?:\/\//, '') }); }
   async zulipDisconnect(): Promise<ApiResponse<{ success?: boolean }>> { return this.guard<{ success?: boolean }>() ?? ok({ success: true }); }
   async updateAccountName(): Promise<ApiResponse<{ success?: boolean; message?: string }>> { return this.guard<{ success?: boolean }>() ?? ok({ success: true, message: 'Account updated successfully' }); }
-  async getAccountCareer(): Promise<ApiResponse<{ status?: string; summary?: string; linkedin_data_id?: string }>> { return this.guard<{ status?: string }>() ?? ok({ status: 'ok', summary: 'Engineering leader; platform teams; two companies.', linkedin_data_id: 'masumi-example' }); }
+  async getAccountCareer(): Promise<ApiResponse<{ status?: string; summary?: string; linkedin_data_id?: string }>> { return this.guard<{ status?: string }>() ?? ok({ status: 'ok', summary: 'Engineering leader; platform teams; two companies.', linkedin_data_id: 'odile-marchetti-example' }); }
   async getPersonalLoop(): Promise<ApiResponse<{ loop?: PersonalLoop | null; coupled_loops?: CoupledLoop[] }>> { return this.guard<{ loop?: PersonalLoop | null }>() ?? ok({ loop: { loop_id: 'loop-1', statement: 'You take on the hard conversation yourself rather than hand it off, and then run out of week.', state: 'mirrored', confidence: 0.7, domain: 'career' }, coupled_loops: [{ to_loop_id: 'loop-2', type: 'drains', confidence: 0.6, other_statement: 'Evenings go to catching up instead of resting.', other_domain: 'energy' }] }); }
   async submitFeedbackSignal(): Promise<ApiResponse<{ success?: boolean; signal_id?: string }>> { return this.guard<{ success?: boolean }>() ?? ok({ success: true, signal_id: 'sig-1' }); }
 
@@ -1816,7 +1816,7 @@ export class MockApi implements AskMyuApi {
     if (journalId.includes('bare')) return ok({ success: true, count: 0, compositions: [] });
     if (journalId === 'mock-j-1') {
       return ok({ success: true, count: 2, compositions: [
-        { composition_id: 'comp-for-mock-j-1-a', turn_number: 1, summary_text: 'What to ask each firm', is_expired: true, component_count: 5 },
+        { composition_id: 'comp-for-mock-j-1-a', turn_number: 1, summary_text: 'What to check after the release', is_expired: true, component_count: 5 },
         { composition_id: 'comp-for-mock-j-1', turn_number: 2, summary_text: 'Team read — platform group', is_expired: false, component_count: 5 },
       ] });
     }
@@ -2149,7 +2149,7 @@ export class MockApi implements AskMyuApi {
         {
           advisor_id: 'relationship_counsel',
           advisor_name: 'The counsel',
-          take_text: 'He has flagged workload twice without being asked once. That pattern usually precedes a resignation, not a complaint.',
+          take_text: 'They have flagged workload twice without being asked once. That pattern usually precedes a resignation, not a complaint.',
         },
       ],
       full_deliberation_available: true,
@@ -2208,9 +2208,9 @@ export class MockApi implements AskMyuApi {
   // Past conversations, so the chat browser and the export have rows to show.
   async getJournalEntries(): Promise<ApiResponse<{ entries?: Array<Record<string, unknown>> }>> {
     return this.guard<{ entries?: Array<Record<string, unknown>> }>() ?? ok({ entries: [
-      { journal_id: 'mock-j-1', content: 'so this whole shopping for a corporate law firm is very new to me. Jenny has been helping', created_at: '2026-08-28T15:10:00Z' },
-      { journal_id: 'mock-j-2', content: 'How it went with Francesca: it was a good conversation. To provide more context, I am', created_at: '2026-08-27T09:00:00Z' },
-      { journal_id: 'mock-j-3', content: 'so today i have a bunch of meetings. i feel like i am not quite prepared for any of them.', created_at: '2026-08-25T08:30:00Z' },
+      { journal_id: 'mock-j-1', content: 'Release went out at noon. Dana Wells is watching the error counts and I check back with Dana at four.', created_at: '2026-08-28T15:10:00Z' },
+      { journal_id: 'mock-j-2', content: 'Planning meeting with Mira Okonjo: we cut two items from the quarter and moved the review to Tuesday.', created_at: '2026-08-27T09:00:00Z' },
+      { journal_id: 'mock-j-3', content: 'Garden club meets Saturday. Odile Marchetti is bringing seedlings and I offered to set up the tables.', created_at: '2026-08-25T08:30:00Z' },
     ] });
   }
 
@@ -2222,7 +2222,7 @@ export class MockApi implements AskMyuApi {
       // it (OfferMoments.pendingFor) — the notes rung on a capture-after reply.
       return ok({
         chats: [
-          { content: 'After the meeting with Priya: she pushed back on the timeline, I agreed to send the revised plan Friday.' },
+          { content: 'After the meeting with Priya: Priya pushed back on the timeline, I agreed to send the revised plan Friday.' },
           { content: JSON.stringify({ content: [{ type: 'conversational', text: 'Captured. The commitment to Priya is on the board.' }] }) },
         ],
         offer: {
@@ -2242,9 +2242,9 @@ export class MockApi implements AskMyuApi {
     }
     if (journalId !== 'mock-j-1') return ok({ chats: [] });
     return ok({ chats: [
-      { content: JSON.stringify({ content: [{ type: 'conversational', text: 'Shopping for counsel is mostly shopping for **judgement**. Three things to ask each firm:\n\n1. Who actually does the work\n2. How they bill the first call\n3. What they would *not* take on' }] }) },
-      { content: 'what should I ask about fees?' },
-      { content: JSON.stringify({ content: [{ type: 'conversational', text: 'Ask for a *capped* first engagement. See [1].' }], references: [{ id: '1', title: 'Your note: law firm shortlist', url: 'obsidian://open?file=law' }] }) },
+      { content: JSON.stringify({ content: [{ type: 'conversational', text: 'A release day is mostly about **watching**. Three things to check with Dana Wells:\n\n1. Error counts against last week\n2. Sign-ins in the first hour\n3. What the support inbox says by four' }] }) },
+      { content: 'what should I ask Dana at four?' },
+      { content: JSON.stringify({ content: [{ type: 'conversational', text: 'Ask whether the error counts *settled* after noon. See [1].' }], references: [{ id: '1', title: 'Your note: release checklist', url: 'obsidian://open?file=release' }] }) },
     ] });
   }
 

@@ -551,8 +551,7 @@ test('a triggered ask is never suppressed by a stale canvas; the quiet ladder st
 test('a canvas that only updated the pane still reaches the thread', async () => {
   const { routeOffer } = await import('../src/composition/offers');
   // Taking the pane is not the end of the story: the step carries the summary so
-  // the conversation can name the canvas it just gained (operator, 2026-09-01:
-  // "there was a canvas pane… that's my point").
+  // the conversation can name the canvas it just gained (2026-09-01).
   const step = routeOffer('ready', { composition_id: 'c-new', summary_text: 'Where things stand with Jill' }, 'c-old', Date.now(), true);
   assert.equal(step.kind, 'replace');
   if (step.kind === 'replace') {

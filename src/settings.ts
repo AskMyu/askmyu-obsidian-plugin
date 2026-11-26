@@ -134,6 +134,12 @@ export interface AskMyuSettings extends PersistedAuth {
       current hash differs has unshipped human edits — don't regenerate it
       until the watcher has shipped them. */
   myu_file_hashes: Record<string, string>;
+  /** Myu/Log/<day>.md is named and read by his own day (25 Nov), no longer UTC's: set once the change has been made in this vault. */
+  myu_log_local_days?: boolean;
+  /** His zone as the log last named it, so the next read starts from his own midnight. */
+  myu_log_zone?: string;
+  /** On the day of the change to his own days, when he had edited yesterday's note: where today's note starts instead of midnight. */
+  myu_log_start?: { day: string; from: number };
   /** Interaction events observed while offline; drained with the queues. */
   vault_event_queue: Array<{
     myu_id: string;
